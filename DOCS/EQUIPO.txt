@@ -1,0 +1,46 @@
+EQUIPO Y ACUERDOS DE TRABAJO
+
+
+1. Nombre del Equipo
+
+Bombo Devs
+
+
+2. Integrantes y Habilidades Especiales
+
+Integrante 1: Valentin
+
+- Habilidad especial: Diseño de arquitectura backend. Me gusta java.
+
+- Valor más importante: La prolijidad técnica y perfeccionismo, y buena administración del repositorio en Git/GitHub.
+
+- Superpoder: Capacidad para resolver errores complejos, perseverando.
+
+Integrante 2: Nahuel
+
+- Habilidad especial: Bueno en el desarrollo de lógica en tiempo real y frontend.
+
+- Valor más importante: La responsabilidad y el enfoque en el usuario final.
+
+- Superpoder: Dominio de JavaScript - creó el videojuego del caballo.
+
+
+3. Acuerdos, Exigencias y Reglas del Equipo
+
+nos comprometemos a cumplir las siguientes reglas de trabajo:
+
+1. Reuniones fijas de seguimiento: Juntarnos de forma obligatoria dos veces por semana (por Discord) para revisar el tablero de tareas, unificar código y planificar la semana.
+
+2. Comunicación sin "clavar el visto": Responder siempre en el día a los mensajes del grupo de WhatsApp, especialmente cuando uno de los dos necesita una definición para seguir programando o avanzando con el informe.
+
+3. Avance semanal constante (Código + Informe): Comprometerse a cerrar al menos 2 funcionalidades/endpoints por semana y dejar redactada su respectiva documentación técnica (requerimientos, diagramas o avances del TFI) para que no se acumule todo antes de las entregas.
+
+4. Orden estricto en GitHub: Prohibido subir código sin probar a la rama principal (main). Cada funcionalidad se trabaja de forma ordenada y se avisa al compañero para revisar antes de integrar los cambios.
+
+5. Regla de aviso previo: Si alguno está trabado con un error técnico o complicado con los tiempos por otra materia, debe avisar al menos 24 horas antes del límite acordado para redistribuir las tareas a tiempo
+
+
+
+4. Sanciones por incumplimiento
+
+- Sanción: el que incumpla paga la merienda en la siguiente juntada (sanguchito de miga).
