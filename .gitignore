@@ -1,0 +1,61 @@
+# ==========================================
+# VARIABLES DE ENTORNO
+# ==========================================
+.env
+.env.*
+!.env.example
+
+# ==========================================
+# LOGS Y AUDITORÍA
+# ==========================================
+*.log
+security.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==========================================
+# PYTHON / DJANGO
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+db.sqlite3
+db.sqlite3-journal
+staticfiles/
+media/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ==========================================
+# NODE.JS
+# ==========================================
+node_modules/
+dist/
+build/
+.npm
+
+# ==========================================
+# ENTORNOS DE DESARROLLO Y SISTEMA
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ==========================================
+# CONFIGURACIÓN DE AUTOMATISMOS
+# ==========================================
+.claude/
+CLAUDE.md
+AGENT.md
+PROJECT.md
