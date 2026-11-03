@@ -1,7 +1,8 @@
 # TaLibre - Plataforma de Gestión y Reserva para Complejos Deportivos
 
 Trabajo Final Integrador (TFI) y Trabajo Práctico Integrador de Programación IV.
-** Universidad Tecnológica Nacional (UTN) — Facultad Regional Resistencia (Extensión Áulica Goya).**
+
+Universidad Tecnológica Nacional (UTN) - Facultad Regional Resistencia (Extensión Áulica Goya).
 
 ## Equipo de Desarrollo (Bombo Devs)
 - **Rivero, Santiago Valentín**
