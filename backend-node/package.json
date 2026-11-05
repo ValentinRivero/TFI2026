@@ -1,0 +1,13 @@
+{
+  "name": "talibre-backend-node",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Servicio complementario de eventos y actividad de TaLibre",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
