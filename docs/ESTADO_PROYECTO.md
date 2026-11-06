@@ -7,33 +7,48 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - [x] **1.2.** Configuración de `backend-django/config/settings.py` (conexión PostgreSQL/Supabase, DRF, SimpleJWT, CORS, Channels/Daphne y logging a `security.log`). — *03/11/2026*
 - [x] **1.3.** Implementación de `ModeloBase` (borrado lógico `estado = 0`, `fecha_creacion`, `fecha_modificacion`) y las 14 tablas normalizadas con `IntegerChoices` en `core/models.py`. — *04/11/2026*
 - [x] **1.4.** Migraciones iniciales aplicadas y comando `seed_inicial.py` (carga de roles, permisos RBAC, deportes, servicios y datos de prueba de Goya). — *04/11/2026*
+- [ ] **1.5.** Pulido de alineación con la cátedra: tests forzados a SQLite (`config/settings_test.py`), migración a `pytest` + `core/tests/` + cobertura, `core/admin.py` con las 14 tablas sin borrado físico, restricciones de horario (migración `0002`), ajustes de `settings.py` y pipeline de CI base (`.github/workflows/ci.yml`).
 
 ## Fase 2: Seguridad, Autenticación JWT y Permisos Jerárquicos
-- [ ] **2.1.** Implementación de `throttles.py` (`LoginRateThrottle` 5/min), `permissions.py` (RBAC + herencia de soporte delegado Superadmin) y `exceptions.py`.
-- [ ] **2.2.** Implementación de `serializers_auth.py` y endpoints de registro (`CU-01`), login/logout JWT (`CU-02`) y perfil propio con baja lógica (`CU-03`).
+- [ ] **2.0.** Rutas base (`core/urls.py`, router), chequeo de salud `GET /api/health/` y `exceptions.py` (`custom_exception_handler`, error 409 de negocio y registro de 403/429).
+- [ ] **2.1.** Implementación de `throttles.py` (`LoginRateThrottle` 5/min) y `permissions.py` (RBAC + herencia de soporte delegado Superadmin).
+- [ ] **2.2.** Implementación de `serializers_auth.py` y endpoints de registro (`CU-01`), login/logout JWT con claim `rol` (`CU-02`) y perfil propio con baja lógica (`CU-03`).
 - [ ] **2.3.** Registro dual de auditoría (`logs_auditoria` + `security.log`) y endpoint de consulta de auditoría global para Superadmin (`CU-14`).
+- [ ] **2.4.** Matriz de permisos por rol verificada con tests, incluyendo el control de rol en altas (`perform_create`) y la respuesta 404 ante complejos ajenos.
 
 ## Fase 3: Catálogo, Personalización de Complejos, Canchas y Contratos
 - [ ] **3.1.** Repositorios, servicios, serializers (con sanitización `nh3`) y vistas para gestión de contratos de complejos por Superadmin (`CU-13`).
 - [ ] **3.2.** Endpoints públicos de catálogo de complejos activos con filtros dinámicos (deporte, servicios, nombre) y coordenadas para mapa (`CU-04`).
 - [ ] **3.3.** Endpoints de personalización del complejo (`CU-08`) y ABM lógico de canchas, horarios de apertura y precios (`CU-09`).
+- [ ] **3.4.** Filtros, búsqueda y orden con `django-filter` (listas blancas) y helper único de sanitización con `nh3`.
 
 ## Fase 4: Motor de Grilla, Reservas Atómicas, Excepciones y WebSockets
 - [ ] **4.1.** Lógica de cálculo de grilla diaria cruzando horarios de apertura, duración por cancha (60/90/120 min), excepciones vigentes y reservas (`CU-05`).
 - [ ] **4.2.** Gestión de excepciones horarias por día completo o franja horaria, por complejo o por cancha (`CU-11`).
 - [ ] **4.3.** Motor transaccional de reservas con bloqueo `select_for_update()`, soporte para jugador web (`CU-06`), cancelación con margen horario (`CU-07`), agenda manual telefónica y turnos fijos (`CU-10`).
-- [ ] **4.4.** Configuración de `asgi.py`, `routing.py` y `consumers.py` para actualización en tiempo real de casilleros por WebSocket al reservar, cancelar o crear excepción (`RF-15`).
+- [ ] **4.4.** Configuración de `routing.py` y `consumers.py` para actualización en tiempo real de casilleros por WebSocket al reservar, cancelar o crear excepción (`RF-15`).
+- [ ] **4.5.** Channel layer con Redis (`REDIS_URL` opcional, con respaldo en memoria), `ws_auth.py` permisivo con su edición en `asgi.py`, consumer de lectura pública y publicación de eventos con `transaction.on_commit`.
+- [ ] **4.6.** Test de concurrencia de reservas sobre PostgreSQL en CI (`select_for_update` no bloquea en SQLite).
 
-## Fase 5: Dashboard de Reportes y Servicio Complementario Node.js
+## Fase 5: Reportes, GraphQL y Servicio Complementario Node.js
 - [ ] **5.1.** Endpoint y lógica agregada del Dashboard y Reportes estadísticos filtrables por rangos de fechas (`fecha_turno`, `fecha_creacion`, `fecha_modificacion`), cancha y estado (`CU-12`).
-- [ ] **5.2.** Configuración de `backend-node` (`app.js`, `server.js`, middlewares `auth`, `rol`, `rateLimit`, `validarCampos`) validando el JWT de Django.
-- [ ] **5.3.** Controladores y servicios en Node.js para registro ágil de actividad/eventos e integración HTTP interna con `backend-django`.
+- [ ] **5.2.** GraphQL mínimo en `/graphql/` (`core/schema.py`, `core/graphql_views.py`, `config/schema.py`) reutilizando los servicios y permisos de la API REST.
+- [ ] **5.3.** Base y seguridad de `backend-node`: ES Modules, `app.js`, `server.js`, un router por módulo, Morgan, Helmet, CORS con lista blanca y middlewares `auth`, `rol`, `rateLimit` y `validarCampos`, validando el JWT de Django.
+- [ ] **5.4.** Persistencia en MongoDB Atlas con Mongoose: `conectarDB`, modelos `Evento` y `Notificacion`, baja lógica y `populate`.
+- [ ] **5.5.** Integración Server-to-Server: `djangoClient.service.js` y clima del complejo con Open-Meteo, con manejo de errores 502.
+- [ ] **5.6.** Pruebas de Node con Jest y Supertest (caminos felices y tristes, sin base real) y job de Node en CI.
 
-## Fase 6: Frontend PWA, Mapa Interactivo y Pruebas Integrales
-- [ ] **6.1.** Estructura base PWA (`manifest.json`, `sw.js`, `styles.css` adaptable móvil/escritorio, `api.js`, `auth.js`, `ws.js`).
-- [ ] **6.2.** Vistas del Jugador: Catálogo público con mapa Leaflet (`index.html`), Grilla en vivo y reserva (`complejo.html`), y Mis Reservas (`mis-reservas.html`).
-- [ ] **6.3.** Vistas de Administración: Panel del Complejo con agenda manual, canchas, excepciones y gráficos de reportes (`panel-complejo.html`), y Panel del Sistema (`panel-sistema.html`).
-- [ ] **6.4.** Pruebas automatizadas en `core/tests.py` y `backend-node/src/tests/`, y scripts de puesta en marcha para el servidor.
+## Fase 6: Frontend React, PWA y Mapa Interactivo
+- [ ] **6.1.** Base React con Vite: capas `services/`, `components/` y `pages/`, `App.jsx` con React Router y `ProtectedRoute`, instancias de Axios con interceptores para ambos backends, `Login`, `Registro` y job de frontend en CI.
+- [ ] **6.2.** Vistas del Jugador: `Catalogo`, `ComplejoDetalle` con grilla en vivo (`wsService.js`), clima y reserva, y `MisReservas`.
+- [ ] **6.3.** Vistas de Administración: `PanelComplejo`, `GestionCanchas`, `GestionExcepciones`, `Agenda` y `Reportes`; `PanelSistema`, `Contratos` y `Auditoria`.
+- [ ] **6.4.** PWA manual (`public/manifest.json`, `public/sw.js`, sin cachear respuestas autenticadas) y mapa interactivo con `react-leaflet` en `MapaComplejos`.
+
+## Fase 7: Despliegue, Pruebas Integrales y Entrega
+- [ ] **7.1.** Imágenes Docker (`Dockerfile` y `.dockerignore` por servicio) y `docker-compose.yml` con `web`, `node`, `frontend` y `redis`.
+- [ ] **7.2.** Despliegue en VPS: nginx como proxy, HTTPS con dominio, IP real detrás del proxy (`NUM_PROXIES`, `trust proxy`) y `python manage.py check --deploy` sin pendientes.
+- [ ] **7.3.** Pruebas de punta a punta de los flujos principales por rol sobre el despliegue.
+- [ ] **7.4.** Documentación de entrega: `docs/API.md`, `docs/DECISIONES_ARQUITECTURA.md` y reporte de cobertura (`pytest --cov=core`), con CI en verde y tag `v1.0.0`.
 
 ## Notas de la Fase 1
 - Modelo de datos alineado a la Sección 3 de `PROJECT.md`: `roles`, `permisos`, `roles_permisos`, `usuarios`, `complejos`, `servicios`, `complejos_servicios`, `deportes`, `canchas`, `horarios_apertura`, `excepciones_horarias`, `turnos_fijos`, `reservas`, `logs_auditoria`.
@@ -42,7 +57,19 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - `es_dia_completo` es SMALLINT: `0` = franja horaria, `1` = día completo.
 - RBAC con 28 permisos que separan pantallas (`ver_*`) de acciones e incluyen los 8 códigos de ejemplo de la Sección 3 de `PROJECT.md`.
 - Pruebas de Fase 1 en `core/tests.py` (27 tests en verde).
-- Migraciones y `seed_inicial` verificados sobre Supabase (PostgreSQL). Los tests automatizados se ejecutan sobre SQLite.
+- Migraciones y `seed_inicial` verificados sobre Supabase (PostgreSQL). Hasta completar el punto 1.5, los tests usan la base que indique `DATABASE_URL` en el `.env`, sin distinguir el entorno de pruebas; el punto 1.5 los fuerza a SQLite en memoria.
 - El proyecto no usa `.env.example`: el equipo comparte los `.env` fuera del repositorio.
 - La gestión de roles desde una pantalla queda fuera del alcance actual: se reparten permisos entre los 4 roles existentes.
-- `config/asgi.py` ya quedó con su forma definitiva; en el punto 4.4 solo resta completar `core/routing.py` y `core/consumers.py`.
+- `config/asgi.py` todavía no tiene su forma definitiva: el punto 4.5 le suma `JWTAuthMiddleware`, y los puntos 4.4 y 4.5 completan `core/routing.py` y `core/consumers.py`.
+
+## Decisiones de alineación con las cátedras (05/11/2026)
+- **Frontend:** React con Vite, en capas `services/`, `components/` y `pages/`, según el Módulo 5, con PWA manual. Los tokens se guardan en `localStorage`; el riesgo y su mitigación se justifican en `docs/DECISIONES_ARQUITECTURA.md`.
+- **`backend-node`:** persiste sus eventos en MongoDB Atlas con Mongoose y consulta a Django por HTTP. No accede a las 14 tablas.
+- **WebSocket de disponibilidad:** lectura pública con identificación opcional, porque el catálogo y la grilla son públicos (`CU-04`, `CU-05`). Se aparta a propósito de la Clase 10 y se justifica en `docs/DECISIONES_ARQUITECTURA.md`.
+- **Pruebas:** `pytest --cov=core` en Django y `npm test` en Node, ambas en CI.
+- **Despliegue:** VPS propio con `docker compose`, nginx y HTTPS.
+
+### Pendientes del equipo
+- Crear el cluster gratuito de MongoDB Atlas y agregar `MONGO_URI` a `backend-node/.env`.
+- Instalar Docker Desktop.
+- Tener disponible el VPS con dominio antes del 17/11.
