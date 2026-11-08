@@ -4,7 +4,9 @@ import sys
 
 
 def main():
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+    # Los tests nunca usan la base definida en DATABASE_URL.
+    configuracion = 'config.settings_test' if sys.argv[1:2] == ['test'] else 'config.settings'
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', configuracion)
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

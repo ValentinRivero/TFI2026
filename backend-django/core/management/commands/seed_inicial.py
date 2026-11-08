@@ -35,7 +35,7 @@ from core.models import (
 ROLES = {
     'SUPERADMIN': 'Administrador de la plataforma (Bombo Devs). Hereda las acciones de cualquier complejo.',
     'DUENO_COMPLEJO': 'Responsable del complejo: configuración, canchas, precios, agenda y reportes.',
-    'OPERADOR_COMPLEJO': 'Personal del complejo: perfil del complejo, agenda diaria, reservas manuales y excepciones.',
+    'OPERADOR_COMPLEJO': 'Personal del complejo: agenda diaria, reservas manuales, turnos fijos y excepciones.',
     'JUGADOR': 'Usuario final que consulta disponibilidad y reserva turnos.',
 }
 
@@ -85,7 +85,6 @@ PERMISOS_JUGADOR = PERMISOS_PERFIL + [
 
 PERMISOS_OPERADOR = PERMISOS_PERFIL + [
     'ver_panel_complejo',
-    'configurar_complejo',
     'ver_canchas',
     'ver_agenda',
     'gestionar_agenda',
@@ -95,7 +94,9 @@ PERMISOS_OPERADOR = PERMISOS_PERFIL + [
     'gestionar_excepciones',
 ]
 
+# configurar_complejo edita parámetros comerciales (info_sena, horas_limite_cancelacion): no es del operador.
 PERMISOS_DUENO = PERMISOS_OPERADOR + [
+    'configurar_complejo',
     'administrar_canchas',
     'administrar_horarios',
     'administrar_precios',
@@ -362,8 +363,19 @@ class Command(BaseCommand):
 
     def _asignar_permisos(self, roles, permisos):
         for nombre_rol, codigos in ASIGNACIONES.items():
+            rol = roles[nombre_rol]
             for codigo in codigos:
-                RolPermiso.objects.get_or_create(rol=roles[nombre_rol], permiso=permisos[codigo])
+                asignacion, _ = RolPermiso.objects.get_or_create(rol=rol, permiso=permisos[codigo])
+                if asignacion.estado != EstadoRegistro.ACTIVO:
+                    asignacion.estado = EstadoRegistro.ACTIVO
+                    asignacion.save(update_fields=['estado', 'fecha_modificacion'])
+
+            # Sincroniza bases donde ya se había corrido el seed: lo que ya no corresponde queda con baja lógica.
+            sobrantes = RolPermiso.objects.filter(rol=rol, estado=EstadoRegistro.ACTIVO).exclude(
+                permiso__codigo__in=codigos
+            )
+            for asignacion in sobrantes:
+                asignacion.desactivar()
 
     def _cargar_deportes(self):
         return {nombre: Deporte.objects.get_or_create(nombre=nombre)[0] for nombre in DEPORTES}
@@ -528,7 +540,7 @@ class Command(BaseCommand):
         conteos = [
             ('Roles', Rol.objects.count()),
             ('Permisos', Permiso.objects.count()),
-            ('Asignaciones rol-permiso', RolPermiso.objects.count()),
+            ('Asignaciones rol-permiso activas', RolPermiso.objects.filter(estado=EstadoRegistro.ACTIVO).count()),
             ('Deportes', Deporte.objects.count()),
             ('Servicios', Servicio.objects.count()),
             ('Usuarios', Usuario.objects.count()),

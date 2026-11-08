@@ -1,18 +1,18 @@
 # Estado de Implementación del Proyecto — TaLibre
 
-Documento de seguimiento técnico del desarrollo. Cada objetivo completado y verificado se marca con `[x]` indicando la fecha de cierre.
+Documento de seguimiento técnico del desarrollo. Cada objetivo completado y verificado se marca con `[x]`.
 
 ## Fase 1: Cimientos, Configuración y Modelo de Datos (14 Tablas)
-- [x] **1.1.** Estructura inicial de carpetas del monorepo (`backend-django`, `backend-node`, `frontend`, `docs`) y archivo `.gitignore`. — *03/11/2026*
-- [x] **1.2.** Configuración de `backend-django/config/settings.py` (conexión PostgreSQL/Supabase, DRF, SimpleJWT, CORS, Channels/Daphne y logging a `security.log`). — *03/11/2026*
-- [x] **1.3.** Implementación de `ModeloBase` (borrado lógico `estado = 0`, `fecha_creacion`, `fecha_modificacion`) y las 14 tablas normalizadas con `IntegerChoices` en `core/models.py`. — *04/11/2026*
-- [x] **1.4.** Migraciones iniciales aplicadas y comando `seed_inicial.py` (carga de roles, permisos RBAC, deportes, servicios y datos de prueba de Goya). — *04/11/2026*
-- [ ] **1.5.** Pulido de alineación con la cátedra: tests forzados a SQLite (`config/settings_test.py`), migración a `pytest` + `core/tests/` + cobertura, `core/admin.py` con las 14 tablas sin borrado físico, restricciones de horario (migración `0002`), ajustes de `settings.py` y pipeline de CI base (`.github/workflows/ci.yml`).
+- [x] **1.1.** Estructura inicial de carpetas del monorepo (`backend-django`, `backend-node`, `frontend`, `docs`) y archivo `.gitignore`.
+- [x] **1.2.** Configuración de `backend-django/config/settings.py` (conexión PostgreSQL/Supabase, DRF, SimpleJWT, CORS, Channels/Daphne y logging a `security.log`).
+- [x] **1.3.** Implementación de `ModeloBase` (borrado lógico `estado = 0`, `fecha_creacion`, `fecha_modificacion`) y las 14 tablas normalizadas con `IntegerChoices` en `core/models.py`.
+- [x] **1.4.** Migraciones iniciales aplicadas y comando `seed_inicial.py` (carga de roles, permisos RBAC, deportes, servicios y datos de prueba de Goya).
+- [x] **1.5.** Base de calidad y pruebas: tests forzados a SQLite (`config/settings_test.py`), migración a `pytest` + `core/tests/` + cobertura, `core/admin.py` con las 14 tablas sin borrado físico, restricciones de horario (migración `0002`), ajustes de `settings.py` y pipeline de CI base (`.github/workflows/ci.yml`).
 
 ## Fase 2: Seguridad, Autenticación JWT y Permisos Jerárquicos
 - [ ] **2.0.** Rutas base (`core/urls.py`, router), chequeo de salud `GET /api/health/` y `exceptions.py` (`custom_exception_handler`, error 409 de negocio y registro de 403/429).
 - [ ] **2.1.** Implementación de `throttles.py` (`LoginRateThrottle` 5/min) y `permissions.py` (RBAC + herencia de soporte delegado Superadmin).
-- [ ] **2.2.** Implementación de `serializers_auth.py` y endpoints de registro (`CU-01`), login/logout JWT con claim `rol` (`CU-02`) y perfil propio con baja lógica (`CU-03`).
+- [ ] **2.2.** Implementación de `serializers_auth.py` y endpoints de registro (`CU-01`), login/logout JWT con claim `rol`, refresh en cookie HttpOnly y `CORS_ALLOW_CREDENTIALS` (`CU-02`) y perfil propio con baja lógica (`CU-03`).
 - [ ] **2.3.** Registro dual de auditoría (`logs_auditoria` + `security.log`) y endpoint de consulta de auditoría global para Superadmin (`CU-14`).
 - [ ] **2.4.** Matriz de permisos por rol verificada con tests, incluyendo el control de rol en altas (`perform_create`) y la respuesta 404 ante complejos ajenos.
 
@@ -56,20 +56,27 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - `logs_auditoria` usa `fecha_creacion` como fecha de la acción auditada y como referencia de sus filtros: no cambia con una baja lógica, por lo que no hace falta un campo aparte.
 - `es_dia_completo` es SMALLINT: `0` = franja horaria, `1` = día completo.
 - RBAC con 28 permisos que separan pantallas (`ver_*`) de acciones e incluyen los 8 códigos de ejemplo de la Sección 3 de `PROJECT.md`.
-- Pruebas de Fase 1 en `core/tests.py` (27 tests en verde).
-- Migraciones y `seed_inicial` verificados sobre Supabase (PostgreSQL). Hasta completar el punto 1.5, los tests usan la base que indique `DATABASE_URL` en el `.env`, sin distinguir el entorno de pruebas; el punto 1.5 los fuerza a SQLite en memoria.
+- Pruebas de Fase 1: 27 tests, migrados a `core/tests/` en el punto 1.5.
+- Migración `0001` y `seed_inicial` verificados sobre Supabase (PostgreSQL).
 - El proyecto no usa `.env.example`: el equipo comparte los `.env` fuera del repositorio.
 - La gestión de roles desde una pantalla queda fuera del alcance actual: se reparten permisos entre los 4 roles existentes.
 - `config/asgi.py` todavía no tiene su forma definitiva: el punto 4.5 le suma `JWTAuthMiddleware`, y los puntos 4.4 y 4.5 completan `core/routing.py` y `core/consumers.py`.
 
-## Decisiones de alineación con las cátedras (05/11/2026)
-- **Frontend:** React con Vite, en capas `services/`, `components/` y `pages/`, según el Módulo 5, con PWA manual. Los tokens se guardan en `localStorage`; el riesgo y su mitigación se justifican en `docs/DECISIONES_ARQUITECTURA.md`.
+## Notas del punto 1.5
+- Los tests corren siempre sobre SQLite en memoria (`config/settings_test.py`), tanto con `pytest --cov=core` como con `python manage.py test`, y nunca tocan la base de `DATABASE_URL`.
+- La migración `0002_restricciones_horarias` agrega `hora_fin > hora_inicio` en reservas y turnos fijos, `hora_cierre > hora_apertura` en horarios de apertura y un único parcial por cancha, fecha y hora de inicio para reservas activas (`1, 2, 3, 7`). Ningún horario puede cerrar pasada la medianoche. Falta aplicarla en Supabase con `python manage.py migrate`.
+- El admin registra las 14 tablas sin borrado físico: solo ofrece la baja lógica, y `logs_auditoria` es de solo lectura.
+- El operador ya no tiene `configurar_complejo`: los parámetros comerciales (`info_sena`, `horas_limite_cancelacion`) los editan solo el dueño y el superadmin. Al re-ejecutarse, `seed_inicial` sincroniza `roles_permisos`: las asignaciones que ya no corresponden quedan con `estado = 0` y las vigentes se reactivan. Las consultas de permisos de la Fase 2 deben filtrar asignaciones activas.
+- CORS y CSRF apuntan por defecto a Vite (`localhost:5173`). Los `.env` locales se actualizan por fuera del repositorio.
+- `.github/workflows/ci.yml` corre `makemigrations --check` y `pytest --cov=core` en cada push y pull request a `main`.
+
+## Decisiones de arquitectura (05/11/2026)
+- **Frontend:** React con Vite y PWA manual, en capas `services/`, `components/` y `pages/`: solo la capa de servicios conoce las URLs de la API, lo que separa el acceso a datos de la presentación. El access token vive en memoria y el refresh en una cookie HttpOnly, `Secure` y `SameSite=Strict`: un script inyectado por XSS no puede leer el refresh, y `SameSite=Strict` mitiga CSRF. Nada de la sesión se guarda en `localStorage`.
 - **`backend-node`:** persiste sus eventos en MongoDB Atlas con Mongoose y consulta a Django por HTTP. No accede a las 14 tablas.
-- **WebSocket de disponibilidad:** lectura pública con identificación opcional, porque el catálogo y la grilla son públicos (`CU-04`, `CU-05`). Se aparta a propósito de la Clase 10 y se justifica en `docs/DECISIONES_ARQUITECTURA.md`.
+- **WebSocket de disponibilidad:** lectura pública con identificación opcional, porque el catálogo y la grilla son públicos (`CU-04`, `CU-05`). El canal es de solo lectura: no procesa mensajes del cliente, sus eventos no llevan datos personales y rechaza complejos sin contrato activo. La decisión se documenta en `docs/DECISIONES_ARQUITECTURA.md`.
 - **Pruebas:** `pytest --cov=core` en Django y `npm test` en Node, ambas en CI.
 - **Despliegue:** VPS propio con `docker compose`, nginx y HTTPS.
 
 ### Pendientes del equipo
-- Crear el cluster gratuito de MongoDB Atlas y agregar `MONGO_URI` a `backend-node/.env`.
 - Instalar Docker Desktop.
 - Tener disponible el VPS con dominio antes del 17/11.
