@@ -29,6 +29,7 @@ from .serializers import (
     ComplejoCatalogoSerializer,
     ComplejoConfiguracionSerializer,
     ComplejoDetallePublicoSerializer,
+    ConfirmacionSerializer,
     ContratoAltaSerializer,
     ContratoEstadoSerializer,
     ContratoSerializer,
@@ -40,6 +41,7 @@ from .serializers import (
     HorarioAperturaSerializer,
     LogAuditoriaSerializer,
     OperadorSerializer,
+    ReaperturaSerializer,
     ReservaAgendaEdicionSerializer,
     ReservaAgendaSerializer,
     ReservaAltaSerializer,
@@ -55,6 +57,7 @@ from .serializers_auth import LoginSerializer, PerfilEdicionSerializer, PerfilSe
 from .services import (
     AccesoComplejoService,
     AuditoriaService,
+    BajaDeCuentaService,
     CanchaService,
     CatalogoService,
     ComplejoService,
@@ -184,6 +187,27 @@ class PerfilView(APIView):
         respuesta = Response(status=status.HTTP_204_NO_CONTENT)
         _borrar_cookie_refresh(respuesta)
         return respuesta
+
+
+class PerfilBajaView(APIView):
+    """Vista previa de la baja propia: qué reservas y turnos fijos se cancelan y cuáles se conservan."""
+
+    permission_classes = [TienePermisoRBAC]
+    permisos_requeridos = {'GET': ('desactivar_perfil_propio',)}
+    http_method_names = ['get', 'head', 'options']
+
+    def get(self, request):
+        return Response(BajaDeCuentaService.vista_previa(request.user))
+
+
+def _confirmado(request):
+    """`confirmar` llega en el cuerpo (PATCH) o en la query string (DELETE, que no suele llevar cuerpo)."""
+    valor = request.data.get('confirmar') if hasattr(request.data, 'get') else None
+    if valor is None:
+        valor = request.query_params.get('confirmar')
+    entrada = ConfirmacionSerializer(data={} if valor is None else {'confirmar': valor})
+    entrada.is_valid(raise_exception=True)
+    return entrada.validated_data['confirmar']
 
 
 class AuditoriaViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
@@ -428,7 +452,10 @@ class CanchaViewSet(PermisosPorCampoMixin, AccesoComplejoMixin, viewsets.ModelVi
         if serializer.instance is None:
             serializer.instance = CanchaService.crear(serializer.validated_data)
         else:
-            serializer.instance = CanchaService.actualizar(serializer.instance, serializer.validated_data)
+            serializer.instance = CanchaService.actualizar(
+                serializer.instance, serializer.validated_data, _confirmado(self.request),
+                self.request.user, AuditoriaService.ip_de_request(self.request),
+            )
 
     def perform_destroy(self, instance):
         CanchaService.dar_de_baja(instance)
@@ -465,10 +492,15 @@ class HorarioAperturaViewSet(PermisosPorCampoMixin, AccesoComplejoMixin, viewset
         if serializer.instance is None:
             serializer.instance = HorarioAperturaService.crear(serializer.validated_data)
         else:
-            serializer.instance = HorarioAperturaService.actualizar(serializer.instance, serializer.validated_data)
+            serializer.instance = HorarioAperturaService.actualizar(
+                serializer.instance, serializer.validated_data, _confirmado(self.request),
+                self.request.user, AuditoriaService.ip_de_request(self.request),
+            )
 
     def perform_destroy(self, instance):
-        HorarioAperturaService.dar_de_baja(instance)
+        HorarioAperturaService.dar_de_baja(
+            instance, _confirmado(self.request), self.request.user, AuditoriaService.ip_de_request(self.request),
+        )
 
 
 def _validar_filtros_de_complejo(request):
@@ -573,6 +605,7 @@ class AgendaViewSet(AccesoComplejoMixin, mixins.ListModelMixin, mixins.RetrieveM
         'create': ('gestionar_agenda',),
         'partial_update': ('gestionar_agenda',),
         'cancelar': ('cancelar_reserva_complejo',),
+        'reabrir': ('gestionar_agenda',),
     }
     campo_complejo = 'cancha__complejo'
     lookup_value_regex = r'\d+'
@@ -612,6 +645,17 @@ class AgendaViewSet(AccesoComplejoMixin, mixins.ListModelMixin, mixins.RetrieveM
         )
         return Response(ReservaAgendaSerializer(reserva).data)
 
+    @action(detail=True, methods=['post'])
+    def reabrir(self, request, pk=None):
+        reserva = self.get_object()
+        entrada = ReaperturaSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        reserva = ReservaService.reabrir(
+            reserva, entrada.validated_data['estado'], entrada.validated_data['confirmar'], request.user,
+            AuditoriaService.ip_de_request(request),
+        )
+        return Response(ReservaAgendaSerializer(reserva).data)
+
 
 class TurnoFijoViewSet(AccesoComplejoMixin, viewsets.ModelViewSet):
     serializer_class = TurnoFijoSerializer
@@ -635,13 +679,18 @@ class TurnoFijoViewSet(AccesoComplejoMixin, viewsets.ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         _validar_filtros_de_complejo(request)
-        return super().list(request, *args, **kwargs)
+        pagina = self.paginate_queryset(self.filter_queryset(self.get_queryset()))
+        # Las fechas en espera se calculan para toda la página con dos consultas, no una por turno fijo.
+        contexto = {**self.get_serializer_context(), 'fechas_en_espera': TurnoFijoService.fechas_en_espera(pagina)}
+        return self.get_paginated_response(TurnoFijoSerializer(pagina, many=True, context=contexto).data)
 
     def guardar(self, serializer):
         if serializer.instance is None:
             serializer.instance = TurnoFijoService.crear(serializer.validated_data, self.request.user)
         else:
-            serializer.instance = TurnoFijoService.actualizar(serializer.instance, serializer.validated_data)
+            serializer.instance = TurnoFijoService.actualizar(
+                serializer.instance, serializer.validated_data, _confirmado(self.request),
+            )
 
     def perform_destroy(self, instance):
         TurnoFijoService.dar_de_baja(instance)
@@ -653,6 +702,7 @@ class TurnoFijoViewSet(AccesoComplejoMixin, viewsets.ModelViewSet):
         entrada.is_valid(raise_exception=True)
         reserva = ReservaService.registrar_fecha_de_turno_fijo(
             turno_fijo, entrada.validated_data['fecha_turno'], request.user, AuditoriaService.ip_de_request(request),
+            entrada.validated_data['accion'],
         )
         return Response(ReservaAgendaSerializer(reserva).data, status=status.HTTP_201_CREATED)
 

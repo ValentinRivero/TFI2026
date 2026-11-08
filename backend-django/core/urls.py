@@ -12,6 +12,7 @@ from .views import (
     HorarioAperturaViewSet,
     LoginView,
     LogoutView,
+    PerfilBajaView,
     PerfilView,
     RefreshView,
     RegistroView,
@@ -43,5 +44,6 @@ urlpatterns = [
     path('token/refresh/', RefreshView.as_view(), name='token_refresh'),
     path('token/logout/', LogoutView.as_view(), name='token_logout'),
     path('perfil/', PerfilView.as_view(), name='perfil'),
+    path('perfil/baja/', PerfilBajaView.as_view(), name='perfil_baja'),
     *router.urls,
 ]

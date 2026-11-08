@@ -24,7 +24,13 @@ from .models import (
     Usuario,
 )
 from .repositories import CanchaRepository, CatalogoRepository, ComplejoRepository, RolRepository, UsuarioRepository
-from .services import ReservaService
+from .services import (
+    ACCION_CANCELAR_FECHA,
+    ACCION_MANTENER_FECHA,
+    ConflictoOperatoriaService,
+    ReservaService,
+    TurnoFijoService,
+)
 
 MAXIMO_PASADAS_SANITIZACION = 5
 
@@ -655,12 +661,20 @@ class ReservaPropiaSerializer(serializers.ModelSerializer):
         return serializers.DateTimeField().to_representation(ReservaService.limite_de_cancelacion(reserva))
 
 
+TITULAR_DADO_DE_BAJA = 'Titular dado de baja'
+
+
 def _datos_de_contacto(ocupacion):
-    """Contacto de quien ocupa el turno: la cuenta del jugador si reservó en la web, o el cliente cargado a mano."""
+    """
+    Contacto de quien ocupa el turno: la cuenta del jugador si reservó en la web, o el cliente cargado a mano.
+    Si el titular se dio de baja, se muestra solo la copia conservada para resolver la seña (o nada): nunca su
+    cuenta anonimizada.
+    """
     usuario = ocupacion.usuario
-    if usuario is not None:
+    if usuario is not None and usuario.estado != EstadoUsuario.BAJA:
         return {'nombre': usuario.nombre_completo, 'telefono': usuario.telefono, 'email': usuario.email}
-    return {'nombre': ocupacion.nombre_cliente_manual, 'telefono': ocupacion.telefono_cliente_manual, 'email': None}
+    nombre = ocupacion.nombre_cliente_manual or (TITULAR_DADO_DE_BAJA if usuario is not None else '')
+    return {'nombre': nombre, 'telefono': ocupacion.telefono_cliente_manual, 'email': None}
 
 
 class ReservaAgendaSerializer(serializers.ModelSerializer):
@@ -671,6 +685,7 @@ class ReservaAgendaSerializer(serializers.ModelSerializer):
     estado_nombre = serializers.CharField(source='get_estado_display', read_only=True)
     tipo_ocupacion_nombre = serializers.CharField(source='get_tipo_ocupacion_display', read_only=True)
     cliente = serializers.SerializerMethodField()
+    conflicto_operatoria = serializers.SerializerMethodField()
 
     class Meta:
         model = Reserva
@@ -690,6 +705,7 @@ class ReservaAgendaSerializer(serializers.ModelSerializer):
             'estado_nombre',
             'cliente',
             'observaciones',
+            'conflicto_operatoria',
             'fecha_creacion',
             'fecha_modificacion',
         )
@@ -697,6 +713,9 @@ class ReservaAgendaSerializer(serializers.ModelSerializer):
 
     def get_cliente(self, reserva):
         return _datos_de_contacto(reserva)
+
+    def get_conflicto_operatoria(self, reserva):
+        return ConflictoOperatoriaService.motivo_de_reserva(reserva)
 
 
 ESTADOS_TURNO_FIJO_EDITABLES = [
@@ -713,10 +732,10 @@ class TurnoFijoSerializer(CamposInmutablesMixin, serializers.ModelSerializer):
     inicio de la vigencia se fijan en el alta; la baja lógica se hace con DELETE.
     """
 
+    # El horario sí se edita (con confirmación): TurnoFijoService.actualizar recalcula hora_fin y revalida.
     campos_inmutables = {
         'cancha': MENSAJE_TURNO_FIJO_NO_EDITABLE,
         'dia_semana': MENSAJE_TURNO_FIJO_NO_EDITABLE,
-        'hora_inicio': MENSAJE_TURNO_FIJO_NO_EDITABLE,
         'fecha_inicio_vigencia': MENSAJE_TURNO_FIJO_NO_EDITABLE,
     }
 
@@ -731,6 +750,8 @@ class TurnoFijoSerializer(CamposInmutablesMixin, serializers.ModelSerializer):
     dia_semana_nombre = serializers.CharField(source='get_dia_semana_display', read_only=True)
     estado_nombre = serializers.CharField(source='get_estado_display', read_only=True)
     cliente = serializers.SerializerMethodField()
+    conflicto_operatoria = serializers.SerializerMethodField()
+    fechas_en_espera = serializers.SerializerMethodField()
 
     class Meta:
         model = TurnoFijo
@@ -749,6 +770,8 @@ class TurnoFijoSerializer(CamposInmutablesMixin, serializers.ModelSerializer):
             'cliente',
             'estado',
             'estado_nombre',
+            'conflicto_operatoria',
+            'fechas_en_espera',
             'fecha_creacion',
         )
         read_only_fields = ('hora_fin', 'fecha_creacion')
@@ -767,6 +790,40 @@ class TurnoFijoSerializer(CamposInmutablesMixin, serializers.ModelSerializer):
     def get_cliente(self, turno_fijo):
         return _datos_de_contacto(turno_fijo)
 
+    def get_conflicto_operatoria(self, turno_fijo):
+        return ConflictoOperatoriaService.motivo_de_turno_fijo(turno_fijo)
+
+    def get_fechas_en_espera(self, turno_fijo):
+        # El listado las calcula para toda la página de una vez; el detalle, para un solo turno fijo.
+        precalculadas = self.context.get('fechas_en_espera')
+        if precalculadas is None:
+            precalculadas = TurnoFijoService.fechas_en_espera([turno_fijo])
+        return precalculadas.get(turno_fijo.pk, [])
+
+
+class ConfirmacionSerializer(serializers.Serializer):
+    """`confirmar: true` aplica un cambio de operatoria aunque deje reservas o turnos fijos fuera de la grilla."""
+
+    confirmar = serializers.BooleanField(default=False)
+
+
+ACCIONES_FECHA_TURNO_FIJO = [
+    (ACCION_MANTENER_FECHA, 'Mantener la fecha (se juega)'),
+    (ACCION_CANCELAR_FECHA, 'Cancelar la fecha y liberar el casillero'),
+]
+
 
 class FechaTurnoFijoSerializer(serializers.Serializer):
     fecha_turno = serializers.DateField(error_messages=MENSAJES_FECHA_ISO)
+    accion = serializers.ChoiceField(choices=ACCIONES_FECHA_TURNO_FIJO, default=ACCION_MANTENER_FECHA)
+
+
+ESTADOS_DE_REAPERTURA = [
+    (valor, etiqueta) for valor, etiqueta in EstadoReserva.choices
+    if valor in (EstadoReserva.PENDIENTE, EstadoReserva.CONFIRMADA, EstadoReserva.SENADA)
+]
+
+
+class ReaperturaSerializer(serializers.Serializer):
+    estado = serializers.ChoiceField(choices=ESTADOS_DE_REAPERTURA)
+    confirmar = serializers.BooleanField(default=False)

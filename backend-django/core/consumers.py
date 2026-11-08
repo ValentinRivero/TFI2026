@@ -35,3 +35,7 @@ class DisponibilidadConsumer(AsyncJsonWebsocketConsumer):
 
     async def grilla_actualizada(self, mensaje):
         await self.send_json(mensaje['evento'])
+
+    async def complejo_no_disponible(self, mensaje):
+        """El contrato dejó de estar activo: se corta la conexión, igual que se rechazaría una nueva."""
+        await self.close(code=CIERRE_COMPLEJO_NO_DISPONIBLE)

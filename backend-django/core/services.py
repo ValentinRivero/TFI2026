@@ -20,7 +20,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .exceptions import ConflictoNegocio, ServicioNoDisponible
+from .exceptions import ConflictoConConfirmacion, ConflictoNegocio, ServicioNoDisponible
 from .models import (
     AlcanceExcepcion,
     DiaSemana,
@@ -35,6 +35,7 @@ from .models import (
     TipoOcupacion,
 )
 from .repositories import (
+    ESTADOS_RESERVA_A_RESOLVER,
     ESTADOS_RESERVA_OCUPANTES,
     AuditoriaRepository,
     CanchaRepository,
@@ -426,17 +427,38 @@ class UsuarioService:
             )
 
     @staticmethod
+    def impedimento_de_baja(usuario):
+        """Motivo por el que hoy se rechazaría la baja propia, o None: la vista previa lo informa antes de confirmar."""
+        try:
+            with transaction.atomic():
+                UsuarioService._validar_continuidad_superadmin(usuario)
+                UsuarioService._validar_complejos_sin_responsable(usuario)
+        except ValidationError as error:
+            return str(error.detail[0])
+        return None
+
+    @staticmethod
     def desactivar_cuenta_propia(usuario, ip_origen):
-        """Atiende el derecho de supresión: baja lógica, anonimización de datos personales y cierre de sesiones."""
+        """
+        Atiende el derecho de supresión: resuelve las reservas y turnos fijos del titular, anonimiza sus datos
+        personales, hace la baja lógica y cierra sus sesiones, todo en una única transacción.
+        """
         with transaction.atomic():
             UsuarioService._validar_continuidad_superadmin(usuario)
             UsuarioService._validar_complejos_sin_responsable(usuario)
+            # Antes de anonimizar: las reservas señadas necesitan una copia del nombre y el teléfono.
+            canceladas, resumen = BajaDeCuentaService.resolver_ocupaciones(usuario)
             UsuarioRepository.anonimizar(usuario)
             usuario.desactivar()
             SesionRepository.revocar_refresh_de_usuario(usuario.pk)
+        for reserva, estado_anterior in canceladas:
+            ReservaService._auditar(
+                TipoEventoAuditoria.RESERVA_CANCELADA, 'Cancelación por baja de la cuenta del titular',
+                reserva, usuario, ip_origen, f' Estado: {estado_anterior} -> {reserva.get_estado_display()}.',
+            )
         AuditoriaService.registrar(
             TipoEventoAuditoria.BAJA_USUARIO, 'Baja lógica de la cuenta propia',
-            detalle='Baja solicitada por el titular: datos personales anonimizados y sesiones revocadas.',
+            detalle=f'Baja solicitada por el titular: datos personales anonimizados y sesiones revocadas. {resumen}',
             usuario=usuario, ip_origen=ip_origen,
         )
 
@@ -572,6 +594,10 @@ class ContratoService:
                                            'complejo activo.',
                     })
             ComplejoRepository.actualizar(complejo, estado_contrato=estado_nuevo)
+            if estado_nuevo == EstadoContrato.ACTIVO:
+                DifusionGrillaService.programar_operatoria(complejo.pk)
+            else:
+                DifusionGrillaService.programar_cierre(complejo.pk)
 
         AuditoriaService.registrar(
             TipoEventoAuditoria.CAMBIO_CONTRATO, 'Cambio de estado de contrato',
@@ -721,13 +747,15 @@ class CanchaService:
         CanchaService._validar_nombre(datos['complejo'].pk, datos['nombre'])
         try:
             with transaction.atomic():
-                return CanchaRepository.crear(**datos)
+                cancha = CanchaRepository.crear(**datos)
+                DifusionGrillaService.programar_operatoria(cancha.complejo_id, cancha.pk)
+                return cancha
         except IntegrityError:
             # Alta simultánea con el mismo nombre: la restricción uq_cancha_nombre_activa decide.
             raise ValidationError({'nombre': MENSAJE_NOMBRE_CANCHA_REPETIDO})
 
     @staticmethod
-    def actualizar(cancha, datos):
+    def actualizar(cancha, datos, confirmar=False, actor=None, ip_origen=None):
         campos = _campos_modificados(cancha, datos)
         if not campos:
             return cancha
@@ -735,12 +763,23 @@ class CanchaService:
             CanchaService._validar_nombre(cancha.complejo_id, campos['nombre'], excluir_id=cancha.pk)
         try:
             with transaction.atomic():
-                return CanchaRepository.actualizar(cancha, **campos)
+                bloqueada = CanchaRepository.bloquear(cancha.pk)
+                if {'duracion_turno_min', 'estado'} & set(campos):
+                    ConflictoOperatoriaService.validar_cambio(
+                        bloqueada, confirmar, actor, ip_origen,
+                        duracion=campos.get('duracion_turno_min', bloqueada.duracion_turno_min),
+                        estado=campos.get('estado', bloqueada.estado),
+                        descripcion=f'edición de la cancha ({", ".join(sorted(campos))})',
+                    )
+                cancha = CanchaRepository.actualizar(cancha, **campos)
+                DifusionGrillaService.programar_operatoria(cancha.complejo_id, cancha.pk)
+                return cancha
         except IntegrityError:
             raise ValidationError({'nombre': MENSAJE_NOMBRE_CANCHA_REPETIDO})
 
     @staticmethod
     def dar_de_baja(cancha):
+        """Sin confirmación posible: una cancha con ocupación futura primero se libera desde la agenda."""
         with transaction.atomic():
             CanchaRepository.bloquear(cancha.pk)
             if CanchaRepository.tiene_ocupacion_futura(cancha.pk, timezone.localdate()):
@@ -749,6 +788,7 @@ class CanchaService:
                     'Cancelalos antes de darla de baja.'
                 )
             cancha.desactivar()
+            DifusionGrillaService.programar_operatoria(cancha.complejo_id, cancha.pk)
 
 
 class HorarioAperturaService:
@@ -774,39 +814,58 @@ class HorarioAperturaService:
         with transaction.atomic():
             # Bloquear la cancha serializa altas y ediciones simultáneas de sus horarios: dos rangos
             # superpuestos no pueden pasar la validación a la vez.
-            CanchaRepository.bloquear(cancha_id)
+            cancha = CanchaRepository.bloquear(cancha_id)
             HorarioAperturaService._validar_rango_libre(cancha_id, dia_semana, apertura, cierre, excluir_id)
-            return operacion()
+            resultado = operacion(cancha)
+            DifusionGrillaService.programar_operatoria(cancha.complejo_id, cancha.pk)
+            return resultado
 
     @staticmethod
     def crear(datos):
+        # Un rango nuevo solo agrega turnos: no puede dejar reservas fuera de la grilla.
         return HorarioAperturaService._guardar(
             datos['cancha'].pk, datos['dia_semana'], datos['hora_apertura'], datos['hora_cierre'], None,
-            lambda: HorarioAperturaRepository.crear(**datos),
+            lambda cancha: HorarioAperturaRepository.crear(**datos),
         )
 
     @staticmethod
-    def actualizar(horario, datos):
+    def actualizar(horario, datos, confirmar=False, actor=None, ip_origen=None):
         campos = _campos_modificados(horario, datos)
         if not campos:
             return horario
-        return HorarioAperturaService._guardar(
-            horario.cancha_id,
-            campos.get('dia_semana', horario.dia_semana),
-            campos.get('hora_apertura', horario.hora_apertura),
-            campos.get('hora_cierre', horario.hora_cierre),
-            horario.pk,
-            lambda: HorarioAperturaRepository.actualizar(horario, **campos),
-        )
+        dia = campos.get('dia_semana', horario.dia_semana)
+        apertura = campos.get('hora_apertura', horario.hora_apertura)
+        cierre = campos.get('hora_cierre', horario.hora_cierre)
+
+        def operar(cancha):
+            if {'dia_semana', 'hora_apertura', 'hora_cierre'} & set(campos):
+                horarios = [
+                    rango for rango in HorarioAperturaRepository.activos_de_cancha(cancha.pk) if rango[0] != horario.pk
+                ] + [(horario.pk, dia, apertura, cierre)]
+                ConflictoOperatoriaService.validar_cambio(
+                    cancha, confirmar, actor, ip_origen, horarios=horarios,
+                    descripcion=f'edición del horario id {horario.pk}',
+                )
+            return HorarioAperturaRepository.actualizar(horario, **campos)
+
+        return HorarioAperturaService._guardar(horario.cancha_id, dia, apertura, cierre, horario.pk, operar)
 
     @staticmethod
-    def dar_de_baja(horario):
-        horario.desactivar()
+    def dar_de_baja(horario, confirmar=False, actor=None, ip_origen=None):
+        with transaction.atomic():
+            cancha = CanchaRepository.bloquear(horario.cancha_id)
+            horarios = [rango for rango in HorarioAperturaRepository.activos_de_cancha(cancha.pk) if rango[0] != horario.pk]
+            ConflictoOperatoriaService.validar_cambio(
+                cancha, confirmar, actor, ip_origen, horarios=horarios, descripcion=f'baja del horario id {horario.pk}',
+            )
+            horario.desactivar()
+            DifusionGrillaService.programar_operatoria(cancha.complejo_id, cancha.pk)
 
 
 EVENTO_GRILLA_ACTUALIZADA = 'grilla_actualizada'
-# Nombre del handler del consumer: Channels traduce el punto del tipo a guion bajo (grilla_actualizada).
+# Nombres de los handlers del consumer: Channels traduce el punto del tipo a guion bajo (grilla_actualizada).
 TIPO_MENSAJE_GRILLA = 'grilla.actualizada'
+TIPO_MENSAJE_CIERRE = 'complejo.no_disponible'
 
 logger_difusion = logging.getLogger('core.difusion')
 
@@ -845,15 +904,35 @@ class DifusionGrillaService:
         transaction.on_commit(lambda: DifusionGrillaService.publicar(complejo_id, evento))
 
     @staticmethod
-    def publicar(complejo_id, evento):
+    def programar_operatoria(complejo_id, cancha_id=None):
         """
-        Envía el evento al grupo complejo_<id>. Corre después del commit: si el channel layer falla (Redis caído,
+        Cambió la operatoria de una cancha (horarios, duración, estado, precio) o de todo el complejo si
+        cancha_id es nulo: rige desde hoy, sin fecha de fin y para el día completo.
+        """
+        DifusionGrillaService.programar(
+            complejo_id, cancha_id=cancha_id, fecha_desde=timezone.localdate().isoformat(), fecha_hasta=None,
+            hora_inicio=None, hora_fin=None,
+        )
+
+    @staticmethod
+    def programar_cierre(complejo_id):
+        """El complejo dejó de publicar su grilla: las conexiones abiertas se cierran después del commit."""
+        transaction.on_commit(lambda: DifusionGrillaService._enviar(complejo_id, {'type': TIPO_MENSAJE_CIERRE}))
+
+    @staticmethod
+    def publicar(complejo_id, evento):
+        DifusionGrillaService._enviar(complejo_id, {'type': TIPO_MENSAJE_GRILLA, 'evento': evento})
+
+    @staticmethod
+    def _enviar(complejo_id, mensaje):
+        """
+        Envía el mensaje al grupo complejo_<id>. Corre después del commit: si el channel layer falla (Redis caído,
         por ejemplo) se registra y se sigue, porque la operación ya quedó confirmada y las grillas abiertas se
         resincronizan por REST al reconectar.
         Sirve desde código sincrónico (vistas de DRF, que Daphne ejecuta en un hilo) y desde código asíncrono
         (consumers o vistas async): ahí no se puede bloquear el loop, así que el envío se agenda como tarea.
         """
-        grupo, mensaje = grupo_de_complejo(complejo_id), {'type': TIPO_MENSAJE_GRILLA, 'evento': evento}
+        grupo = grupo_de_complejo(complejo_id)
         try:
             capa = get_channel_layer()
             try:
@@ -926,6 +1005,7 @@ class ExcepcionHorariaService:
         with transaction.atomic():
             excepcion = ExcepcionHorariaRepository.crear(creado_por=actor, **datos)
             ExcepcionHorariaService._difundir(excepcion)
+            TurnoFijoService.avisar_fechas_en_espera(excepcion)
 
         AuditoriaService.registrar(
             TipoEventoAuditoria.ALTA_EXCEPCION, 'Alta de excepción horaria',
@@ -1199,6 +1279,9 @@ TRANSICIONES_AGENDA = {
 ESTADOS_QUE_REQUIEREN_TURNO_INICIADO = (EstadoReserva.AUSENTE, EstadoReserva.COMPLETADA)
 
 MENSAJE_TURNO_YA_RESERVADO = 'El turno ya está reservado.'
+ESTADOS_RESERVA_CANCELADAS = (EstadoReserva.CANCELADA_JUGADOR, EstadoReserva.CANCELADA_COMPLEJO)
+ACCION_MANTENER_FECHA = 'mantener'
+ACCION_CANCELAR_FECHA = 'cancelar'
 
 
 def _horas(cantidad):
@@ -1311,9 +1394,24 @@ class ReservaService:
             raise ValidationError(f'Una reserva en estado «{reserva.get_estado_display()}» no se puede cancelar.')
 
     @staticmethod
+    def _contacto_de_baja_a_liberar(reserva):
+        """
+        Una reserva señada de un titular que se dio de baja guarda una copia de su nombre y teléfono solo para
+        resolver la seña (PROJECT.md §13.2): al resolverse (completada, ausente o cancelada) esa copia se borra.
+        """
+        usuario = reserva.usuario
+        if usuario is None or usuario.estado != EstadoUsuario.BAJA:
+            return {}
+        if not reserva.nombre_cliente_manual and not reserva.telefono_cliente_manual:
+            return {}
+        return {'nombre_cliente_manual': '', 'telefono_cliente_manual': ''}
+
+    @staticmethod
     def _cancelar(reserva, estado_nuevo):
         estado_anterior = reserva.get_estado_display()
-        ReservaRepository.actualizar(reserva, estado=estado_nuevo)
+        ReservaRepository.actualizar(
+            reserva, estado=estado_nuevo, **ReservaService._contacto_de_baja_a_liberar(reserva),
+        )
         ReservaService._difundir(reserva)
         return f' Estado: {estado_anterior} -> {reserva.get_estado_display()}.'
 
@@ -1379,6 +1477,8 @@ class ReservaService:
             estado_anterior = reserva.estado
             if 'estado' in campos:
                 ReservaService._validar_transicion(reserva, campos['estado'])
+                if campos['estado'] in (EstadoReserva.AUSENTE, EstadoReserva.COMPLETADA):
+                    campos.update(ReservaService._contacto_de_baja_a_liberar(reserva))
             ReservaService._guardar(lambda: ReservaRepository.actualizar(reserva, **campos))
             cambia_ocupacion = (estado_anterior in ESTADOS_RESERVA_OCUPANTES) != (
                 reserva.estado in ESTADOS_RESERVA_OCUPANTES
@@ -1395,10 +1495,12 @@ class ReservaService:
         return reserva
 
     @staticmethod
-    def registrar_fecha_de_turno_fijo(turno_fijo, fecha, actor, ip_origen):
+    def registrar_fecha_de_turno_fijo(turno_fijo, fecha, actor, ip_origen, accion=ACCION_MANTENER_FECHA):
         """
         Lleva a la agenda una fecha puntual de un turno fijo para operarla (señarla, completarla o cancelarla).
         Desde ese momento manda el estado de la reserva generada: cancelarla libera el casillero, como en la grilla.
+        `accion = cancelar` la registra ya cancelada por el complejo, en un solo paso: es la decisión típica ante
+        una fecha en espera por una excepción (por ejemplo, un feriado).
         """
         with transaction.atomic():
             cancha, turno = TurnoFijoService.bloquear(turno_fijo)
@@ -1414,18 +1516,74 @@ class ReservaService:
             if ReservaRepository.existe_fecha_de_turno_fijo(turno.pk, fecha):
                 raise ConflictoNegocio('Esa fecha del turno fijo ya figura en la agenda.')
             precio = DisponibilidadService.precio_vigente(cancha, turno.dia_semana, turno.hora_inicio, turno.hora_fin)
+            cancelada = accion == ACCION_CANCELAR_FECHA
             reserva = ReservaService._guardar(lambda: ReservaRepository.crear(
                 cancha=cancha, usuario_id=turno.usuario_id, turno_fijo=turno, creado_por=actor,
                 nombre_cliente_manual=turno.nombre_cliente_manual,
                 telefono_cliente_manual=turno.telefono_cliente_manual,
                 fecha_turno=fecha, hora_inicio=turno.hora_inicio, hora_fin=turno.hora_fin, precio_acordado=precio,
-                tipo_ocupacion=TipoOcupacion.TURNO_FIJO, estado=EstadoReserva.CONFIRMADA,
+                tipo_ocupacion=TipoOcupacion.TURNO_FIJO,
+                estado=EstadoReserva.CANCELADA_COMPLEJO if cancelada else EstadoReserva.CONFIRMADA,
             ))
             ReservaService._difundir(reserva)
 
+        if cancelada:
+            ReservaService._auditar(
+                TipoEventoAuditoria.RESERVA_CANCELADA, 'Fecha de turno fijo cancelada por el complejo', reserva, actor,
+                ip_origen, f' Turno fijo id {turno.pk}.',
+            )
+        else:
+            ReservaService._auditar(
+                TipoEventoAuditoria.RESERVA_CREADA, 'Alta de fecha de turno fijo', reserva, actor, ip_origen,
+                f' Turno fijo id {turno.pk}.',
+            )
+        return reserva
+
+    @staticmethod
+    def reabrir(reserva_cancelada, estado_nuevo, confirmar, actor, ip_origen):
+        """
+        Corrige una cancelación hecha por error. Antes de pedir la confirmación revalida el turno con la cancha
+        bloqueada, igual que un alta: si mientras tanto lo tomó otra reserva o un turno fijo, lo cerró una
+        excepción o ya no es un turno de la grilla, es un choque real (409) que no se puede forzar.
+        """
+        with transaction.atomic():
+            cancha = ReservaRepository.bloquear_cancha(reserva_cancelada.cancha_id)
+            reserva = ReservaRepository.bloquear(reserva_cancelada.pk)
+            if reserva is None:
+                raise NotFound()
+            if reserva.estado not in ESTADOS_RESERVA_CANCELADAS:
+                raise ValidationError({'estado': 'Solo se reabre una reserva cancelada.'})
+            if reserva.usuario_id is not None and reserva.usuario.estado == EstadoUsuario.BAJA:
+                raise ValidationError('La cuenta del titular se dio de baja: registrá una reserva manual nueva.')
+            if _ya_comenzo(reserva.fecha_turno, reserva.hora_inicio):
+                raise ValidationError('El turno ya comenzó: no se puede reabrir.')
+
+            complejo = cancha.complejo
+            publica = complejo.estado == EstadoRegistro.ACTIVO and complejo.estado_contrato == EstadoContrato.ACTIVO
+            if not publica or cancha.estado != EstadoCancha.ACTIVA:
+                raise ConflictoNegocio('La cancha o el complejo ya no están disponibles para reservas.')
+            bloque = DisponibilidadService.bloque(cancha, reserva.fecha_turno.weekday(), reserva.hora_inicio)
+            if bloque is None or bloque[0] != reserva.hora_fin:
+                raise ConflictoNegocio('El turno ya no coincide con los horarios vigentes de la cancha.')
+            DisponibilidadService.validar_fecha_libre(cancha, reserva.fecha_turno, reserva.hora_inicio, reserva.hora_fin)
+
+            if not confirmar:
+                raise ConflictoConConfirmacion(
+                    f'La reserva pasa de «{reserva.get_estado_display()}» a «{EstadoReserva(estado_nuevo).label}» y '
+                    'vuelve a ocupar su turno. Para aplicarlo, repetí la operación con "confirmar": true.',
+                    vista_previa={
+                        'id': reserva.pk, 'fecha_turno': reserva.fecha_turno.isoformat(),
+                        'hora_inicio': _hora_iso(reserva.hora_inicio), 'hora_fin': _hora_iso(reserva.hora_fin),
+                        'estado_actual': reserva.estado, 'estado_nuevo': estado_nuevo,
+                    },
+                )
+            estado_anterior = reserva.get_estado_display()
+            ReservaService._guardar(lambda: ReservaRepository.actualizar(reserva, estado=estado_nuevo))
+            ReservaService._difundir(reserva)
+
         ReservaService._auditar(
-            TipoEventoAuditoria.RESERVA_CREADA, 'Alta de fecha de turno fijo', reserva, actor, ip_origen,
-            f' Turno fijo id {turno.pk}.',
+            TipoEventoAuditoria.RESERVA_CAMBIO_ESTADO, 'Reapertura de reserva cancelada', reserva, actor, ip_origen,
+            f' Estado: {estado_anterior} -> {reserva.get_estado_display()}.',
         )
         return reserva
 
@@ -1457,7 +1615,8 @@ class TurnoFijoService:
     def _validar_periodo_libre(cancha, dia_semana, inicio, fin, desde, hasta, excluir_id=None):
         """
         El turno fijo no puede chocar, en ninguna fecha de ese día de la semana dentro de [desde, hasta], con otro
-        turno fijo vigente, una reserva activa ni una excepción activa. Las fechas pasadas no se revisan.
+        turno fijo vigente ni con una reserva activa. Las fechas pasadas no se revisan. Una excepción no lo
+        impide: las fechas que cubre quedan en espera de una decisión del complejo (`fechas_en_espera`).
         """
         desde = max(desde, timezone.localdate())
         if hasta is not None and hasta < desde:
@@ -1481,26 +1640,95 @@ class TurnoFijoService:
                 f'a las {reserva["hora_inicio"]:%H:%M}.'
             )
 
-        for excepcion in ExcepcionHorariaRepository.activas_en_periodo(cancha.complejo_id, cancha.pk, desde, hasta):
-            if not _excepcion_cubre(excepcion, inicio, fin):
-                continue
-            fecha = _primera_fecha_del_dia(
-                max(desde, excepcion['fecha_inicio']), _menor_fecha(hasta, excepcion['fecha_fin']), dia_semana,
-            )
-            if fecha is not None:
-                motivo = TipoMotivoExcepcion(excepcion['tipo_motivo']).label
-                raise ConflictoNegocio(f'Coincide con una excepción horaria activa el {fecha:%d/%m/%Y} ({motivo}).')
+    @staticmethod
+    def fechas_en_espera(turnos):
+        """
+        {turno_id: [{'fecha', 'motivo'}]}: fechas desde hoy de turnos fijos vigentes que cubre una excepción activa y
+        que el complejo todavía no decidió (no tienen reserva generada). Siguen ocupando la grilla mientras esperan.
+        Dos consultas para toda la página, sin importar cuántos turnos fijos haya.
+        """
+        vigentes = [turno for turno in turnos if turno.estado == EstadoTurnoFijo.VIGENTE]
+        if not vigentes:
+            return {}
+        hoy = timezone.localdate()
+        excepciones = ExcepcionHorariaRepository.activas_desde({turno.cancha.complejo_id for turno in vigentes}, hoy)
+        generadas = ReservaRepository.fechas_generadas([turno.pk for turno in vigentes], hoy)
+
+        resultado = {}
+        for turno in vigentes:
+            fechas = {}
+            for excepcion in excepciones:
+                misma_cancha = excepcion['cancha_id'] in (None, turno.cancha_id)
+                if excepcion['complejo_id'] != turno.cancha.complejo_id or not misma_cancha:
+                    continue
+                if not _excepcion_cubre(excepcion, turno.hora_inicio, turno.hora_fin):
+                    continue
+                hasta = _menor_fecha(excepcion['fecha_fin'], turno.fecha_fin_vigencia)
+                fecha = _primera_fecha_del_dia(
+                    max(hoy, excepcion['fecha_inicio'], turno.fecha_inicio_vigencia), hasta, turno.dia_semana,
+                )
+                while fecha is not None and fecha <= hasta:
+                    if (turno.pk, fecha) not in generadas:
+                        fechas.setdefault(fecha, TipoMotivoExcepcion(excepcion['tipo_motivo']).label)
+                    fecha += timedelta(days=7)
+            if fechas:
+                resultado[turno.pk] = [
+                    {'fecha': fecha.isoformat(), 'motivo': motivo} for fecha, motivo in sorted(fechas.items())
+                ]
+        return resultado
 
     @staticmethod
-    def _difundir(turno):
+    def filtrar_en_espera(queryset, en_espera):
+        con_fechas = set(TurnoFijoService.fechas_en_espera(list(queryset)))
+        return queryset.filter(pk__in=con_fechas) if en_espera else queryset.exclude(pk__in=con_fechas)
+
+    @staticmethod
+    def avisar_fechas_en_espera(excepcion):
+        """Una excepción nueva que deja fechas de turnos fijos sin decidir genera un aviso urgente al complejo."""
+        turnos = TurnoFijoRepository.vigentes_alcanzados(excepcion.complejo_id, excepcion.cancha_id)
+        afectados, cantidad = [], 0
+        for turno_id, fechas in TurnoFijoService.fechas_en_espera(turnos).items():
+            propias = [
+                item for item in fechas
+                if excepcion.fecha_inicio.isoformat() <= item['fecha'] <= excepcion.fecha_fin.isoformat()
+            ]
+            if propias:
+                afectados.append(turno_id)
+                cantidad += len(propias)
+        if afectados:
+            AvisoComplejoService.programar(
+                excepcion.complejo_id, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_URGENTE,
+                f'La excepción id {excepcion.pk} deja {_plural(cantidad, "fecha", "fechas")} de turnos fijos en espera '
+                f'(turnos fijos {afectados}). Indicá desde la agenda si cada fecha se mantiene o se cancela.',
+                {'excepcion': excepcion.pk, 'turnos_fijos': afectados},
+            )
+
+    @staticmethod
+    def _difundir(turno, dia_completo=False):
+        """Con `dia_completo` (cambio de horario) el aviso cubre el horario viejo y el nuevo a la vez."""
         DifusionGrillaService.programar(
             turno.cancha.complejo_id,
             cancha_id=turno.cancha_id,
             fecha_desde=turno.fecha_inicio_vigencia.isoformat(),
             fecha_hasta=turno.fecha_fin_vigencia.isoformat() if turno.fecha_fin_vigencia else None,
-            hora_inicio=_hora_iso(turno.hora_inicio),
-            hora_fin=_hora_iso(turno.hora_fin),
+            hora_inicio=None if dia_completo else _hora_iso(turno.hora_inicio),
+            hora_fin=None if dia_completo else _hora_iso(turno.hora_fin),
         )
+
+    @staticmethod
+    def _vista_previa_de_horario(turno, inicio_nuevo, fin_nuevo, fin_vigencia):
+        hoy = timezone.localdate()
+        rige_desde = _primera_fecha_del_dia(max(hoy, turno.fecha_inicio_vigencia), fin_vigencia, turno.dia_semana)
+        return {
+            'horario_actual': {'hora_inicio': _hora_iso(turno.hora_inicio), 'hora_fin': _hora_iso(turno.hora_fin)},
+            'horario_nuevo': {'hora_inicio': _hora_iso(inicio_nuevo), 'hora_fin': _hora_iso(fin_nuevo)},
+            'rige_desde': rige_desde.isoformat() if rige_desde else None,
+            # Ya están en la agenda con el horario anterior: se resuelven desde ahí (mantener, reabrir o cancelar).
+            'fechas_registradas': [
+                {'id': reserva['id'], 'fecha_turno': reserva['fecha_turno'].isoformat(), 'estado': reserva['estado']}
+                for reserva in ReservaRepository.fechas_a_resolver_de_turno_fijo(turno.pk, hoy)
+            ],
+        }
 
     @staticmethod
     def crear(datos, actor):
@@ -1527,10 +1755,11 @@ class TurnoFijoService:
         return turno
 
     @staticmethod
-    def actualizar(turno_fijo, datos):
+    def actualizar(turno_fijo, datos, confirmar=False):
         """
-        El día, el horario y el inicio de la vigencia no se editan: un cambio así es otro turno fijo. Reanudar un
-        turno pausado revisa toda su vigencia; extender el fin, solo el tramo agregado.
+        El día, la cancha y el inicio de la vigencia no se editan: un cambio así es otro turno fijo. El horario sí,
+        hacia otro turno libre de la grilla y con confirmación explícita, porque cambia el acuerdo con el cliente.
+        Reanudar o cambiar el horario revisa toda la vigencia; extender el fin, solo el tramo agregado.
         """
         with transaction.atomic():
             cancha, turno = TurnoFijoService.bloquear(turno_fijo)
@@ -1544,8 +1773,19 @@ class TurnoFijoService:
                     raise ValidationError({'fecha_fin_vigencia': 'No puede ser anterior a hoy.'})
                 TurnoFijoService.validar_vigencia(turno.fecha_inicio_vigencia, fin_nuevo, turno.dia_semana)
 
+            cambia_horario = 'hora_inicio' in campos
+            inicio_nuevo, hora_fin_nueva = campos.get('hora_inicio', turno.hora_inicio), turno.hora_fin
+            if cambia_horario:
+                bloque = DisponibilidadService.bloque(cancha, turno.dia_semana, inicio_nuevo)
+                if bloque is None:
+                    raise ValidationError({
+                        'hora_inicio': 'El horario no corresponde a un turno de la cancha para ese día de la semana.',
+                    })
+                hora_fin_nueva = bloque[0]
+                campos['hora_fin'] = hora_fin_nueva
+
             if campos.get('estado', turno.estado) == EstadoTurnoFijo.VIGENTE:
-                if turno.estado == EstadoTurnoFijo.PAUSADO:
+                if turno.estado == EstadoTurnoFijo.PAUSADO or cambia_horario:
                     desde = turno.fecha_inicio_vigencia
                 elif 'fecha_fin_vigencia' in campos and turno.fecha_fin_vigencia is not None and (
                     fin_nuevo is None or fin_nuevo > turno.fecha_fin_vigencia
@@ -1555,13 +1795,22 @@ class TurnoFijoService:
                     desde = None
                 if desde is not None:
                     TurnoFijoService._validar_periodo_libre(
-                        cancha, turno.dia_semana, turno.hora_inicio, turno.hora_fin, desde, fin_nuevo,
+                        cancha, turno.dia_semana, inicio_nuevo, hora_fin_nueva, desde, fin_nuevo,
                         excluir_id=turno.pk,
                     )
 
+            # Primero los choques reales, que no se pueden confirmar; recién después se pide la confirmación.
+            if cambia_horario and not confirmar:
+                raise ConflictoConConfirmacion(
+                    f'El turno fijo pasa de las {turno.hora_inicio:%H:%M} a las {inicio_nuevo:%H:%M}. Para aplicarlo, '
+                    'repetí la operación con "confirmar": true. Las fechas ya registradas en la agenda conservan '
+                    'el horario anterior.',
+                    vista_previa=TurnoFijoService._vista_previa_de_horario(turno, inicio_nuevo, hora_fin_nueva, fin_nuevo),
+                )
+
             TurnoFijoRepository.actualizar(turno, **campos)
-            if {'estado', 'fecha_fin_vigencia'} & set(campos):
-                TurnoFijoService._difundir(turno)
+            if cambia_horario or {'estado', 'fecha_fin_vigencia'} & set(campos):
+                TurnoFijoService._difundir(turno, dia_completo=cambia_horario)
         return turno
 
     @staticmethod
@@ -1571,3 +1820,283 @@ class TurnoFijoService:
             _, turno = TurnoFijoService.bloquear(turno_fijo)
             turno.desactivar()
             TurnoFijoService._difundir(turno)
+
+
+MOTIVO_CANCHA_EN_MANTENIMIENTO = 'La cancha está en mantenimiento.'
+MOTIVO_FUERA_DE_LOS_TURNOS = 'El turno ya no coincide con los horarios ni con la duración vigentes de la cancha.'
+
+
+class ConflictoOperatoriaService:
+    """
+    Reservas y turnos fijos que un cambio de horarios, de duración o de estado de una cancha deja fuera de su
+    grilla. El cambio no los cancela: se informan (409) y, con confirmación, se aplica y quedan marcados en la
+    agenda para que el complejo los reprograme o los cancele.
+    """
+
+    @staticmethod
+    def _rangos(horarios):
+        """Normaliza a (dia, apertura, cierre) tanto tuplas del repositorio como horarios precargados."""
+        return [
+            rango[1:] if isinstance(rango, tuple) else (rango.dia_semana, rango.hora_apertura, rango.hora_cierre)
+            for rango in horarios
+        ]
+
+    @staticmethod
+    def motivo(estado_cancha, rangos, duracion, dia_semana, inicio, fin):
+        """Por qué un turno quedó fuera de la grilla de su cancha, o None si sigue siendo un bloque válido."""
+        if estado_cancha != EstadoCancha.ACTIVA:
+            return MOTIVO_CANCHA_EN_MANTENIMIENTO
+        for dia, apertura, cierre in rangos:
+            if dia == dia_semana and (inicio, fin) in GrillaService.generar_bloques(apertura, cierre, duracion):
+                return None
+        return MOTIVO_FUERA_DE_LOS_TURNOS
+
+    @staticmethod
+    def motivo_de_reserva(reserva):
+        """Marca de la agenda: solo para reservas que todavía se van a jugar."""
+        if reserva.estado not in ESTADOS_RESERVA_A_RESOLVER or _ya_comenzo(reserva.fecha_turno, reserva.hora_inicio):
+            return None
+        cancha = reserva.cancha
+        horarios = getattr(cancha, 'horarios_activos', None)
+        if horarios is None:
+            horarios = HorarioAperturaRepository.activos_de_cancha(cancha.pk)
+        return ConflictoOperatoriaService.motivo(
+            cancha.estado, ConflictoOperatoriaService._rangos(horarios), cancha.duracion_turno_min,
+            reserva.fecha_turno.weekday(), reserva.hora_inicio, reserva.hora_fin,
+        )
+
+    @staticmethod
+    def motivo_de_turno_fijo(turno_fijo):
+        """Los listados de turnos fijos ya excluyen la baja lógica: solo resta ver si sigue en vigencia."""
+        if turno_fijo.fecha_fin_vigencia is not None and turno_fijo.fecha_fin_vigencia < timezone.localdate():
+            return None
+        cancha = turno_fijo.cancha
+        horarios = getattr(cancha, 'horarios_activos', None)
+        if horarios is None:
+            horarios = HorarioAperturaRepository.activos_de_cancha(cancha.pk)
+        return ConflictoOperatoriaService.motivo(
+            cancha.estado, ConflictoOperatoriaService._rangos(horarios), cancha.duracion_turno_min,
+            turno_fijo.dia_semana, turno_fijo.hora_inicio, turno_fijo.hora_fin,
+        )
+
+    @staticmethod
+    def filtrar_reservas(queryset, con_conflicto):
+        """
+        Filtro de la agenda. El motivo depende de los horarios vigentes, así que se evalúa en Python sobre las
+        reservas a resolver desde hoy, acotadas por la anticipación máxima de reserva.
+        """
+        en_conflicto = [
+            reserva.pk for reserva in ReservaRepository.a_resolver_desde(queryset, timezone.localdate())
+            if ConflictoOperatoriaService.motivo_de_reserva(reserva) is not None
+        ]
+        return queryset.filter(pk__in=en_conflicto) if con_conflicto else queryset.exclude(pk__in=en_conflicto)
+
+    @staticmethod
+    def _afectados(cancha, rangos, duracion, estado):
+        """Reservas por jugar y turnos fijos fuera de la grilla en esa configuración, cada uno con su motivo."""
+        hoy = timezone.localdate()
+        reservas, turnos = [], []
+        for reserva in ReservaRepository.a_resolver_de_cancha(cancha.pk, hoy):
+            if _ya_comenzo(reserva['fecha_turno'], reserva['hora_inicio']):
+                continue
+            motivo = ConflictoOperatoriaService.motivo(
+                estado, rangos, duracion, reserva['fecha_turno'].weekday(), reserva['hora_inicio'], reserva['hora_fin'],
+            )
+            if motivo:
+                reservas.append({**reserva, 'motivo': motivo})
+        for turno in TurnoFijoRepository.activos_de_cancha(cancha.pk, hoy):
+            motivo = ConflictoOperatoriaService.motivo(
+                estado, rangos, duracion, turno['dia_semana'], turno['hora_inicio'], turno['hora_fin'],
+            )
+            if motivo:
+                turnos.append({**turno, 'motivo': motivo})
+        return reservas, turnos
+
+    @staticmethod
+    def _con_impacto_nuevo(antes, despues):
+        """Lo que el cambio afecta por primera vez o por otro motivo (por ejemplo, de fuera de turno a mantenimiento)."""
+        motivos_previos = {item['id']: item['motivo'] for item in antes}
+        return [item for item in despues if motivos_previos.get(item['id']) != item['motivo']]
+
+    @staticmethod
+    def validar_cambio(cancha, confirmar, actor, ip_origen, *, horarios=None, duracion=None, estado=None,
+                       descripcion=''):
+        """
+        Compara lo que queda fuera de la grilla antes y después del cambio. Pide confirmación por lo que el cambio
+        afecta por primera vez o con un motivo distinto del que ya tenía; repetir el mismo aviso sobre lo ya marcado
+        y sin novedades no aporta. Sin `confirmar` responde 409 con el detalle (sin datos personales); con
+        `confirmar`, lo audita.
+        """
+        actuales = ConflictoOperatoriaService._rangos(HorarioAperturaRepository.activos_de_cancha(cancha.pk))
+        nuevos = actuales if horarios is None else ConflictoOperatoriaService._rangos(horarios)
+        reservas_antes, turnos_antes = ConflictoOperatoriaService._afectados(
+            cancha, actuales, cancha.duracion_turno_min, cancha.estado,
+        )
+        reservas_despues, turnos_despues = ConflictoOperatoriaService._afectados(
+            cancha, nuevos, duracion or cancha.duracion_turno_min, cancha.estado if estado is None else estado,
+        )
+        reservas = ConflictoOperatoriaService._con_impacto_nuevo(reservas_antes, reservas_despues)
+        turnos = ConflictoOperatoriaService._con_impacto_nuevo(turnos_antes, turnos_despues)
+        if not reservas and not turnos:
+            return
+
+        conflictos = {
+            'cantidad': len(reservas) + len(turnos),
+            'reservas': [
+                {'id': reserva['id'], 'fecha_turno': reserva['fecha_turno'].isoformat(),
+                 'hora_inicio': _hora_iso(reserva['hora_inicio']), 'estado': reserva['estado'],
+                 'motivo': reserva['motivo']}
+                for reserva in reservas
+            ],
+            'turnos_fijos': [
+                {'id': turno['id'], 'dia_semana': turno['dia_semana'], 'hora_inicio': _hora_iso(turno['hora_inicio']),
+                 'motivo': turno['motivo']}
+                for turno in turnos
+            ],
+        }
+        if not confirmar:
+            raise ConflictoConConfirmacion(
+                f'El cambio deja fuera de la grilla {len(reservas)} reserva(s) futura(s) y {len(turnos)} turno(s) '
+                'fijo(s). Para aplicarlo igual, repetí la operación con "confirmar": true: no se cancelan y quedan '
+                'marcados en la agenda para reprogramarlos o cancelarlos.',
+                conflictos,
+            )
+        AuditoriaService.registrar(
+            TipoEventoAuditoria.CAMBIO_CONFIGURACION, 'Cambio de operatoria confirmado con ocupaciones afectadas',
+            detalle=f'Cancha id {cancha.pk}: {descripcion}. '
+                    f'Reservas afectadas: {[reserva["id"] for reserva in reservas] or "ninguna"}. '
+                    f'Turnos fijos afectados: {[turno["id"] for turno in turnos] or "ninguno"}.',
+            usuario=actor, complejo=cancha.complejo_id, ip_origen=ip_origen,
+        )
+
+
+CATEGORIA_AVISO_RESERVAS = 1
+PRIORIDAD_AVISO_NORMAL = 1
+PRIORIDAD_AVISO_URGENTE = 2
+
+logger_avisos = logging.getLogger('core.avisos')
+
+
+class AvisoComplejoService:
+    """
+    Avisos para el panel de un complejo, con la categoría y la prioridad de la colección `notificaciones` de
+    backend-node. Se entregan después del commit y nunca revierten la operación que los originó. El mensaje no
+    lleva datos personales: solo cantidades e ids de reservas o turnos.
+    """
+
+    @staticmethod
+    def programar(complejo_id, categoria, prioridad, mensaje, referencias=None):
+        aviso = {
+            'complejo_id': complejo_id, 'categoria': categoria, 'prioridad': prioridad, 'mensaje': mensaje,
+            'referencias': referencias or {},
+        }
+        # robust: una falla al entregar se registra y no convierte en error una operación ya confirmada.
+        transaction.on_commit(lambda: AvisoComplejoService.entregar(aviso), robust=True)
+
+    @staticmethod
+    def entregar(aviso):
+        """
+        Punto único de entrega. La ruta interna de backend-node se conecta en el punto 5.7; hasta entonces el aviso
+        queda registrado en el log del servidor.
+        """
+        logger_avisos.warning(
+            'Aviso para el complejo %s sin entregar (la mensajería de backend-node aún no está conectada): '
+            'categoría %s, prioridad %s. %s',
+            aviso['complejo_id'], aviso['categoria'], aviso['prioridad'], aviso['mensaje'],
+        )
+
+
+DIAS_DE_CONSERVACION_DE_CONTACTO = 30
+
+
+def _plural(cantidad, singular, plural):
+    return f'{cantidad} {singular if cantidad == 1 else plural}'
+
+
+class BajaDeCuentaService:
+    """
+    Efectos de la baja de cuenta propia sobre sus ocupaciones (PROJECT.md §4.7 y §13.2): se cancelan las reservas
+    futuras pendientes y confirmadas, se conservan las señadas o pagadas (hay dinero de por medio) y se dan de baja
+    los turnos fijos. En las señadas se copia el nombre y el teléfono del titular antes de anonimizarlo, con la
+    única finalidad de resolver la seña con el complejo.
+    """
+
+    @staticmethod
+    def vista_previa(usuario):
+        reservas = [
+            reserva for reserva in ReservaRepository.a_resolver_de_titular(usuario.pk, timezone.localdate())
+            if not _ya_comenzo(reserva['fecha_turno'], reserva['hora_inicio'])
+        ]
+        senadas = sum(1 for reserva in reservas if reserva['estado'] == EstadoReserva.SENADA)
+        turnos_fijos = TurnoFijoRepository.cantidad_activos_de_titular(usuario.pk)
+        avisos = []
+        if senadas:
+            avisos.append(
+                f'{_plural(senadas, "reserva señada o pagada no se cancela", "reservas señadas o pagadas no se cancelan")}: '
+                'el complejo decide si la mantiene, la reprograma o devuelve la seña. Para eso conservamos tu nombre y '
+                'tu teléfono solo en esas reservas, hasta que se resuelvan o, como máximo, '
+                f'{DIAS_DE_CONSERVACION_DE_CONTACTO} días después de cada turno.'
+            )
+        return {
+            'reservas_a_cancelar': len(reservas) - senadas,
+            'reservas_senadas_conservadas': senadas,
+            'turnos_fijos_a_dar_de_baja': turnos_fijos,
+            'avisos': avisos,
+            'impedimento': UsuarioService.impedimento_de_baja(usuario),
+        }
+
+    @staticmethod
+    def resolver_ocupaciones(usuario):
+        """
+        Corre dentro de la transacción de la baja, antes de anonimizar. Devuelve las reservas canceladas para
+        auditarlas después del commit y un resumen sin datos personales.
+        """
+        reservas = [
+            reserva for reserva in ReservaRepository.bloquear_a_resolver_de_titular(usuario.pk, timezone.localdate())
+            if not _ya_comenzo(reserva.fecha_turno, reserva.hora_inicio)
+        ]
+        canceladas, senadas_por_complejo = [], defaultdict(list)
+        for reserva in reservas:
+            if reserva.estado == EstadoReserva.SENADA:
+                ReservaRepository.actualizar(
+                    reserva, nombre_cliente_manual=usuario.nombre_completo, telefono_cliente_manual=usuario.telefono,
+                )
+                senadas_por_complejo[reserva.cancha.complejo_id].append(reserva.pk)
+            else:
+                estado_anterior = reserva.get_estado_display()
+                ReservaRepository.actualizar(reserva, estado=EstadoReserva.CANCELADA_JUGADOR)
+                ReservaService._difundir(reserva)
+                canceladas.append((reserva, estado_anterior))
+
+        turnos_por_complejo = defaultdict(list)
+        for turno in TurnoFijoRepository.bloquear_activos_de_titular(usuario.pk):
+            turno.desactivar()
+            TurnoFijoService._difundir(turno)
+            turnos_por_complejo[turno.cancha.complejo_id].append(turno.pk)
+
+        for complejo_id, ids in senadas_por_complejo.items():
+            AvisoComplejoService.programar(
+                complejo_id, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_URGENTE,
+                f'Un titular dio de baja su cuenta y conserva {_plural(len(ids), "reserva señada", "reservas señadas")} '
+                f'(ids {ids}). Resolvé la seña desde la agenda: mantenerla, reprogramarla o cancelarla y devolverla.',
+                {'reservas': ids},
+            )
+        for complejo_id, ids in turnos_por_complejo.items():
+            AvisoComplejoService.programar(
+                complejo_id, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_NORMAL,
+                f'Se dieron de baja {_plural(len(ids), "turno fijo", "turnos fijos")} (ids {ids}) porque su titular '
+                'cerró la cuenta. El horario quedó libre en la grilla.',
+                {'turnos_fijos': ids},
+            )
+        resumen = (
+            f'Reservas canceladas: {len(canceladas)}. '
+            f'Reservas señadas conservadas: {sum(len(ids) for ids in senadas_por_complejo.values())}. '
+            f'Turnos fijos dados de baja: {sum(len(ids) for ids in turnos_por_complejo.values())}.'
+        )
+        return canceladas, resumen
+
+    @staticmethod
+    def purgar_contactos_vencidos():
+        """Plazo máximo de conservación: 30 días después del turno, aunque la reserva siga sin resolverse."""
+        limite = timezone.localdate() - timedelta(days=DIAS_DE_CONSERVACION_DE_CONTACTO)
+        return ReservaRepository.limpiar_contactos_de_bajas_hasta(limite)

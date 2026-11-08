@@ -28,6 +28,7 @@ from .repositories import (
     RolRepository,
     TurnoFijoRepository,
 )
+from .services import ConflictoOperatoriaService, TurnoFijoService
 
 
 def quitar_acentos(texto):
@@ -168,6 +169,11 @@ class AgendaFilter(RangoDeFechasDeTurnoFilter):
     cancha = django_filters.NumberFilter(field_name='cancha_id')
     fecha = django_filters.DateFilter(field_name='fecha_turno', input_formats=FORMATO_FECHA_ISO)
     tipo_ocupacion = django_filters.TypedChoiceFilter(choices=TipoOcupacion.choices, coerce=int)
+    # Reservas por jugar que un cambio de operatoria dejó fuera de la grilla y esperan una decisión del complejo.
+    con_conflicto = django_filters.BooleanFilter(method='filtrar_con_conflicto')
+
+    def filtrar_con_conflicto(self, queryset, nombre, valor):
+        return ConflictoOperatoriaService.filtrar_reservas(queryset, valor)
 
 
 ESTADOS_TURNO_FIJO_VISIBLES = [
@@ -183,5 +189,11 @@ class TurnoFijoFilter(django_filters.FilterSet):
     # Turnos fijos que caen en esa fecha: la agenda del día los combina con las reservas.
     fecha = django_filters.DateFilter(method='filtrar_fecha', input_formats=FORMATO_FECHA_ISO)
 
+    # Turnos fijos con alguna fecha cubierta por una excepción que el complejo todavía no decidió.
+    en_espera = django_filters.BooleanFilter(method='filtrar_en_espera')
+
     def filtrar_fecha(self, queryset, nombre, valor):
         return TurnoFijoRepository.que_aplican_en(queryset, valor)
+
+    def filtrar_en_espera(self, queryset, nombre, valor):
+        return TurnoFijoService.filtrar_en_espera(queryset, valor)

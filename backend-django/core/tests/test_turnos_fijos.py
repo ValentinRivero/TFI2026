@@ -328,17 +328,17 @@ class TestColisionesDeTurnosFijos:
 
         assert registrar(cancha, hasta=_martes(5)).status_code == status.HTTP_201_CREATED
 
-    def test_choca_con_una_excepcion_en_alguna_fecha_del_turno(
+    def test_una_excepcion_no_impide_el_alta_y_deja_la_fecha_en_espera(
         self, registrar, crear_excepcion_horaria, complejo, cancha,
     ):
         crear_excepcion_horaria(complejo, _martes(3), tipo_motivo=TipoMotivoExcepcion.FERIADO)
 
         respuesta = registrar(cancha)
 
-        assert respuesta.status_code == status.HTTP_409_CONFLICT
-        assert respuesta.json()['detail'] == 'Coincide con una excepción horaria activa el 08/12/2026 (Feriado).'
+        assert respuesta.status_code == status.HTTP_201_CREATED
+        assert respuesta.json()['fechas_en_espera'] == [{'fecha': '2026-12-08', 'motivo': 'Feriado'}]
 
-    def test_una_excepcion_de_varios_dias_que_incluye_un_martes_choca(
+    def test_una_excepcion_de_varios_dias_deja_en_espera_el_martes_que_incluye(
         self, registrar, crear_excepcion_horaria, complejo, cancha,
     ):
         crear_excepcion_horaria(
@@ -346,9 +346,12 @@ class TestColisionesDeTurnosFijos:
             cancha=cancha, inicio=time(20, 0), fin=time(23, 0),
         )
 
-        assert registrar(cancha).status_code == status.HTTP_409_CONFLICT
+        respuesta = registrar(cancha)
 
-    def test_excepciones_que_no_caen_en_ese_dia_u_horario_no_chocan(
+        assert respuesta.status_code == status.HTTP_201_CREATED
+        assert [item['fecha'] for item in respuesta.json()['fechas_en_espera']] == [_martes(1).isoformat()]
+
+    def test_excepciones_que_no_caen_en_ese_dia_u_horario_no_dejan_fechas_en_espera(
         self, registrar, crear_excepcion_horaria, complejo, crear_cancha, cancha,
     ):
         crear_excepcion_horaria(complejo, _martes(1) + timedelta(days=1), hasta=_martes(1) + timedelta(days=5))
@@ -357,7 +360,10 @@ class TestColisionesDeTurnosFijos:
         crear_excepcion_horaria(complejo, _martes(1)).desactivar()
         crear_excepcion_horaria(complejo, _martes(9))
 
-        assert registrar(cancha, hasta=_martes(8)).status_code == status.HTTP_201_CREATED
+        respuesta = registrar(cancha, hasta=_martes(8))
+
+        assert respuesta.status_code == status.HTTP_201_CREATED
+        assert respuesta.json()['fechas_en_espera'] == []
 
     def test_un_turno_fijo_ocupa_la_grilla_y_bloquea_reservas_web(
         self, registrar, jugador, cliente, cliente_de, complejo, cancha,
@@ -387,7 +393,7 @@ class TestEdicionDeTurnosFijos:
         turno.refresh_from_db()
         assert (turno.nombre_cliente_manual, turno.telefono_cliente_manual) == ('Los del Martes 2', '3777 000402')
 
-    def test_cambiar_el_dia_el_horario_o_la_cancha_responde_400(
+    def test_cambiar_el_dia_el_inicio_o_la_cancha_responde_400(
         self, reloj, dueno, cliente_de, crear_cancha, complejo, turno,
     ):
         respuesta = self._patch(
@@ -397,8 +403,8 @@ class TestEdicionDeTurnosFijos:
         )
 
         assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
-        assert set(respuesta.json()['detail']) == {'dia_semana', 'hora_inicio', 'fecha_inicio_vigencia', 'cancha'}
-        assert respuesta.json()['detail']['hora_inicio'] == ['No se edita: dá de baja el turno fijo y registrá otro.']
+        assert set(respuesta.json()['detail']) == {'dia_semana', 'fecha_inicio_vigencia', 'cancha'}
+        assert respuesta.json()['detail']['dia_semana'] == ['No se edita: dá de baja el turno fijo y registrá otro.']
         turno.refresh_from_db()
         assert (turno.dia_semana, turno.hora_inicio, turno.nombre_cliente_manual) == (
             DiaSemana.MARTES, time(21, 0), 'Los del Martes',

@@ -30,6 +30,9 @@ ESTADOS_RESERVA_OCUPANTES = (
     EstadoReserva.SENADA,
     EstadoReserva.COMPLETADA,
 )
+# Reservas que todavía se van a jugar y pueden necesitar una decisión del complejo o del titular.
+ESTADOS_RESERVA_A_RESOLVER = (EstadoReserva.PENDIENTE, EstadoReserva.CONFIRMADA, EstadoReserva.SENADA)
+ESTADOS_TURNO_FIJO_ACTIVOS = (EstadoTurnoFijo.VIGENTE, EstadoTurnoFijo.PAUSADO)
 
 
 class UsuarioRepository:
@@ -364,6 +367,26 @@ class HorarioAperturaRepository:
         return horarios.order_by('hora_apertura').first()
 
     @staticmethod
+    def activos_de_cancha(cancha_id):
+        """(id, dia_semana, apertura, cierre) de los rangos activos: alcanza para recalcular los bloques."""
+        return list(
+            HorarioApertura.objects.filter(cancha_id=cancha_id, estado=EstadoRegistro.ACTIVO)
+            .order_by('dia_semana', 'hora_apertura')
+            .values_list('id', 'dia_semana', 'hora_apertura', 'hora_cierre')
+        )
+
+    @staticmethod
+    def prefetch_activos(ruta_cancha):
+        """Precarga, en `<ruta_cancha>.horarios_activos`, los rangos activos de cada cancha con una sola consulta."""
+        return Prefetch(
+            f'{ruta_cancha}horarios',
+            queryset=HorarioApertura.objects.filter(estado=EstadoRegistro.ACTIVO).only(
+                'id', 'cancha_id', 'dia_semana', 'hora_apertura', 'hora_cierre',
+            ),
+            to_attr='horarios_activos',
+        )
+
+    @staticmethod
     def crear(**campos):
         return HorarioApertura.objects.create(**campos)
 
@@ -406,18 +429,13 @@ class ExcepcionHorariaRepository:
         )
 
     @staticmethod
-    def activas_en_periodo(complejo_id, cancha_id, desde, hasta):
-        """Excepciones activas que cierran la cancha (propias o globales) en algún día de [desde, hasta]; hasta nulo es sin fin."""
-        excepciones = ExcepcionHoraria.objects.filter(
-            Q(cancha__isnull=True) | Q(cancha_id=cancha_id),
-            complejo_id=complejo_id, estado=EstadoRegistro.ACTIVO, fecha_fin__gte=desde,
-        )
-        if hasta is not None:
-            excepciones = excepciones.filter(fecha_inicio__lte=hasta)
+    def activas_desde(complejo_ids, hoy):
+        """Excepciones activas de esos complejos que todavía no terminaron, sin texto libre."""
         return list(
-            excepciones.order_by('fecha_inicio', 'id').values(
-                'fecha_inicio', 'fecha_fin', 'es_dia_completo', 'hora_inicio', 'hora_fin', 'tipo_motivo',
-            )
+            ExcepcionHoraria.objects.filter(complejo_id__in=complejo_ids, estado=EstadoRegistro.ACTIVO, fecha_fin__gte=hoy)
+            .order_by('fecha_inicio', 'id')
+            .values('complejo_id', 'cancha_id', 'fecha_inicio', 'fecha_fin', 'es_dia_completo', 'hora_inicio',
+                    'hora_fin', 'tipo_motivo')
         )
 
     @staticmethod
@@ -497,7 +515,48 @@ class ReservaRepository:
     def agenda():
         return (
             ReservaRepository._vigentes().select_related('cancha__complejo', 'usuario')
+            .prefetch_related(HorarioAperturaRepository.prefetch_activos('cancha__'))
             .order_by('fecha_turno', 'hora_inicio', 'cancha__nombre', 'id')
+        )
+
+    @staticmethod
+    def a_resolver_desde(queryset, hoy):
+        """Reservas en 1, 2 o 3 desde hoy; la agenda ya precarga la cancha y sus rangos activos."""
+        return queryset.filter(estado__in=ESTADOS_RESERVA_A_RESOLVER, fecha_turno__gte=hoy)
+
+    @staticmethod
+    def a_resolver_de_cancha(cancha_id, hoy):
+        return list(
+            Reserva.objects.filter(cancha_id=cancha_id, estado__in=ESTADOS_RESERVA_A_RESOLVER, fecha_turno__gte=hoy)
+            .order_by('fecha_turno', 'hora_inicio', 'id')
+            .values('id', 'fecha_turno', 'hora_inicio', 'hora_fin', 'estado')
+        )
+
+    @staticmethod
+    def bloquear_a_resolver_de_titular(usuario_id, hoy):
+        return list(
+            Reserva.objects.select_for_update(of=('self',)).select_related('cancha', 'usuario')
+            .filter(usuario_id=usuario_id, estado__in=ESTADOS_RESERVA_A_RESOLVER, fecha_turno__gte=hoy)
+            .order_by('fecha_turno', 'hora_inicio', 'id')
+        )
+
+    @staticmethod
+    def a_resolver_de_titular(usuario_id, hoy):
+        return list(
+            Reserva.objects.filter(usuario_id=usuario_id, estado__in=ESTADOS_RESERVA_A_RESOLVER, fecha_turno__gte=hoy)
+            .values('fecha_turno', 'hora_inicio', 'estado')
+        )
+
+    @staticmethod
+    def limpiar_contactos_de_bajas_hasta(fecha_limite):
+        """
+        Borra el nombre y el teléfono copiados de un titular dado de baja en reservas cuyo turno fue hace más de
+        30 días (PROJECT.md §13.2). Es un UPDATE: la fila de la reserva se conserva.
+        """
+        return Reserva.objects.filter(
+            usuario__estado=EstadoUsuario.BAJA, fecha_turno__lt=fecha_limite,
+        ).exclude(nombre_cliente_manual='', telefono_cliente_manual='').update(
+            nombre_cliente_manual='', telefono_cliente_manual='', fecha_modificacion=timezone.now(),
         )
 
     @staticmethod
@@ -532,6 +591,22 @@ class ReservaRepository:
         return ReservaRepository._vigentes().filter(turno_fijo_id=turno_fijo_id, fecha_turno=fecha).exists()
 
     @staticmethod
+    def fechas_generadas(turno_fijo_ids, desde):
+        """(turno_fijo_id, fecha) que ya tienen su reserva generada, en cualquier estado salvo la baja lógica."""
+        return set(
+            ReservaRepository._vigentes().filter(turno_fijo_id__in=turno_fijo_ids, fecha_turno__gte=desde)
+            .values_list('turno_fijo_id', 'fecha_turno')
+        )
+
+    @staticmethod
+    def fechas_a_resolver_de_turno_fijo(turno_fijo_id, desde):
+        return list(
+            Reserva.objects.filter(
+                turno_fijo_id=turno_fijo_id, fecha_turno__gte=desde, estado__in=ESTADOS_RESERVA_A_RESOLVER,
+            ).order_by('fecha_turno').values('id', 'fecha_turno', 'estado')
+        )
+
+    @staticmethod
     def primera_ocupante_en_dia_de_semana(cancha_id, dia_semana, inicio, fin, desde, hasta, excluir_turno_fijo_id=None):
         """Primera reserva ocupante de ese día de la semana y horario en [desde, hasta]; hasta nulo es sin fin."""
         reservas = Reserva.objects.filter(
@@ -555,8 +630,38 @@ class TurnoFijoRepository:
         return (
             TurnoFijo.objects.exclude(estado=EstadoTurnoFijo.BAJA)
             .select_related('cancha__complejo', 'usuario')
+            .prefetch_related(HorarioAperturaRepository.prefetch_activos('cancha__'))
             .order_by('cancha_id', 'dia_semana', 'hora_inicio', 'id')
         )
+
+    @staticmethod
+    def activos_de_cancha(cancha_id, hoy):
+        """Vigentes y pausados que siguen en vigencia: un pausado puede reanudarse."""
+        return list(
+            TurnoFijo.objects.filter(
+                Q(fecha_fin_vigencia__isnull=True) | Q(fecha_fin_vigencia__gte=hoy),
+                cancha_id=cancha_id, estado__in=ESTADOS_TURNO_FIJO_ACTIVOS,
+            ).order_by('dia_semana', 'hora_inicio', 'id').values('id', 'dia_semana', 'hora_inicio', 'hora_fin')
+        )
+
+    @staticmethod
+    def vigentes_alcanzados(complejo_id, cancha_id=None):
+        """Turnos fijos vigentes del complejo; con cancha, solo los de esa cancha (una excepción global los alcanza a todos)."""
+        turnos = TurnoFijo.objects.filter(cancha__complejo_id=complejo_id, estado=EstadoTurnoFijo.VIGENTE)
+        if cancha_id is not None:
+            turnos = turnos.filter(cancha_id=cancha_id)
+        return list(turnos.select_related('cancha'))
+
+    @staticmethod
+    def bloquear_activos_de_titular(usuario_id):
+        return list(
+            TurnoFijo.objects.select_for_update(of=('self',)).select_related('cancha')
+            .filter(usuario_id=usuario_id, estado__in=ESTADOS_TURNO_FIJO_ACTIVOS).order_by('id')
+        )
+
+    @staticmethod
+    def cantidad_activos_de_titular(usuario_id):
+        return TurnoFijo.objects.filter(usuario_id=usuario_id, estado__in=ESTADOS_TURNO_FIJO_ACTIVOS).count()
 
     @staticmethod
     def que_aplican_en(queryset, fecha):

@@ -314,6 +314,52 @@ class TestDifusionEnTiempoReal:
         _correr(prueba)
         assert not Reserva.objects.exists()
 
+    @pytest.mark.parametrize('estado_contrato', [EstadoContrato.SUSPENDIDO, EstadoContrato.BAJA])
+    def test_suspender_el_contrato_cierra_las_grillas_abiertas(
+        self, superadmin, complejo, complejo_ajeno, cliente_de, django_capture_on_commit_callbacks, estado_contrato,
+    ):
+        def suspender():
+            with django_capture_on_commit_callbacks(execute=True):
+                return cliente_de(superadmin).patch(
+                    f'/api/contratos/{complejo.id}/', {'estado_contrato': estado_contrato}, format='json',
+                ).status_code
+
+        async def prueba():
+            afectada, otra = _conectar(complejo.id), _conectar(complejo_ajeno.id)
+            await afectada.connect()
+            await otra.connect()
+            assert await database_sync_to_async(suspender)() == status.HTTP_200_OK
+            assert await afectada.receive_output() == {'type': 'websocket.close', 'code': CIERRE_COMPLEJO_NO_DISPONIBLE}
+            assert await otra.receive_nothing()
+            await otra.disconnect()
+
+        _correr(prueba)
+
+    def test_un_cambio_de_operatoria_llega_a_las_grillas_abiertas(
+        self, reloj, dueno, complejo, cancha, cliente_de, django_capture_on_commit_callbacks,
+    ):
+        def cambiar_precio():
+            with django_capture_on_commit_callbacks(execute=True):
+                return cliente_de(dueno).patch(
+                    f'/api/canchas/{cancha.id}/', {'precio_base': '41000.00'}, format='json',
+                ).status_code
+
+        async def prueba():
+            ws = _conectar(complejo.id)
+            await ws.connect()
+            assert await database_sync_to_async(cambiar_precio)() == status.HTTP_200_OK
+            evento = await ws.receive_json_from()
+            await ws.disconnect()
+            return evento
+
+        evento = _correr(prueba)
+
+        assert evento == {
+            'event': 'grilla_actualizada', 'cancha_id': cancha.id,
+            'fecha_desde': reloj.return_value.date().isoformat(), 'fecha_hasta': None,
+            'hora_inicio': None, 'hora_fin': None,
+        }
+
     def test_publica_al_grupo_del_complejo(self, complejo):
         capa = mock.MagicMock()
         capa.group_send = mock.AsyncMock()

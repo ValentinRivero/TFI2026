@@ -29,9 +29,9 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - [x] **4.4.** Configuración de `routing.py` y `consumers.py` para actualización en tiempo real de casilleros por WebSocket al reservar, cancelar o crear excepción (`RF-15`).
 - [x] **4.5.** Channel layer con Redis (`REDIS_URL` opcional, con respaldo en memoria), `ws_auth.py` permisivo con su edición en `asgi.py`, consumer de lectura pública y publicación de eventos con `transaction.on_commit`.
 - [x] **4.6.** Test de concurrencia de reservas sobre PostgreSQL en CI (`select_for_update` no bloquea en SQLite).
-- [ ] **4.7.** Advertencias de conflicto al modificar la operatoria con reservas futuras: editar o dar de baja un rango horario, cambiar `duracion_turno_min` o pasar una cancha a mantenimiento informa las reservas afectadas (409 con el detalle) y solo se aplica con confirmación explícita. Esos cambios, y los de contrato de un complejo, se anuncian a las grillas abiertas por WebSocket.
-- [ ] **4.8.** Baja de cuenta con reservas: vista previa de lo que se cancela, cancelación de las reservas futuras pendientes y confirmadas, conservación de las señadas o pagadas con aviso urgente al complejo, y baja de los turnos fijos del titular.
-- [ ] **4.9.** Ajustes de la operatoria de agenda y turnos fijos: reapertura de una reserva cancelada por error, cambio de horario de un turno fijo a otro turno libre (ambos solo por el personal del complejo y con confirmación explícita), y fechas de turnos fijos alcanzadas por una excepción en espera de una decisión del complejo, con aviso, en lugar de rechazar el alta.
+- [x] **4.7.** Advertencias de conflicto al modificar la operatoria con reservas futuras: editar o dar de baja un rango horario, cambiar `duracion_turno_min` o pasar una cancha a mantenimiento informa las reservas afectadas (409 con el detalle) y solo se aplica con confirmación explícita. Esos cambios, y los de contrato de un complejo, se anuncian a las grillas abiertas por WebSocket.
+- [x] **4.8.** Baja de cuenta con reservas: vista previa de lo que se cancela, cancelación de las reservas futuras pendientes y confirmadas, conservación de las señadas o pagadas con aviso urgente al complejo, y baja de los turnos fijos del titular.
+- [x] **4.9.** Ajustes de la operatoria de agenda y turnos fijos: reapertura de una reserva cancelada por error, cambio de horario de un turno fijo a otro turno libre (ambos solo por el personal del complejo y con confirmación explícita), y fechas de turnos fijos alcanzadas por una excepción en espera de una decisión del complejo, con aviso, en lugar de rechazar el alta.
 
 ## Fase 5: Reportes, GraphQL y Servicio Complementario Node.js
 - [ ] **5.1.** Endpoint y lógica agregada del Dashboard y Reportes estadísticos filtrables por rangos de fechas (`fecha_turno`, `fecha_creacion`, `fecha_modificacion`), cancha y estado (`CU-12`).
@@ -172,6 +172,50 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - **Dónde corre:** sobre SQLite se saltea. En CI corre en un job aparte (`django-concurrencia`) contra un servicio de PostgreSQL descartable, con `config.settings_concurrencia` y `TEST_POSTGRES_URL`; la suite general sigue en SQLite.
   - **Control:** con el bloqueo de la cancha desactivado, los casos sin restricción de base fallan (turnos fijos duplicados). Eso confirma que los protege `select_for_update` y no la restricción única.
 - Pruebas de los puntos 4.4 a 4.6: 37 tests (32 sobre SQLite y 5 de concurrencia sobre PostgreSQL; 1082 en total).
+
+## Notas de los puntos 4.7 y 4.8
+- **Advertencias de conflicto** (`ConflictoOperatoriaService`):
+  - **Cuándo se revisa:** al editar el día o el horario de un rango, dar de baja un rango, cambiar `duracion_turno_min` o pasar una cancha a mantenimiento. El cálculo corre en la transacción y con la cancha bloqueada (`select_for_update`).
+  - **Qué cuenta como afectado:** reservas por jugar (estados `1`, `2` y `3`, sin turnos ya iniciados) y turnos fijos vigentes o pausados que dejarían de coincidir con un bloque de la grilla.
+  - **Solo lo nuevo:** se comparan los afectados antes y después del cambio. Pide confirmación lo que el cambio afecta por primera vez o con un motivo distinto (por ejemplo, de fuera de turno a mantenimiento); lo ya marcado y sin novedades no vuelve a frenar otro cambio. Agregar un rango o cambiar solo un precio no puede dejar reservas afuera y no se revisa.
+- **Respuesta 409:**
+  - **Formato:** `{"error": true, "detail", "requiere_confirmacion": true, "conflictos": {"cantidad", "reservas": [{"id", "fecha_turno", "hora_inicio", "estado"}], "turnos_fijos": [{"id", "dia_semana", "hora_inicio"}]}}`, sin datos personales.
+  - **Confirmación:** con `confirmar: true` (en el cuerpo o, en un `DELETE`, en la query string) el cambio se aplica, nada se cancela solo y el cambio confirmado se audita (`CAMBIO_CONFIGURACION`) con los ids afectados.
+  - **Baja de cancha:** una cancha con ocupación futura sigue sin poder darse de baja (400), aun con `confirmar`.
+- **Marcas en la agenda:** agenda y turnos fijos informan `conflicto_operatoria` (motivo, o nulo) calculado contra los horarios vigentes, y `GET /api/agenda/?con_conflicto=true` lista lo que espera una decisión. La marca desaparece al resolver la reserva o al restituir la operatoria. Los horarios se precargan con un `Prefetch`, así la cantidad de consultas sigue sin crecer con las reservas.
+- **Difusión de la operatoria:** alta, edición y baja de canchas y horarios anuncian `grilla_actualizada` para esa cancha desde hoy y sin fin. Reactivar un contrato lo anuncia para todo el complejo. Suspenderlo o darlo de baja cierra las grillas abiertas de ese complejo (código `4404`), en `on_commit`.
+- **Vista previa de la baja** (`GET /api/perfil/baja/`): informa reservas a cancelar, señadas que se conservan, turnos fijos a dar de baja, el aviso sobre la conservación del contacto y el impedimento, si lo hay (último superadmin o dueño con contratos vigentes). No modifica nada.
+- **Baja de cuenta** (`DELETE /api/perfil/`), en una única transacción y antes de anonimizar:
+  - Las reservas por jugar en `1` y `2` pasan a `4` y liberan la grilla en `on_commit`.
+  - Las señadas (`3`) se conservan, con una copia del nombre y el teléfono del titular solo en esas filas.
+  - Los turnos fijos vigentes y pausados del titular pasan a baja lógica.
+  - El historial y las reservas de otros no se tocan.
+  - Cada cancelación y el resumen de la baja se auditan sin datos personales.
+- **Avisos al complejo** (`AvisoComplejoService`): uno urgente por las señadas conservadas y uno normal por los turnos fijos dados de baja, con ids y sin datos personales. Se entregan en `on_commit` con `robust=True`, así una falla no revierte la baja. Hasta que el punto 5.7 conecte la ruta interna de `backend-node`, quedan en el log del servidor (`core.avisos`).
+- **Contacto conservado de la seña:**
+  - **Agenda:** muestra la copia y nunca la cuenta anonimizada. Sin copia, el cliente figura como "Titular dado de baja".
+  - **Borrado al resolver:** la copia se borra cuando la reserva se resuelve (completada, ausente o cancelada por el complejo).
+  - **Plazo máximo:** `python manage.py purgar_contactos_de_bajas`, pensado para correr una vez por día, la borra cuando pasaron más de 30 días desde el turno aunque no se haya resuelto.
+- Pruebas de los puntos 4.7 y 4.8: 70 tests. Las suites de reservas, agenda, turnos fijos, conflictos y baja de cuenta pasaron también sobre PostgreSQL.
+
+## Notas del punto 4.9
+- **Confirmación explícita:** reapertura y cambio de horario usan el patrón de 4.7. Sin `confirmar: true` responden 409 con `requiere_confirmacion` y una vista previa; con `confirmar: true` se aplican. Los choques reales se validan primero, con la cancha bloqueada, y responden 409 sin opción de confirmar.
+- **Reapertura** (`POST /api/agenda/<id>/reabrir/`, `gestionar_agenda`, nunca el jugador):
+  - **Qué reabre:** una reserva cancelada (`4` o `5`) de un turno que todavía no empezó vuelve a `1`, `2` o `3`, conservando su precio.
+  - **Validación:** revalida el turno como un alta: grilla vigente, cancha y complejo disponibles, sin otra reserva, turno fijo ni excepción en el horario.
+  - **Cuentas dadas de baja:** sus reservas no se reabren.
+  - **Auditoría y difusión:** se audita como `RESERVA_CAMBIO_ESTADO` ("Reapertura") y se anuncia a la grilla. Funciona también con la fecha cancelada de un turno fijo.
+- **Cambio de horario de un turno fijo** (`PATCH` con `hora_inicio`):
+  - **Qué se cambia:** el día, la cancha y el inicio de la vigencia siguen fijos. El horario nuevo debe ser un turno de la grilla y `hora_fin` se recalcula.
+  - **Validación:** se revisan choques con otros turnos fijos y reservas en toda la vigencia; si el turno está pausado, al reanudarlo.
+  - **Vista previa:** informa el horario actual y el nuevo, desde qué fecha rige y las fechas ya registradas, que conservan el horario anterior.
+  - **Difusión:** el aviso a la grilla cubre el día completo, para refrescar el horario viejo y el nuevo.
+- **Excepciones y turnos fijos:**
+  - **Ya no bloquean:** una excepción no rechaza el alta, la reanudación, la extensión ni el cambio de horario de un turno fijo.
+  - **Fechas en espera:** las fechas que cubre quedan en espera (`fechas_en_espera` en listado y detalle, filtro `?en_espera=`), siguen ocupando la grilla y se deciden con `fechas/` y `accion` (`mantener` o `cancelar`).
+  - **Rendimiento:** el listado las calcula con dos consultas para toda la página.
+  - **Aviso:** una excepción nueva que deja fechas en espera genera un aviso urgente al complejo (`AvisoComplejoService`, que entrega a `backend-node` desde el punto 5.7).
+- Pruebas del punto 4.9 y del ajuste de la regla de confirmación: 59 tests (1211 en total). Las suites de negocio completas (653 tests) pasaron también sobre PostgreSQL.
 
 ## Decisiones de arquitectura
 - **Frontend:** React con Vite y PWA manual, en capas `services/`, `components/` y `pages/`: solo la capa de servicios conoce las URLs de la API, lo que separa el acceso a datos de la presentación. El access token vive en memoria y el refresh en una cookie HttpOnly, `Secure` y `SameSite=Strict`: un script inyectado por XSS no puede leer el refresh, y `SameSite=Strict` mitiga CSRF. Nada de la sesión se guarda en `localStorage`.
