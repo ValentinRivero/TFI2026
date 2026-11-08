@@ -14,6 +14,7 @@ from .filters import (
     CanchaFilter,
     CatalogoComplejoFilter,
     ContratoFilter,
+    ExcepcionHorariaFilter,
     HorarioAperturaFilter,
     UsuarioFilter,
 )
@@ -28,7 +29,10 @@ from .serializers import (
     ContratoAltaSerializer,
     ContratoEstadoSerializer,
     ContratoSerializer,
+    ExcepcionHorariaSerializer,
     FiltroAuditoriaSerializer,
+    FiltroGrillaSerializer,
+    GrillaSerializer,
     HorarioAperturaSerializer,
     LogAuditoriaSerializer,
     OperadorSerializer,
@@ -45,6 +49,8 @@ from .services import (
     CatalogoService,
     ComplejoService,
     ContratoService,
+    ExcepcionHorariaService,
+    GrillaService,
     HorarioAperturaService,
     OperadorService,
     RbacService,
@@ -288,7 +294,7 @@ class ComplejoViewSet(AccionesPublicasMixin, mixins.ListModelMixin, mixins.Retri
     contratos activos; lo administrativo, los complejos que el usuario administra (lo ajeno responde 404).
     """
 
-    acciones_publicas = frozenset({'list', 'retrieve'})
+    acciones_publicas = frozenset({'list', 'retrieve', 'grilla'})
     permission_classes = [TienePermisoRBAC, AdministraComplejo]
     permisos_requeridos = {
         'administrados': ('ver_panel_complejo',),
@@ -333,6 +339,14 @@ class ComplejoViewSet(AccionesPublicasMixin, mixins.ListModelMixin, mixins.Retri
             complejo, entrada.validated_data, request.user, AuditoriaService.ip_de_request(request),
         )
         return Response(ComplejoAdminSerializer(complejo).data)
+
+    # La grilla de un día está acotada por las canchas del complejo y sus rangos horarios: va completa.
+    @action(detail=True, methods=['get'], pagination_class=None)
+    def grilla(self, request, pk=None):
+        entrada = FiltroGrillaSerializer(data=request.query_params)
+        entrada.is_valid(raise_exception=True)
+        grilla = GrillaService.calcular(int(pk), entrada.validated_data['fecha'])
+        return Response(GrillaSerializer(grilla).data)
 
     @action(detail=False, methods=['get'])
     def administrados(self, request):
@@ -443,6 +457,43 @@ class HorarioAperturaViewSet(PermisosPorCampoMixin, AccesoComplejoMixin, viewset
 
     def perform_destroy(self, instance):
         HorarioAperturaService.dar_de_baja(instance)
+
+
+class ExcepcionHorariaViewSet(AccesoComplejoMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin,
+                              mixins.CreateModelMixin, mixins.DestroyModelMixin, viewsets.GenericViewSet):
+    serializer_class = ExcepcionHorariaSerializer
+    permission_classes = [TienePermisoRBAC, AdministraComplejo]
+    permisos_requeridos = {
+        'list': ('ver_excepciones',),
+        'retrieve': ('ver_excepciones',),
+        'create': ('gestionar_excepciones',),
+        'destroy': ('gestionar_excepciones',),
+    }
+    lookup_value_regex = r'\d+'
+    queryset = ExcepcionHorariaService.listar()
+    filterset_class = ExcepcionHorariaFilter
+    ordering_fields = ('fecha_inicio', 'fecha_creacion', 'id')
+    ordering = ('fecha_inicio', 'hora_inicio', 'id')
+    filter_backends = (DjangoFilterBackend, OrderingFilter)
+
+    def list(self, request, *args, **kwargs):
+        complejo_id = request.query_params.get('complejo', '')
+        if complejo_id.isdigit() and not AccesoComplejoService.puede_administrar(request.user, complejo_id):
+            raise NotFound()
+        cancha_id = request.query_params.get('cancha', '')
+        if cancha_id.isdigit() and not CanchaService.es_visible_para(request.user, cancha_id):
+            raise NotFound()
+        return super().list(request, *args, **kwargs)
+
+    def guardar(self, serializer):
+        serializer.instance = ExcepcionHorariaService.crear(
+            serializer.validated_data, self.request.user, AuditoriaService.ip_de_request(self.request),
+        )
+
+    def perform_destroy(self, instance):
+        ExcepcionHorariaService.dar_de_baja(
+            instance.pk, self.request.user, AuditoriaService.ip_de_request(self.request),
+        )
 
 
 class ContratoViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):

@@ -50,8 +50,35 @@ El registro y el inicio de sesión tienen un límite de intentos por origen y re
 | `GET /api/servicios/` | Público | Servicios disponibles (lista completa, sin paginar) |
 | `GET /api/complejos/` | Público | Complejos habilitados, con coordenadas, servicios, deportes y `precio_desde` |
 | `GET /api/complejos/<id>/` | Público | Detalle con sus canchas activas; `404` si el complejo no está habilitado |
+| `GET /api/complejos/<id>/grilla/?fecha=AAAA-MM-DD` | Público | Turnos del día por cancha, con precio y estado (respuesta completa, sin paginar) |
 
 Filtros de `GET /api/complejos/`: `deporte` (id), `cobertura` (`1` descubierta, `2` techada, `3` semicubierta), `servicio` (id, repetible: se exigen todos), `search` (nombre o dirección) y `ordering` (`nombre`, `precio_desde`, con `-` para invertir). `deporte` y `cobertura` se cumplen sobre una misma cancha.
+
+### Grilla del día
+
+`fecha` es obligatoria, en formato `AAAA-MM-DD`, y no puede ser anterior a hoy (`400`). Un complejo no habilitado responde `404`.
+
+```json
+{
+  "complejo": { "id": 1, "nombre": "Complejo El Yacaré" },
+  "fecha": "2026-11-18",
+  "dia_semana": 2,
+  "canchas": [
+    {
+      "id": 3, "nombre": "Cancha 1", "deporte": { "id": 1, "nombre": "Fútbol 5" }, "duracion_turno_min": 60,
+      "bloques": [
+        { "hora_inicio": "14:00:00", "hora_fin": "15:00:00", "precio": "38000.00", "estado": "LIBRE", "motivo": null },
+        { "hora_inicio": "15:00:00", "hora_fin": "16:00:00", "precio": "38000.00", "estado": "OCUPADO", "motivo": null },
+        { "hora_inicio": "16:00:00", "hora_fin": "17:00:00", "precio": "38000.00", "estado": "CERRADO_EXCEPCION", "motivo": "Mantenimiento" }
+      ]
+    }
+  ]
+}
+```
+
+- Cada rango horario del día genera sus turnos por separado según `duracion_turno_min`; un resto menor a un turno completo no se ofrece. Una cancha sin horario ese día figura con `bloques` vacío.
+- `estado`: `LIBRE`, `OCUPADO` (reserva activa o turno fijo) o `CERRADO_EXCEPCION`, con el motivo del cierre en `motivo`. Si un turno ya ocupado coincide con un cierre, se informa `OCUPADO`.
+- La respuesta no incluye datos de quien reservó.
 
 ## Administración del complejo
 
@@ -85,6 +112,21 @@ Filtros de `GET /api/complejos/`: `deporte` (id), `cobertura` (`1` descubierta, 
 | `DELETE /api/horarios/<id>/` | Dueño | Baja del rango |
 
 Un día admite varios rangos por cancha mientras no se superpongan; `hora_cierre` debe ser posterior a `hora_apertura`. Sin `precio_diferenciado` rige el `precio_base` de la cancha.
+
+### Excepciones horarias
+
+| Método y ruta | Acceso | Uso |
+|---|---|---|
+| `GET /api/excepciones/` | Operador | Excepciones activas; filtros `complejo`, `cancha` (incluye las de todo su complejo), `vigencia` (`vigentes` o `finalizadas`), `fecha` (`AAAA-MM-DD`, las que la cubren) y `tipo_motivo`; `ordering` por `fecha_inicio` o `fecha_creacion` |
+| `GET /api/excepciones/<id>/` | Operador | Detalle |
+| `POST /api/excepciones/` | Operador | `complejo`, `cancha` (opcional), `fecha_inicio`, `fecha_fin`, `es_dia_completo`, `hora_inicio`, `hora_fin`, `tipo_motivo` y `descripcion` (opcional) |
+| `DELETE /api/excepciones/<id>/` | Operador | Baja de la excepción (`204`) |
+
+- Sin `cancha`, la excepción cierra todo el complejo; con `cancha`, debe ser una cancha activa de ese complejo.
+- `es_dia_completo`: `1` cierra el día entero y no lleva horas; `0` es una franja y exige `hora_inicio` y `hora_fin` (`HH:MM`), con el fin posterior al inicio.
+- `fecha_fin` debe ser igual o posterior a `fecha_inicio`, que no puede ser anterior a hoy. El rango tiene una extensión máxima.
+- `tipo_motivo`: `1` mantenimiento, `2` condiciones climáticas, `3` feriado, `4` evento privado, `5` corte de servicio, `6` otro.
+- No se editan: para corregir una excepción se da de baja y se registra otra.
 
 ## Sistema
 

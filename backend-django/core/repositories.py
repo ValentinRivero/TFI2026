@@ -13,6 +13,7 @@ from .models import (
     EstadoReserva,
     EstadoTurnoFijo,
     EstadoUsuario,
+    ExcepcionHoraria,
     HorarioApertura,
     LogAuditoria,
     Reserva,
@@ -220,6 +221,15 @@ class ComplejoRepository:
         return queryset
 
     @staticmethod
+    def publico_por_id(complejo_id):
+        """Mismo criterio que el catálogo: sin baja lógica y con contrato activo."""
+        return (
+            Complejo.objects.filter(id=complejo_id, estado=EstadoRegistro.ACTIVO, estado_contrato=EstadoContrato.ACTIVO)
+            .only('id', 'nombre')
+            .first()
+        )
+
+    @staticmethod
     def bloquear(complejo_id):
         return Complejo.objects.select_for_update(of=('self',)).get(id=complejo_id)
 
@@ -363,6 +373,90 @@ class HorarioAperturaRepository:
             setattr(horario, campo, valor)
         horario.save(update_fields=[*campos, 'fecha_modificacion'])
         return horario
+
+
+class ExcepcionHorariaRepository:
+    @staticmethod
+    def vigentes():
+        return (
+            ExcepcionHoraria.objects.filter(estado=EstadoRegistro.ACTIVO)
+            .select_related('complejo', 'cancha')
+            .order_by('fecha_inicio', 'hora_inicio', 'id')
+        )
+
+    @staticmethod
+    def que_afectan_a_cancha(queryset, cancha_id):
+        """Las propias de la cancha y las globales de su complejo, que también la cierran."""
+        complejo_de_la_cancha = Cancha.objects.filter(id=cancha_id).values('complejo_id')
+        return queryset.filter(
+            Q(cancha_id=cancha_id) | Q(cancha__isnull=True, complejo_id__in=complejo_de_la_cancha),
+        )
+
+    @staticmethod
+    def que_cubren_fecha(queryset, fecha):
+        return queryset.filter(fecha_inicio__lte=fecha, fecha_fin__gte=fecha)
+
+    @staticmethod
+    def activas_en_fecha(complejo_id, fecha):
+        """Excepciones activas del complejo (globales y por cancha) vigentes en la fecha, sin texto libre."""
+        return list(
+            ExcepcionHoraria.objects.filter(
+                complejo_id=complejo_id, estado=EstadoRegistro.ACTIVO, fecha_inicio__lte=fecha, fecha_fin__gte=fecha,
+            ).values('cancha_id', 'es_dia_completo', 'hora_inicio', 'hora_fin', 'tipo_motivo')
+        )
+
+    @staticmethod
+    def crear(**campos):
+        return ExcepcionHoraria.objects.create(**campos)
+
+    @staticmethod
+    def bloquear(excepcion_id):
+        return ExcepcionHoraria.objects.select_for_update(of=('self',)).filter(id=excepcion_id).first()
+
+
+class GrillaRepository:
+    """
+    Lecturas de la grilla pública. Las ocupaciones se leen con `values()` y solo con columnas de horario:
+    los datos de clientes nunca salen de la base en esta consulta.
+    """
+
+    @staticmethod
+    def canchas_activas(complejo_id):
+        return list(
+            Cancha.objects.filter(
+                complejo_id=complejo_id, estado=EstadoCancha.ACTIVA, deporte__estado=EstadoRegistro.ACTIVO,
+            ).select_related('deporte').order_by('nombre', 'id')
+        )
+
+    @staticmethod
+    def horarios_del_dia(cancha_ids, dia_semana):
+        return list(
+            HorarioApertura.objects.filter(
+                cancha_id__in=cancha_ids, dia_semana=dia_semana, estado=EstadoRegistro.ACTIVO,
+            ).values('cancha_id', 'hora_apertura', 'hora_cierre', 'precio_diferenciado').order_by('hora_apertura')
+        )
+
+    @staticmethod
+    def reservas_de_fecha(cancha_ids, fecha):
+        """Reservas ocupantes, más las de turnos fijos en cualquier estado: indican si esa fecha ya se generó."""
+        return list(
+            Reserva.objects.filter(cancha_id__in=cancha_ids, fecha_turno=fecha)
+            .exclude(estado=EstadoReserva.BAJA)
+            .filter(Q(estado__in=ESTADOS_RESERVA_OCUPANTES) | Q(turno_fijo__isnull=False))
+            .values('cancha_id', 'turno_fijo_id', 'hora_inicio', 'hora_fin', 'estado')
+        )
+
+    @staticmethod
+    def turnos_fijos_vigentes(cancha_ids, dia_semana, fecha):
+        return list(
+            TurnoFijo.objects.filter(
+                Q(fecha_fin_vigencia__isnull=True) | Q(fecha_fin_vigencia__gte=fecha),
+                cancha_id__in=cancha_ids,
+                dia_semana=dia_semana,
+                estado=EstadoTurnoFijo.VIGENTE,
+                fecha_inicio_vigencia__lte=fecha,
+            ).values('id', 'cancha_id', 'hora_inicio', 'hora_fin')
+        )
 
 
 class SesionRepository:

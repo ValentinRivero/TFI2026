@@ -23,8 +23,8 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - [x] **3.4.** Filtros, búsqueda y orden con `django-filter` (listas blancas) y helper único de sanitización con `nh3`.
 
 ## Fase 4: Motor de Grilla, Reservas Atómicas, Excepciones y WebSockets
-- [ ] **4.1.** Lógica de cálculo de grilla diaria cruzando horarios de apertura, duración por cancha (60/90/120 min), excepciones vigentes y reservas (`CU-05`).
-- [ ] **4.2.** Gestión de excepciones horarias por día completo o franja horaria, por complejo o por cancha (`CU-11`).
+- [x] **4.1.** Lógica de cálculo de grilla diaria cruzando horarios de apertura, duración por cancha (60/90/120 min), excepciones vigentes y reservas (`CU-05`).
+- [x] **4.2.** Gestión de excepciones horarias por día completo o franja horaria, por complejo o por cancha (`CU-11`).
 - [ ] **4.3.** Motor transaccional de reservas con bloqueo `select_for_update()`, soporte para jugador web (`CU-06`), cancelación con margen horario (`CU-07`), agenda manual telefónica y turnos fijos (`CU-10`).
 - [ ] **4.4.** Configuración de `routing.py` y `consumers.py` para actualización en tiempo real de casilleros por WebSocket al reservar, cancelar o crear excepción (`RF-15`).
 - [ ] **4.5.** Channel layer con Redis (`REDIS_URL` opcional, con respaldo en memoria), `ws_auth.py` permisivo con su edición en `asgi.py`, consumer de lectura pública y publicación de eventos con `transaction.on_commit`.
@@ -110,6 +110,20 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - `docs/API.md` documenta los endpoints vigentes de Django y se amplía en cada fase; el punto 7.4 lo cierra con Node.
 - `seed_inicial` y los tests usan solo datos ficticios: emails en dominios reservados (`demo.talibre.test`, `talibre.test`), teléfonos `3777 00xxxx` (inexistentes en la numeración local) y nombres, direcciones, complejos y alias bancarios inventados. Ningún dato de muestra corresponde a personas o comercios reales.
 - Pruebas de Fase 3: 282 tests (644 en total).
+
+## Notas de los puntos 4.1 y 4.2
+- `GET /api/complejos/<id>/grilla/?fecha=AAAA-MM-DD` es público, ignora el header `Authorization` y no pagina: la grilla de un día está acotada por las canchas del complejo y sus rangos horarios. Responde 404 si el complejo no tiene `estado = 1` y `estado_contrato = 2`, y 400 si falta la fecha, su formato no es ISO o es anterior a hoy.
+- Toma las canchas activas (con deporte activo) y recorre todos los rangos activos de `horarios_apertura` del día de la semana de la fecha. Cada rango genera sus bloques por separado según `duracion_turno_min`; un resto menor a un turno completo no se ofrece y un corte no se completa con el rango siguiente. El precio es el `precio_diferenciado` del rango o, si es nulo, el `precio_base` de la cancha.
+- Estados de un bloque: `OCUPADO`, `CERRADO_EXCEPCION` (con el `motivo`) o `LIBRE`. La ocupación prevalece sobre la excepción: un turno ya tomado se informa ocupado aunque el complejo cierre después, y queda a la vista para que el complejo lo resuelva.
+- Ocupan una reserva en estado `1`, `2`, `3` o `7` y un turno fijo vigente (`estado = 1`) del mismo día de la semana dentro de su vigencia. Si esa fecha ya tiene una reserva generada por el turno fijo, manda el estado de la reserva: cancelar una fecha puntual del turno fijo libera el casillero.
+- Todos los cruces son intervalos semiabiertos: una reserva o franja que termina a las 14:00 no ocupa ni cierra el bloque de las 14:00.
+- La grilla se calcula con seis consultas fijas, sin importar canchas, reservas ni excepciones. Las ocupaciones se leen solo con columnas de horario (`values()`): los datos de clientes y jugadores no salen de la base, y la respuesta no lleva nombres, teléfonos, emails, observaciones ni la descripción de las excepciones.
+- `/api/excepciones/` usa `AccesoComplejoMixin`: lo ajeno responde 404, también al filtrar por `?complejo=` o `?cancha=` ajenos, y un alta en un complejo ajeno, 403. Filtros: `complejo`, `cancha` (incluye las globales de su complejo, que también la cierran), `vigencia` (`vigentes` o `finalizadas`), `fecha` (excepciones que la cubren) y `tipo_motivo`.
+- Alta: global (`cancha` nula) o de una cancha activa del mismo complejo; día completo (`es_dia_completo = 1`) sin horas o franja (`es_dia_completo = 0`) con `hora_fin > hora_inicio`. `fecha_inicio` no puede ser anterior a hoy y el rango abarca como máximo 366 días. `creado_por` lo fija el servidor y la `descripcion` se sanitiza con `nh3`.
+- Sin edición: una excepción mal cargada se da de baja y se registra otra, así la auditoría conserva cada versión. La baja es lógica y bloquea la fila, así dos bajas simultáneas no se auditan dos veces.
+- Alta y baja se auditan (`ALTA_EXCEPCION`, `BAJA_EXCEPCION`) con el id, el alcance, las fechas, el horario y el motivo. La descripción es texto libre del personal y no se replica en la auditoría ni en `security.log`.
+- `DifusionGrillaService` es el punto único de aviso a las grillas abiertas. Alta y baja de excepciones ya programan el evento `grilla_actualizada` con `transaction.on_commit`, con `cancha_id` (nulo si es global), `fecha_desde`, `fecha_hasta`, `hora_inicio` y `hora_fin`, sin datos personales. El envío al channel layer se conecta en los puntos 4.4 y 4.5.
+- Pruebas de los puntos 4.1 y 4.2: 119 tests (763 en total).
 
 ## Decisiones de arquitectura
 - **Frontend:** React con Vite y PWA manual, en capas `services/`, `components/` y `pages/`: solo la capa de servicios conoce las URLs de la API, lo que separa el acceso a datos de la presentación. El access token vive en memoria y el refresh en una cookie HttpOnly, `Secure` y `SameSite=Strict`: un script inyectado por XSS no puede leer el refresh, y `SameSite=Strict` mitiga CSRF. Nada de la sesión se guarda en `localStorage`.

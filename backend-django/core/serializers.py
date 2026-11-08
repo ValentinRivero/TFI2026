@@ -6,14 +6,17 @@ import nh3
 from rest_framework import serializers
 
 from .models import (
+    AlcanceExcepcion,
     Cancha,
     Complejo,
     EstadoCancha,
     EstadoContrato,
     EstadoUsuario,
+    ExcepcionHoraria,
     HorarioApertura,
     LogAuditoria,
     TipoEventoAuditoria,
+    TipoMotivoExcepcion,
     Usuario,
 )
 from .repositories import CanchaRepository, CatalogoRepository, ComplejoRepository, RolRepository, UsuarioRepository
@@ -444,3 +447,94 @@ class HorarioAperturaSerializer(serializers.ModelSerializer):
         if apertura is not None and cierre is not None and cierre <= apertura:
             raise serializers.ValidationError({'hora_cierre': 'Debe ser posterior a hora_apertura.'})
         return attrs
+
+
+class ExcepcionHorariaSerializer(serializers.ModelSerializer):
+    """
+    Sin cancha, la excepción cierra todo el complejo. No hay edición: una excepción mal cargada se da de baja
+    y se registra otra, así la auditoría conserva cada versión.
+    """
+
+    complejo = serializers.PrimaryKeyRelatedField(queryset=ComplejoRepository.vigentes())
+    cancha = serializers.PrimaryKeyRelatedField(queryset=CanchaRepository.vigentes(), allow_null=True, default=None)
+    es_dia_completo = serializers.ChoiceField(choices=AlcanceExcepcion.choices)
+    hora_inicio = serializers.TimeField(allow_null=True, default=None)
+    hora_fin = serializers.TimeField(allow_null=True, default=None)
+    tipo_motivo = serializers.ChoiceField(choices=TipoMotivoExcepcion.choices)
+    descripcion = TextoLimpioField(max_length=255, allow_blank=True, default='')
+    cancha_nombre = serializers.CharField(source='cancha.nombre', read_only=True, default=None)
+    es_dia_completo_nombre = serializers.CharField(source='get_es_dia_completo_display', read_only=True)
+    tipo_motivo_nombre = serializers.CharField(source='get_tipo_motivo_display', read_only=True)
+
+    class Meta:
+        model = ExcepcionHoraria
+        fields = (
+            'id',
+            'complejo',
+            'cancha',
+            'cancha_nombre',
+            'fecha_inicio',
+            'fecha_fin',
+            'es_dia_completo',
+            'es_dia_completo_nombre',
+            'hora_inicio',
+            'hora_fin',
+            'tipo_motivo',
+            'tipo_motivo_nombre',
+            'descripcion',
+            'fecha_creacion',
+        )
+        read_only_fields = ('fecha_creacion',)
+        validators = []
+
+    def validate(self, attrs):
+        errores = {}
+        if attrs['fecha_fin'] < attrs['fecha_inicio']:
+            errores['fecha_fin'] = 'Debe ser igual o posterior a fecha_inicio.'
+
+        inicio, fin = attrs.get('hora_inicio'), attrs.get('hora_fin')
+        if attrs['es_dia_completo'] == AlcanceExcepcion.DIA_COMPLETO:
+            if inicio is not None or fin is not None:
+                errores['hora_inicio'] = 'Una excepción de día completo no lleva horario.'
+        else:
+            if inicio is None:
+                errores['hora_inicio'] = 'Es obligatoria en una franja horaria.'
+            if fin is None:
+                errores['hora_fin'] = 'Es obligatoria en una franja horaria.'
+            if inicio is not None and fin is not None and fin <= inicio:
+                errores['hora_fin'] = 'Debe ser posterior a hora_inicio.'
+
+        if errores:
+            raise serializers.ValidationError(errores)
+        return attrs
+
+
+class FiltroGrillaSerializer(serializers.Serializer):
+    fecha = serializers.DateField(
+        error_messages={'invalid': 'Usá el formato AAAA-MM-DD.', 'required': 'Indicá la fecha a consultar.'},
+    )
+
+
+class BloqueGrillaSerializer(serializers.Serializer):
+    hora_inicio = serializers.TimeField()
+    hora_fin = serializers.TimeField()
+    precio = serializers.DecimalField(max_digits=10, decimal_places=2)
+    estado = serializers.CharField()
+    motivo = serializers.CharField(allow_null=True)
+
+
+class CanchaGrillaSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    nombre = serializers.CharField()
+    deporte = CatalogoMaestroSerializer()
+    duracion_turno_min = serializers.IntegerField()
+    bloques = BloqueGrillaSerializer(many=True)
+
+
+class GrillaSerializer(serializers.Serializer):
+    """Respuesta pública: solo horarios, precios y estados; ninguna ocupación identifica a su titular."""
+
+    complejo = CatalogoMaestroSerializer()
+    fecha = serializers.DateField()
+    dia_semana = serializers.IntegerField()
+    canchas = CanchaGrillaSerializer(many=True)

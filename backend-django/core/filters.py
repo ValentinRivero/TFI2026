@@ -6,10 +6,11 @@ import unicodedata
 
 import django_filters
 from django.db.models import CharField, TextField, Transform
+from django.utils import timezone
 from rest_framework.filters import SearchFilter
 
-from .models import Cobertura, DiaSemana, EstadoCancha, EstadoContrato, EstadoUsuario
-from .repositories import CatalogoRepository, ComplejoRepository, RolRepository
+from .models import Cobertura, DiaSemana, EstadoCancha, EstadoContrato, EstadoUsuario, TipoMotivoExcepcion
+from .repositories import CatalogoRepository, ComplejoRepository, ExcepcionHorariaRepository, RolRepository
 
 
 def quitar_acentos(texto):
@@ -97,3 +98,27 @@ class CanchaFilter(django_filters.FilterSet):
 class HorarioAperturaFilter(django_filters.FilterSet):
     cancha = django_filters.NumberFilter(field_name='cancha_id')
     dia_semana = django_filters.TypedChoiceFilter(choices=DiaSemana.choices, coerce=int)
+
+
+VIGENCIA_EXCEPCION = (('vigentes', 'Vigentes'), ('finalizadas', 'Finalizadas'))
+
+
+class ExcepcionHorariaFilter(django_filters.FilterSet):
+    complejo = django_filters.NumberFilter(field_name='complejo_id')
+    # Una cancha también queda cerrada por las excepciones globales de su complejo: se listan ambas.
+    cancha = django_filters.NumberFilter(method='filtrar_cancha')
+    vigencia = django_filters.ChoiceFilter(choices=VIGENCIA_EXCEPCION, method='filtrar_vigencia')
+    fecha = django_filters.DateFilter(method='filtrar_fecha', input_formats=['%Y-%m-%d'])
+    tipo_motivo = django_filters.TypedChoiceFilter(choices=TipoMotivoExcepcion.choices, coerce=int)
+
+    def filtrar_cancha(self, queryset, nombre, valor):
+        return ExcepcionHorariaRepository.que_afectan_a_cancha(queryset, valor)
+
+    def filtrar_vigencia(self, queryset, nombre, valor):
+        hoy = timezone.localdate()
+        if valor == 'vigentes':
+            return queryset.filter(fecha_fin__gte=hoy)
+        return queryset.filter(fecha_fin__lt=hoy)
+
+    def filtrar_fecha(self, queryset, nombre, valor):
+        return ExcepcionHorariaRepository.que_cubren_fecha(queryset, valor)

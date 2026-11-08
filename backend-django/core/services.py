@@ -2,7 +2,8 @@ import hashlib
 import ipaddress
 import logging
 import re
-from datetime import datetime, time, timedelta
+from collections import defaultdict
+from datetime import date, datetime, time, timedelta
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -16,13 +17,24 @@ from rest_framework_simplejwt.settings import api_settings as jwt_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .exceptions import ServicioNoDisponible
-from .models import EstadoContrato, EstadoRegistro, EstadoUsuario, TipoEventoAuditoria
+from .models import (
+    AlcanceExcepcion,
+    EstadoCancha,
+    EstadoContrato,
+    EstadoRegistro,
+    EstadoUsuario,
+    TipoEventoAuditoria,
+    TipoMotivoExcepcion,
+)
 from .repositories import (
+    ESTADOS_RESERVA_OCUPANTES,
     AuditoriaRepository,
     CanchaRepository,
     CatalogoRepository,
     ComplejoRepository,
     ComplejoServicioRepository,
+    ExcepcionHorariaRepository,
+    GrillaRepository,
     HorarioAperturaRepository,
     PermisoRepository,
     RolRepository,
@@ -780,3 +792,234 @@ class HorarioAperturaService:
     @staticmethod
     def dar_de_baja(horario):
         horario.desactivar()
+
+
+EVENTO_GRILLA_ACTUALIZADA = 'grilla_actualizada'
+
+
+class DifusionGrillaService:
+    """
+    Punto único de aviso a las grillas abiertas de un complejo. El evento se programa con
+    transaction.on_commit, nunca dentro del bloque atómico: un rollback no puede anunciar un cambio que no
+    ocurrió. Solo lleva ids, fechas y horarios, sin datos personales.
+    """
+
+    @staticmethod
+    def programar(complejo_id, **cambio):
+        evento = {'event': EVENTO_GRILLA_ACTUALIZADA, **cambio}
+        transaction.on_commit(lambda: DifusionGrillaService.publicar(complejo_id, evento))
+
+    @staticmethod
+    def publicar(complejo_id, evento):
+        """
+        Envía el evento al grupo complejo_<id> del channel layer. Mientras no exista el consumer de
+        disponibilidad no hay grillas suscriptas, así que todavía no hay a quién enviarlo.
+        """
+        return None
+
+
+MAXIMO_DIAS_EXCEPCION = 366
+
+
+def _hora_iso(valor):
+    return valor.isoformat() if valor is not None else None
+
+
+class ExcepcionHorariaService:
+    @staticmethod
+    def listar():
+        return ExcepcionHorariaRepository.vigentes()
+
+    @staticmethod
+    def _validar_alta(datos):
+        cancha = datos.get('cancha')
+        if cancha is not None:
+            if cancha.complejo_id != datos['complejo'].pk:
+                raise ValidationError({'cancha': 'La cancha no pertenece al complejo indicado.'})
+            if cancha.estado != EstadoCancha.ACTIVA:
+                raise ValidationError({'cancha': 'Solo se registran excepciones sobre canchas activas.'})
+        if datos['fecha_inicio'] < timezone.localdate():
+            raise ValidationError({'fecha_inicio': 'No puede ser anterior a hoy.'})
+        if (datos['fecha_fin'] - datos['fecha_inicio']).days >= MAXIMO_DIAS_EXCEPCION:
+            raise ValidationError({
+                'fecha_fin': f'Una excepción abarca como máximo {MAXIMO_DIAS_EXCEPCION} días.',
+            })
+
+    @staticmethod
+    def _describir(excepcion):
+        # La descripción es texto libre del personal y puede nombrar a terceros: no se replica en la auditoría.
+        alcance = f'cancha id {excepcion.cancha_id}' if excepcion.cancha_id else 'todo el complejo'
+        if excepcion.es_dia_completo == AlcanceExcepcion.DIA_COMPLETO:
+            horario = 'día completo'
+        else:
+            horario = f'{excepcion.hora_inicio:%H:%M} a {excepcion.hora_fin:%H:%M}'
+        return (
+            f'Excepción id {excepcion.pk}. Alcance: {alcance}. '
+            f'Fechas: {excepcion.fecha_inicio.isoformat()} a {excepcion.fecha_fin.isoformat()}. '
+            f'Horario: {horario}. Motivo: {TipoMotivoExcepcion(excepcion.tipo_motivo).label}.'
+        )
+
+    @staticmethod
+    def _difundir(excepcion):
+        DifusionGrillaService.programar(
+            excepcion.complejo_id,
+            cancha_id=excepcion.cancha_id,
+            fecha_desde=excepcion.fecha_inicio.isoformat(),
+            fecha_hasta=excepcion.fecha_fin.isoformat(),
+            hora_inicio=_hora_iso(excepcion.hora_inicio),
+            hora_fin=_hora_iso(excepcion.hora_fin),
+        )
+
+    @staticmethod
+    def crear(datos, actor, ip_origen):
+        ExcepcionHorariaService._validar_alta(datos)
+        with transaction.atomic():
+            excepcion = ExcepcionHorariaRepository.crear(creado_por=actor, **datos)
+            ExcepcionHorariaService._difundir(excepcion)
+
+        AuditoriaService.registrar(
+            TipoEventoAuditoria.ALTA_EXCEPCION, 'Alta de excepción horaria',
+            detalle=ExcepcionHorariaService._describir(excepcion),
+            usuario=actor, complejo=excepcion.complejo_id, ip_origen=ip_origen,
+        )
+        return excepcion
+
+    @staticmethod
+    def dar_de_baja(excepcion_id, actor, ip_origen):
+        with transaction.atomic():
+            # El bloqueo evita que dos bajas simultáneas de la misma excepción se registren dos veces.
+            excepcion = ExcepcionHorariaRepository.bloquear(excepcion_id)
+            if excepcion is None or excepcion.estado != EstadoRegistro.ACTIVO:
+                raise NotFound()
+            excepcion.desactivar()
+            ExcepcionHorariaService._difundir(excepcion)
+
+        AuditoriaService.registrar(
+            TipoEventoAuditoria.BAJA_EXCEPCION, 'Baja de excepción horaria',
+            detalle=ExcepcionHorariaService._describir(excepcion),
+            usuario=actor, complejo=excepcion.complejo_id, ip_origen=ip_origen,
+        )
+
+
+BLOQUE_LIBRE = 'LIBRE'
+BLOQUE_OCUPADO = 'OCUPADO'
+BLOQUE_CERRADO_EXCEPCION = 'CERRADO_EXCEPCION'
+
+# Fecha arbitraria para operar con horas: ningún rango cruza la medianoche (ck_horario_apertura_cierre).
+_FECHA_DE_REFERENCIA = date(2000, 1, 1)
+
+
+def _se_superponen(inicio_a, fin_a, inicio_b, fin_b):
+    """Intervalos semiabiertos [inicio, fin): los contiguos (14 a 15 y 15 a 16) no se superponen."""
+    return inicio_a < fin_b and fin_a > inicio_b
+
+
+class GrillaService:
+    @staticmethod
+    def generar_bloques(apertura, cierre, duracion_min):
+        """Turnos consecutivos desde la apertura; un resto menor a un turno completo no se ofrece."""
+        paso = timedelta(minutes=duracion_min)
+        inicio = datetime.combine(_FECHA_DE_REFERENCIA, apertura)
+        limite = datetime.combine(_FECHA_DE_REFERENCIA, cierre)
+        bloques = []
+        while inicio + paso <= limite:
+            bloques.append((inicio.time(), (inicio + paso).time()))
+            inicio += paso
+        return bloques
+
+    @staticmethod
+    def _ocupaciones_por_cancha(reservas, turnos_fijos):
+        """
+        Una reserva ocupante bloquea su horario. Un turno fijo vigente ocupa el suyo salvo que esa fecha ya
+        tenga una reserva generada por él: en ese caso manda el estado de la reserva, así cancelar una
+        fecha puntual del turno fijo libera el casillero.
+        """
+        ocupaciones = defaultdict(list)
+        turnos_con_reserva = set()
+        for reserva in reservas:
+            if reserva['turno_fijo_id'] is not None:
+                turnos_con_reserva.add(reserva['turno_fijo_id'])
+            if reserva['estado'] in ESTADOS_RESERVA_OCUPANTES:
+                ocupaciones[reserva['cancha_id']].append((reserva['hora_inicio'], reserva['hora_fin']))
+        for turno in turnos_fijos:
+            if turno['id'] not in turnos_con_reserva:
+                ocupaciones[turno['cancha_id']].append((turno['hora_inicio'], turno['hora_fin']))
+        return ocupaciones
+
+    @staticmethod
+    def _excepciones_por_cancha(excepciones, cancha_ids):
+        globales = [excepcion for excepcion in excepciones if excepcion['cancha_id'] is None]
+        por_cancha = {cancha_id: list(globales) for cancha_id in cancha_ids}
+        for excepcion in excepciones:
+            if excepcion['cancha_id'] in por_cancha:
+                por_cancha[excepcion['cancha_id']].append(excepcion)
+        return por_cancha
+
+    @staticmethod
+    def _estado_del_bloque(inicio, fin, ocupaciones, excepciones):
+        """
+        La ocupación prevalece sobre la excepción: un turno ya tomado se informa ocupado aunque el complejo
+        cierre después, y sigue a la vista en la agenda hasta que el complejo lo resuelva.
+        """
+        if any(_se_superponen(inicio, fin, desde, hasta) for desde, hasta in ocupaciones):
+            return BLOQUE_OCUPADO, None
+        for excepcion in excepciones:
+            cubre_el_bloque = excepcion['es_dia_completo'] == AlcanceExcepcion.DIA_COMPLETO or _se_superponen(
+                inicio, fin, excepcion['hora_inicio'], excepcion['hora_fin'],
+            )
+            if cubre_el_bloque:
+                return BLOQUE_CERRADO_EXCEPCION, TipoMotivoExcepcion(excepcion['tipo_motivo']).label
+        return BLOQUE_LIBRE, None
+
+    @staticmethod
+    def calcular(complejo_id, fecha):
+        """
+        Grilla pública de un día: los bloques de cada rango horario activo de las canchas activas, con su
+        precio y su estado. La cantidad de consultas es fija, sin importar canchas ni reservas.
+        """
+        if fecha < timezone.localdate():
+            raise ValidationError({'fecha': 'La grilla se consulta desde hoy en adelante.'})
+        complejo = ComplejoRepository.publico_por_id(complejo_id)
+        if complejo is None:
+            raise NotFound()
+
+        dia_semana = fecha.weekday()
+        canchas = GrillaRepository.canchas_activas(complejo.pk)
+        cancha_ids = [cancha.pk for cancha in canchas]
+
+        horarios = defaultdict(list)
+        for horario in GrillaRepository.horarios_del_dia(cancha_ids, dia_semana):
+            horarios[horario['cancha_id']].append(horario)
+        excepciones = GrillaService._excepciones_por_cancha(
+            ExcepcionHorariaRepository.activas_en_fecha(complejo.pk, fecha), cancha_ids,
+        )
+        ocupaciones = GrillaService._ocupaciones_por_cancha(
+            GrillaRepository.reservas_de_fecha(cancha_ids, fecha),
+            GrillaRepository.turnos_fijos_vigentes(cancha_ids, dia_semana, fecha),
+        )
+
+        resultado = []
+        for cancha in canchas:
+            bloques = []
+            for horario in horarios[cancha.pk]:
+                precio = horario['precio_diferenciado']
+                if precio is None:
+                    precio = cancha.precio_base
+                for inicio, fin in GrillaService.generar_bloques(
+                    horario['hora_apertura'], horario['hora_cierre'], cancha.duracion_turno_min,
+                ):
+                    estado, motivo = GrillaService._estado_del_bloque(
+                        inicio, fin, ocupaciones[cancha.pk], excepciones[cancha.pk],
+                    )
+                    bloques.append({
+                        'hora_inicio': inicio, 'hora_fin': fin, 'precio': precio, 'estado': estado, 'motivo': motivo,
+                    })
+            resultado.append({
+                'id': cancha.pk,
+                'nombre': cancha.nombre,
+                'deporte': cancha.deporte,
+                'duracion_turno_min': cancha.duracion_turno_min,
+                'bloques': bloques,
+            })
+
+        return {'complejo': complejo, 'fecha': fecha, 'dia_semana': dia_semana, 'canchas': resultado}

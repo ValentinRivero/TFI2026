@@ -7,6 +7,7 @@ from .views import (
     ComplejoViewSet,
     ContratoViewSet,
     DeporteViewSet,
+    ExcepcionHorariaViewSet,
     HorarioAperturaViewSet,
     LoginView,
     LogoutView,
@@ -25,6 +26,7 @@ router.register('servicios', ServicioViewSet, basename='servicio')
 router.register('complejos', ComplejoViewSet, basename='complejo')
 router.register('canchas', CanchaViewSet, basename='cancha')
 router.register('horarios', HorarioAperturaViewSet, basename='horario')
+router.register('excepciones', ExcepcionHorariaViewSet, basename='excepcion')
 router.register('contratos', ContratoViewSet, basename='contrato')
 router.register('usuarios', UsuarioViewSet, basename='usuario')
 
