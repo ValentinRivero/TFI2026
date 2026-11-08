@@ -166,7 +166,9 @@ REST_FRAMEWORK = {
         'anon': os.environ.get('THROTTLE_ANON', '60/minute'),
         'user': os.environ.get('THROTTLE_USER', '240/minute'),
         'login': '5/minute',
+        'registro': os.environ.get('THROTTLE_REGISTRO', '10/hour'),
     },
+    'EXCEPTION_HANDLER': 'core.exceptions.custom_exception_handler',
 }
 
 if DEBUG:
@@ -188,11 +190,16 @@ SIMPLE_JWT = {
     'USER_ID_CLAIM': 'usuario_id',
 }
 
+# Versión vigente de la política de privacidad publicada en el frontend; cambiarla obliga a aceptarla de nuevo.
+POLITICA_PRIVACIDAD_VERSION = '1.0'
+
 CORS_ALLOWED_ORIGINS = _env_lista(
     'CORS_ALLOWED_ORIGINS',
     'http://localhost:5173,http://127.0.0.1:5173',
 )
 CSRF_TRUSTED_ORIGINS = _env_lista('CSRF_TRUSTED_ORIGINS', ','.join(CORS_ALLOWED_ORIGINS))
+# La cookie HttpOnly del refresh solo viaja en peticiones cross-origin con credenciales habilitadas.
+CORS_ALLOW_CREDENTIALS = True
 
 REDIS_URL = os.environ.get('REDIS_URL', '').strip()
 

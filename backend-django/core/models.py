@@ -134,6 +134,7 @@ class TipoEventoAuditoria(models.IntegerChoices):
     RESERVA_CANCELADA = 12, 'Reserva cancelada'
     RESERVA_CAMBIO_ESTADO = 13, 'Cambio de estado de reserva'
     CAMBIO_CONFIGURACION = 14, 'Cambio de configuración del complejo'
+    ACEPTACION_POLITICA = 15, 'Aceptación de la política de privacidad'
 
 
 class Rol(ModeloBase):
@@ -225,6 +226,9 @@ class Usuario(AbstractBaseUser, ModeloBase):
         on_delete=models.SET_NULL,
         related_name='operadores',
     )
+    # Constancia del consentimiento informado: qué versión de la política aceptó el titular y cuándo.
+    version_politica_aceptada = models.CharField(max_length=20, blank=True)
+    fecha_aceptacion_politica = models.DateTimeField(null=True, blank=True)
 
     last_login = None
 
