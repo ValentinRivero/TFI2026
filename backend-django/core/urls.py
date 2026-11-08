@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework.routers import SimpleRouter
 
 from .views import (
+    AgendaViewSet,
     AuditoriaViewSet,
     CanchaViewSet,
     ComplejoViewSet,
@@ -14,8 +15,10 @@ from .views import (
     PerfilView,
     RefreshView,
     RegistroView,
+    ReservaViewSet,
     SaludView,
     ServicioViewSet,
+    TurnoFijoViewSet,
     UsuarioViewSet,
 )
 
@@ -27,6 +30,9 @@ router.register('complejos', ComplejoViewSet, basename='complejo')
 router.register('canchas', CanchaViewSet, basename='cancha')
 router.register('horarios', HorarioAperturaViewSet, basename='horario')
 router.register('excepciones', ExcepcionHorariaViewSet, basename='excepcion')
+router.register('reservas', ReservaViewSet, basename='reserva')
+router.register('agenda', AgendaViewSet, basename='agenda')
+router.register('turnos-fijos', TurnoFijoViewSet, basename='turno-fijo')
 router.register('contratos', ContratoViewSet, basename='contrato')
 router.register('usuarios', UsuarioViewSet, basename='usuario')
 

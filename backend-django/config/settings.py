@@ -167,6 +167,7 @@ REST_FRAMEWORK = {
         'user': os.environ.get('THROTTLE_USER', '240/minute'),
         'login': '5/minute',
         'registro': os.environ.get('THROTTLE_REGISTRO', '10/hour'),
+        'reservas': '20/hour',
     },
     'EXCEPTION_HANDLER': 'core.exceptions.custom_exception_handler',
 }

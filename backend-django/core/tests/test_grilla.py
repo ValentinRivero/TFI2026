@@ -8,6 +8,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework import status
 
+from conftest import HOY_CONGELADO
 from core.models import (
     AlcanceExcepcion,
     Deporte,
@@ -255,6 +256,45 @@ class TestGrillaPublica:
         _abrir(cancha, time(8, 0), time(9, 0), dia=timezone.localdate().weekday())
 
         assert len(_bloques(cliente, complejo, timezone.localdate(), cancha)) == 1
+
+
+class TestBloquesYaIniciados:
+    """El reloj congelado marca el lunes a las 10:00: el bloque de las 10 ya empezó y no se puede reservar."""
+
+    def test_hoy_los_bloques_libres_ya_iniciados_no_estan_disponibles(self, reloj, cliente, complejo, cancha):
+        _abrir(cancha, time(8, 0), time(13, 0))
+
+        assert _estados(_bloques(cliente, complejo, HOY_CONGELADO, cancha)) == {
+            '08:00': 'NO_DISPONIBLE', '09:00': 'NO_DISPONIBLE', '10:00': 'NO_DISPONIBLE',
+            '11:00': 'LIBRE', '12:00': 'LIBRE',
+        }
+
+    def test_un_bloque_iniciado_conserva_su_ocupacion_o_su_cierre(
+        self, reloj, cliente, complejo, cancha, reservar, excepcion,
+    ):
+        _abrir(cancha, time(8, 0), time(11, 0))
+        reservar(cancha, HOY_CONGELADO, time(8, 0), time(9, 0))
+        excepcion(complejo, HOY_CONGELADO, cancha=cancha, inicio=time(9, 0), fin=time(10, 0))
+
+        estados = _estados(_bloques(cliente, complejo, HOY_CONGELADO, cancha))
+
+        assert estados == {'08:00': 'OCUPADO', '09:00': 'CERRADO_EXCEPCION', '10:00': 'NO_DISPONIBLE'}
+
+    def test_los_dias_siguientes_no_se_ven_afectados(self, reloj, cliente, complejo, cancha):
+        _abrir(cancha, time(8, 0), time(10, 0))
+
+        assert set(_estados(_bloques(cliente, complejo, HOY_CONGELADO + timedelta(days=7), cancha)).values()) == {'LIBRE'}
+
+    def test_mas_alla_de_la_anticipacion_maxima_no_se_ofrecen_turnos(
+        self, reloj, cliente, complejo, cancha, reservar,
+    ):
+        # Hoy es el lunes 16/11/2026: se reserva hasta el 16/01/2027.
+        _abrir(cancha, time(8, 0), time(10, 0))
+        ultimo_lunes, siguiente = HOY_CONGELADO + timedelta(weeks=8), HOY_CONGELADO + timedelta(weeks=9)
+        reservar(cancha, siguiente, time(8, 0), time(9, 0))
+
+        assert set(_estados(_bloques(cliente, complejo, ultimo_lunes, cancha)).values()) == {'LIBRE'}
+        assert _estados(_bloques(cliente, complejo, siguiente, cancha)) == {'08:00': 'OCUPADO', '09:00': 'NO_DISPONIBLE'}
 
 
 class TestValidacionesDeGrilla:

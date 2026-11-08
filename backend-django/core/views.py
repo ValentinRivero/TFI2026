@@ -10,12 +10,15 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
 
 from .filters import (
+    AgendaFilter,
     BusquedaFlexibleFilter,
     CanchaFilter,
     CatalogoComplejoFilter,
     ContratoFilter,
     ExcepcionHorariaFilter,
     HorarioAperturaFilter,
+    ReservaPropiaFilter,
+    TurnoFijoFilter,
     UsuarioFilter,
 )
 from .permissions import AdministraComplejo, TienePermisoRBAC
@@ -30,13 +33,20 @@ from .serializers import (
     ContratoEstadoSerializer,
     ContratoSerializer,
     ExcepcionHorariaSerializer,
+    FechaTurnoFijoSerializer,
     FiltroAuditoriaSerializer,
     FiltroGrillaSerializer,
     GrillaSerializer,
     HorarioAperturaSerializer,
     LogAuditoriaSerializer,
     OperadorSerializer,
+    ReservaAgendaEdicionSerializer,
+    ReservaAgendaSerializer,
+    ReservaAltaSerializer,
+    ReservaManualSerializer,
+    ReservaPropiaSerializer,
     ServiciosComplejoSerializer,
+    TurnoFijoSerializer,
     UsuarioAdminEdicionSerializer,
     UsuarioAdminSerializer,
     VincularOperadorSerializer,
@@ -54,11 +64,13 @@ from .services import (
     HorarioAperturaService,
     OperadorService,
     RbacService,
+    ReservaService,
     SesionService,
+    TurnoFijoService,
     UsuarioAdminService,
     UsuarioService,
 )
-from .throttles import LoginRateThrottle, RegistroRateThrottle
+from .throttles import LoginRateThrottle, RegistroRateThrottle, ReservaRateThrottle
 
 NOMBRE_COOKIE_REFRESH = 'refresh'
 # El navegador solo envía la cookie a /api/token/, /api/token/refresh/ y /api/token/logout/.
@@ -459,6 +471,16 @@ class HorarioAperturaViewSet(PermisosPorCampoMixin, AccesoComplejoMixin, viewset
         HorarioAperturaService.dar_de_baja(instance)
 
 
+def _validar_filtros_de_complejo(request):
+    """Filtrar por un complejo o una cancha ajenos responde 404, igual que pedirlos por id."""
+    complejo_id = request.query_params.get('complejo', '')
+    if complejo_id.isdigit() and not AccesoComplejoService.puede_administrar(request.user, complejo_id):
+        raise NotFound()
+    cancha_id = request.query_params.get('cancha', '')
+    if cancha_id.isdigit() and not CanchaService.es_visible_para(request.user, cancha_id):
+        raise NotFound()
+
+
 class ExcepcionHorariaViewSet(AccesoComplejoMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin,
                               mixins.CreateModelMixin, mixins.DestroyModelMixin, viewsets.GenericViewSet):
     serializer_class = ExcepcionHorariaSerializer
@@ -477,12 +499,7 @@ class ExcepcionHorariaViewSet(AccesoComplejoMixin, mixins.ListModelMixin, mixins
     filter_backends = (DjangoFilterBackend, OrderingFilter)
 
     def list(self, request, *args, **kwargs):
-        complejo_id = request.query_params.get('complejo', '')
-        if complejo_id.isdigit() and not AccesoComplejoService.puede_administrar(request.user, complejo_id):
-            raise NotFound()
-        cancha_id = request.query_params.get('cancha', '')
-        if cancha_id.isdigit() and not CanchaService.es_visible_para(request.user, cancha_id):
-            raise NotFound()
+        _validar_filtros_de_complejo(request)
         return super().list(request, *args, **kwargs)
 
     def guardar(self, serializer):
@@ -494,6 +511,150 @@ class ExcepcionHorariaViewSet(AccesoComplejoMixin, mixins.ListModelMixin, mixins
         ExcepcionHorariaService.dar_de_baja(
             instance.pk, self.request.user, AuditoriaService.ip_de_request(self.request),
         )
+
+
+class ReservaViewSet(viewsets.GenericViewSet):
+    """Reservas del jugador: solo ve y cancela las propias; las ajenas responden 404."""
+
+    serializer_class = ReservaPropiaSerializer
+    permission_classes = [TienePermisoRBAC]
+    permisos_requeridos = {
+        'create': ('reservar_turno',),
+        'mias': ('ver_reservas_propias',),
+        'cancelar': ('cancelar_reserva_propia',),
+    }
+    lookup_value_regex = r'\d+'
+    filterset_class = ReservaPropiaFilter
+    ordering_fields = ('fecha_turno', 'hora_inicio', 'fecha_creacion')
+    ordering = ('fecha_turno', 'hora_inicio', 'id')
+
+    @property
+    def filter_backends(self):
+        return (DjangoFilterBackend, OrderingFilter) if self.action == 'mias' else ()
+
+    def get_throttles(self):
+        throttles = super().get_throttles()
+        if self.action == 'create':
+            throttles.append(ReservaRateThrottle())
+        return throttles
+
+    def get_queryset(self):
+        return ReservaService.propias(self.request.user)
+
+    def create(self, request):
+        entrada = ReservaAltaSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        reserva = ReservaService.crear_reserva(
+            entrada.validated_data, request.user, AuditoriaService.ip_de_request(request),
+        )
+        return Response(ReservaPropiaSerializer(reserva).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'])
+    def mias(self, request):
+        pagina = self.paginate_queryset(self.filter_queryset(self.get_queryset()))
+        return self.get_paginated_response(self.get_serializer(pagina, many=True).data)
+
+    @action(detail=True, methods=['post'])
+    def cancelar(self, request, pk=None):
+        reserva = ReservaService.cancelar_por_jugador(
+            self.get_object().pk, request.user, AuditoriaService.ip_de_request(request),
+        )
+        return Response(ReservaPropiaSerializer(reserva).data)
+
+
+class AgendaViewSet(AccesoComplejoMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    """Reservas de los complejos que el usuario administra, con los datos de contacto de cada cliente."""
+
+    serializer_class = ReservaAgendaSerializer
+    permission_classes = [TienePermisoRBAC, AdministraComplejo]
+    permisos_requeridos = {
+        'list': ('ver_agenda',),
+        'retrieve': ('ver_agenda',),
+        'create': ('gestionar_agenda',),
+        'partial_update': ('gestionar_agenda',),
+        'cancelar': ('cancelar_reserva_complejo',),
+    }
+    campo_complejo = 'cancha__complejo'
+    lookup_value_regex = r'\d+'
+    http_method_names = ['get', 'post', 'patch', 'head', 'options']
+    queryset = ReservaService.agenda()
+    filterset_class = AgendaFilter
+    ordering_fields = ('fecha_turno', 'hora_inicio', 'fecha_creacion', 'id')
+    ordering = ('fecha_turno', 'hora_inicio', 'cancha__nombre', 'id')
+    filter_backends = (DjangoFilterBackend, OrderingFilter)
+
+    def list(self, request, *args, **kwargs):
+        _validar_filtros_de_complejo(request)
+        return super().list(request, *args, **kwargs)
+
+    def create(self, request):
+        entrada = ReservaManualSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        AccesoComplejoService.validar_operacion(request.user, entrada.validated_data['cancha'].complejo_id)
+        reserva = ReservaService.crear_reserva(
+            entrada.validated_data, request.user, AuditoriaService.ip_de_request(request), manual=True,
+        )
+        return Response(ReservaAgendaSerializer(reserva).data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, pk=None):
+        reserva = self.get_object()
+        entrada = ReservaAgendaEdicionSerializer(reserva, data=request.data)
+        entrada.is_valid(raise_exception=True)
+        reserva = ReservaService.actualizar_en_agenda(
+            reserva.pk, entrada.validated_data, request.user, AuditoriaService.ip_de_request(request),
+        )
+        return Response(ReservaAgendaSerializer(reserva).data)
+
+    @action(detail=True, methods=['post'])
+    def cancelar(self, request, pk=None):
+        reserva = ReservaService.cancelar_por_complejo(
+            self.get_object().pk, request.user, AuditoriaService.ip_de_request(request),
+        )
+        return Response(ReservaAgendaSerializer(reserva).data)
+
+
+class TurnoFijoViewSet(AccesoComplejoMixin, viewsets.ModelViewSet):
+    serializer_class = TurnoFijoSerializer
+    permission_classes = [TienePermisoRBAC, AdministraComplejo]
+    permisos_requeridos = {
+        'list': ('ver_agenda',),
+        'retrieve': ('ver_agenda',),
+        'create': ('gestionar_turnos_fijos',),
+        'partial_update': ('gestionar_turnos_fijos',),
+        'destroy': ('gestionar_turnos_fijos',),
+        'fechas': ('gestionar_agenda',),
+    }
+    campo_complejo = 'cancha__complejo'
+    lookup_value_regex = r'\d+'
+    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
+    queryset = TurnoFijoService.listar()
+    filterset_class = TurnoFijoFilter
+    ordering_fields = ('dia_semana', 'hora_inicio', 'fecha_inicio_vigencia', 'id')
+    ordering = ('cancha_id', 'dia_semana', 'hora_inicio', 'id')
+    filter_backends = (DjangoFilterBackend, OrderingFilter)
+
+    def list(self, request, *args, **kwargs):
+        _validar_filtros_de_complejo(request)
+        return super().list(request, *args, **kwargs)
+
+    def guardar(self, serializer):
+        if serializer.instance is None:
+            serializer.instance = TurnoFijoService.crear(serializer.validated_data, self.request.user)
+        else:
+            serializer.instance = TurnoFijoService.actualizar(serializer.instance, serializer.validated_data)
+
+    def perform_destroy(self, instance):
+        TurnoFijoService.dar_de_baja(instance)
+
+    @action(detail=True, methods=['post'])
+    def fechas(self, request, pk=None):
+        turno_fijo = self.get_object()
+        entrada = FechaTurnoFijoSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        reserva = ReservaService.registrar_fecha_de_turno_fijo(
+            turno_fijo, entrada.validated_data['fecha_turno'], request.user, AuditoriaService.ip_de_request(request),
+        )
+        return Response(ReservaAgendaSerializer(reserva).data, status=status.HTTP_201_CREATED)
 
 
 class ContratoViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):

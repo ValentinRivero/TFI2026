@@ -21,6 +21,7 @@ Referencia de los endpoints vigentes del backend principal. Todas las rutas cuel
 | 403 | Sesión válida sin permiso para la acción |
 | 404 | No existe o no es accesible para el usuario |
 | 405 | Método no admitido en la ruta |
+| 409 | El turno choca con una reserva, un turno fijo o una excepción horaria |
 | 429 | Demasiadas solicitudes; reintentar más tarde |
 
 **Listados.** Paginados de a 20: `{ "count", "next", "previous", "results" }`, con `?page=`. Los filtros aceptan solo los parámetros documentados; un valor inválido responde `400` y un parámetro desconocido se ignora. `?search=` no distingue mayúsculas ni tildes, y varios términos separados por espacios se exigen todos.
@@ -77,8 +78,36 @@ Filtros de `GET /api/complejos/`: `deporte` (id), `cobertura` (`1` descubierta, 
 ```
 
 - Cada rango horario del día genera sus turnos por separado según `duracion_turno_min`; un resto menor a un turno completo no se ofrece. Una cancha sin horario ese día figura con `bloques` vacío.
-- `estado`: `LIBRE`, `OCUPADO` (reserva activa o turno fijo) o `CERRADO_EXCEPCION`, con el motivo del cierre en `motivo`. Si un turno ya ocupado coincide con un cierre, se informa `OCUPADO`.
+- `estado`: `LIBRE`, `OCUPADO` (reserva activa o turno fijo), `CERRADO_EXCEPCION`, con el motivo del cierre en `motivo`, o `NO_DISPONIBLE` (un turno de hoy que ya empezó, o de una fecha posterior a los 2 meses de anticipación que admiten las reservas). Si un turno ya ocupado coincide con un cierre, se informa `OCUPADO`.
+- Todo turno `LIBRE` se puede reservar con `POST /api/reservas/`.
 - La respuesta no incluye datos de quien reservó.
+
+## Reservas del jugador
+
+| Método y ruta | Acceso | Uso |
+|---|---|---|
+| `POST /api/reservas/` | Jugador | `cancha`, `fecha_turno` (`AAAA-MM-DD`) y `hora_inicio` (`HH:MM`) de un turno libre de la grilla |
+| `GET /api/reservas/mias/` | Jugador | Reservas propias; filtros `estado`, `vigencia` (`proximas` o `pasadas`), `fecha_desde` y `fecha_hasta`; `ordering` por `fecha_turno`, `hora_inicio` o `fecha_creacion` |
+| `POST /api/reservas/<id>/cancelar/` | Jugador | Cancela una reserva propia (`estado = 4`) |
+
+```json
+{
+  "id": 41, "complejo": { "id": 1, "nombre": "Complejo El Yacaré" }, "cancha": { "id": 3, "nombre": "Cancha 1" },
+  "deporte": "Fútbol 5", "fecha_turno": "2026-11-24", "hora_inicio": "20:00:00", "hora_fin": "21:00:00",
+  "precio_acordado": "38000.00", "tipo_ocupacion": 1, "tipo_ocupacion_nombre": "Reserva web del jugador",
+  "estado": 1, "estado_nombre": "Pendiente Seña", "cancelable_hasta": "2026-11-24T16:00:00-03:00",
+  "fecha_creacion": "2026-11-16T10:00:00-03:00"
+}
+```
+
+- Rutas de jugadores (y del superadmin): dueños y operadores registran reservas desde la agenda.
+- `hora_inicio` debe ser el inicio de un turno de la grilla de esa fecha. `hora_fin` y `precio_acordado` los calcula el servidor según la cancha y su horario; si se envían, se ignoran. La reserva nace pendiente de seña (`estado = 1`).
+- Se reserva con hasta 2 meses calendario de anticipación (por ejemplo, el 16/11 hasta el 16/01 inclusive).
+- `400`: turno pasado o ya iniciado, fecha más allá de la anticipación máxima, horario que no es un turno de la cancha, cancha no disponible o complejo no habilitado. `409`: el turno ya está reservado, lo ocupa un turno fijo o lo cierra una excepción; el mensaje indica cuál.
+- Las altas tienen un límite de solicitudes por cuenta y responden `429` al superarlo; consultar y cancelar no cuentan.
+- `vigencia=proximas` incluye las reservas cuyo turno todavía no terminó (la de hoy en curso también); `pasadas`, las ya terminadas.
+- Solo se cancelan reservas en `1`, `2` o `3`, y si faltan más horas que el margen del complejo (`horas_limite_cancelacion`) para el inicio del turno; `cancelable_hasta` informa el límite. Fuera de margen responde `400`. Una reserva de otra cuenta responde `404`.
+- `estado`: `1` pendiente de seña, `2` confirmada, `3` señada o pagada, `4` cancelada por el jugador, `5` cancelada por el complejo, `6` ausente, `7` completada.
 
 ## Administración del complejo
 
@@ -127,6 +156,40 @@ Un día admite varios rangos por cancha mientras no se superpongan; `hora_cierre
 - `fecha_fin` debe ser igual o posterior a `fecha_inicio`, que no puede ser anterior a hoy. El rango tiene una extensión máxima.
 - `tipo_motivo`: `1` mantenimiento, `2` condiciones climáticas, `3` feriado, `4` evento privado, `5` corte de servicio, `6` otro.
 - No se editan: para corregir una excepción se da de baja y se registra otra.
+
+### Agenda
+
+| Método y ruta | Acceso | Uso |
+|---|---|---|
+| `GET /api/agenda/` | Operador | Reservas de los complejos administrados, con el contacto del cliente; filtros `complejo`, `cancha`, `fecha`, `fecha_desde`, `fecha_hasta`, `estado` y `tipo_ocupacion` (`1` web, `2` manual, `3` turno fijo); `ordering` por `fecha_turno`, `hora_inicio` o `fecha_creacion` |
+| `GET /api/agenda/<id>/` | Operador | Detalle |
+| `POST /api/agenda/` | Operador | Reserva telefónica o presencial: `cancha`, `fecha_turno`, `hora_inicio`, `nombre_cliente_manual` y, opcionales, `telefono_cliente_manual` y `observaciones` |
+| `PATCH /api/agenda/<id>/` | Operador | `estado` y `observaciones` |
+| `POST /api/agenda/<id>/cancelar/` | Operador | Cancela la reserva (`estado = 5`) sin restricción horaria |
+
+- Cada reserva trae `cliente`: `{ "nombre", "telefono", "email" }`. Es la cuenta del jugador si reservó en la web; si se cargó a mano, `email` es `null`.
+- El alta manual sigue las mismas reglas que la reserva web (turno de la grilla, futuro, dentro de la anticipación máxima y libre) y responde `409` ante un choque. Una cancha de otro complejo responde `403`.
+- En `PATCH`, `cancha`, `fecha_turno`, `hora_inicio`, `hora_fin` y `precio_acordado` no se editan: enviados con otro valor responden `400` con el motivo; con el mismo valor se aceptan. Para cambiar el turno se cancela la reserva y se registra otra.
+- `estado` en `PATCH` admite `2` confirmada, `3` señada, `6` ausente y `7` completada. Desde pendiente se pasa a cualquiera de ellas, desde confirmada a señada, ausente o completada, y desde señada a ausente o completada; ausente y completada se corrigen entre sí. Ausente y completada exigen que el turno haya empezado. Las reservas canceladas no cambian de estado.
+- Las reservas no se borran: se cancelan.
+
+### Turnos fijos
+
+| Método y ruta | Acceso | Uso |
+|---|---|---|
+| `GET /api/turnos-fijos/` | Operador | Turnos fijos vigentes y pausados, con el contacto del cliente; filtros `cancha`, `complejo`, `dia_semana`, `estado` (`1` vigente, `2` pausado) y `fecha` (los que caen ese día) |
+| `GET /api/turnos-fijos/<id>/` | Operador | Detalle |
+| `POST /api/turnos-fijos/` | Operador | `cancha`, `dia_semana`, `hora_inicio`, `fecha_inicio_vigencia`, `fecha_fin_vigencia` (opcional, sin fin si es nula), `nombre_cliente_manual` y `telefono_cliente_manual` (opcional) |
+| `PATCH /api/turnos-fijos/<id>/` | Operador | `estado` (`1` o `2`), `fecha_fin_vigencia`, `nombre_cliente_manual` y `telefono_cliente_manual` |
+| `DELETE /api/turnos-fijos/<id>/` | Operador | Baja del turno fijo (`204`) |
+| `POST /api/turnos-fijos/<id>/fechas/` | Operador | `{ "fecha_turno" }`: lleva esa fecha a la agenda como reserva confirmada (`tipo_ocupacion = 3`) |
+
+- `hora_fin` la calcula el servidor según la duración del turno de la cancha, y `hora_inicio` debe ser el inicio de un turno de la grilla ese día de la semana. La vigencia empieza hoy o después e incluye al menos una fecha de ese día.
+- `409` si en alguna fecha futura de la vigencia choca con otro turno fijo vigente, una reserva activa o una excepción activa; el mensaje indica la fecha o el horario.
+- La cancha, el día, el horario y el inicio de la vigencia no se editan: enviados con otro valor responden `400` con el motivo; con el mismo valor se aceptan. Pausar (`estado = 2`) libera el horario; reanudar y extender `fecha_fin_vigencia` vuelven a validar choques (`409`).
+- `?fecha=` trae los vigentes y los pausados que caen ese día; con `estado=1`, solo los vigentes.
+- Un turno fijo vigente ocupa su horario en cada fecha de su vigencia. Para operar una fecha puntual (señarla, completarla o cancelarla) se registra con `fechas/` y se gestiona desde la agenda; cancelarla libera solo ese día. La fecha debe ser de ese día de la semana y estar dentro de la vigencia; si ya se registró, responde `409`.
+- La baja no cancela las fechas ya registradas en la agenda.
 
 ## Sistema
 

@@ -406,6 +406,21 @@ class ExcepcionHorariaRepository:
         )
 
     @staticmethod
+    def activas_en_periodo(complejo_id, cancha_id, desde, hasta):
+        """Excepciones activas que cierran la cancha (propias o globales) en algún día de [desde, hasta]; hasta nulo es sin fin."""
+        excepciones = ExcepcionHoraria.objects.filter(
+            Q(cancha__isnull=True) | Q(cancha_id=cancha_id),
+            complejo_id=complejo_id, estado=EstadoRegistro.ACTIVO, fecha_fin__gte=desde,
+        )
+        if hasta is not None:
+            excepciones = excepciones.filter(fecha_inicio__lte=hasta)
+        return list(
+            excepciones.order_by('fecha_inicio', 'id').values(
+                'fecha_inicio', 'fecha_fin', 'es_dia_completo', 'hora_inicio', 'hora_fin', 'tipo_motivo',
+            )
+        )
+
+    @staticmethod
     def crear(**campos):
         return ExcepcionHoraria.objects.create(**campos)
 
@@ -457,6 +472,139 @@ class GrillaRepository:
                 fecha_inicio_vigencia__lte=fecha,
             ).values('id', 'cancha_id', 'hora_inicio', 'hora_fin')
         )
+
+
+class ReservaRepository:
+    @staticmethod
+    def _vigentes():
+        return Reserva.objects.exclude(estado=EstadoReserva.BAJA)
+
+    @staticmethod
+    def de_usuario(usuario_id):
+        return (
+            ReservaRepository._vigentes().filter(usuario_id=usuario_id)
+            .select_related('cancha__complejo', 'cancha__deporte')
+            .order_by('fecha_turno', 'hora_inicio', 'id')
+        )
+
+    @staticmethod
+    def filtrar_por_vigencia(queryset, proximas, hoy, hora_actual):
+        """Próxima hasta que termina el turno; un turno de hoy en curso sigue siendo próximo."""
+        terminadas = Q(fecha_turno__lt=hoy) | Q(fecha_turno=hoy, hora_fin__lte=hora_actual)
+        return queryset.exclude(terminadas) if proximas else queryset.filter(terminadas)
+
+    @staticmethod
+    def agenda():
+        return (
+            ReservaRepository._vigentes().select_related('cancha__complejo', 'usuario')
+            .order_by('fecha_turno', 'hora_inicio', 'cancha__nombre', 'id')
+        )
+
+    @staticmethod
+    def bloquear_cancha(cancha_id):
+        """FOR UPDATE solo sobre la cancha: serializa las altas de reservas y turnos fijos que compiten por ella."""
+        return (
+            Cancha.objects.select_for_update(of=('self',)).select_related('complejo', 'deporte')
+            .filter(id=cancha_id).first()
+        )
+
+    @staticmethod
+    def bloquear(reserva_id):
+        return (
+            Reserva.objects.select_for_update(of=('self',))
+            .select_related('cancha__complejo', 'cancha__deporte', 'usuario')
+            .filter(id=reserva_id).exclude(estado=EstadoReserva.BAJA).first()
+        )
+
+    @staticmethod
+    def crear(**campos):
+        return Reserva.objects.create(**campos)
+
+    @staticmethod
+    def actualizar(reserva, **campos):
+        for campo, valor in campos.items():
+            setattr(reserva, campo, valor)
+        reserva.save(update_fields=[*campos, 'fecha_modificacion'])
+        return reserva
+
+    @staticmethod
+    def existe_fecha_de_turno_fijo(turno_fijo_id, fecha):
+        return ReservaRepository._vigentes().filter(turno_fijo_id=turno_fijo_id, fecha_turno=fecha).exists()
+
+    @staticmethod
+    def primera_ocupante_en_dia_de_semana(cancha_id, dia_semana, inicio, fin, desde, hasta, excluir_turno_fijo_id=None):
+        """Primera reserva ocupante de ese día de la semana y horario en [desde, hasta]; hasta nulo es sin fin."""
+        reservas = Reserva.objects.filter(
+            cancha_id=cancha_id,
+            estado__in=ESTADOS_RESERVA_OCUPANTES,
+            fecha_turno__gte=desde,
+            fecha_turno__iso_week_day=dia_semana + 1,
+            hora_inicio__lt=fin,
+            hora_fin__gt=inicio,
+        )
+        if hasta is not None:
+            reservas = reservas.filter(fecha_turno__lte=hasta)
+        if excluir_turno_fijo_id is not None:
+            reservas = reservas.exclude(turno_fijo_id=excluir_turno_fijo_id)
+        return reservas.order_by('fecha_turno', 'hora_inicio').values('fecha_turno', 'hora_inicio').first()
+
+
+class TurnoFijoRepository:
+    @staticmethod
+    def vigentes():
+        return (
+            TurnoFijo.objects.exclude(estado=EstadoTurnoFijo.BAJA)
+            .select_related('cancha__complejo', 'usuario')
+            .order_by('cancha_id', 'dia_semana', 'hora_inicio', 'id')
+        )
+
+    @staticmethod
+    def que_aplican_en(queryset, fecha):
+        """Turnos fijos cuyo día de la semana y vigencia incluyen la fecha."""
+        return queryset.filter(
+            Q(fecha_fin_vigencia__isnull=True) | Q(fecha_fin_vigencia__gte=fecha),
+            dia_semana=fecha.weekday(),
+            fecha_inicio_vigencia__lte=fecha,
+        )
+
+    @staticmethod
+    def bloquear(turno_fijo_id):
+        return (
+            TurnoFijo.objects.select_for_update(of=('self',)).select_related('cancha__complejo', 'usuario')
+            .filter(id=turno_fijo_id).exclude(estado=EstadoTurnoFijo.BAJA).first()
+        )
+
+    @staticmethod
+    def solapados(cancha_id, dia_semana, inicio, fin, desde, hasta, excluir_id=None):
+        """Turnos fijos vigentes de la cancha, mismo día y horario superpuesto, cuya vigencia toca [desde, hasta]."""
+        turnos = TurnoFijo.objects.filter(
+            Q(fecha_fin_vigencia__isnull=True) | Q(fecha_fin_vigencia__gte=desde),
+            cancha_id=cancha_id,
+            dia_semana=dia_semana,
+            estado=EstadoTurnoFijo.VIGENTE,
+            hora_inicio__lt=fin,
+            hora_fin__gt=inicio,
+        )
+        if hasta is not None:
+            turnos = turnos.filter(fecha_inicio_vigencia__lte=hasta)
+        if excluir_id is not None:
+            turnos = turnos.exclude(id=excluir_id)
+        return list(
+            turnos.order_by('fecha_inicio_vigencia', 'id').values(
+                'hora_inicio', 'hora_fin', 'fecha_inicio_vigencia', 'fecha_fin_vigencia',
+            )
+        )
+
+    @staticmethod
+    def crear(**campos):
+        return TurnoFijo.objects.create(**campos)
+
+    @staticmethod
+    def actualizar(turno_fijo, **campos):
+        for campo, valor in campos.items():
+            setattr(turno_fijo, campo, valor)
+        turno_fijo.save(update_fields=[*campos, 'fecha_modificacion'])
+        return turno_fijo
 
 
 class SesionRepository:

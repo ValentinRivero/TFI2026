@@ -11,15 +11,20 @@ from .models import (
     Complejo,
     EstadoCancha,
     EstadoContrato,
+    EstadoReserva,
+    EstadoTurnoFijo,
     EstadoUsuario,
     ExcepcionHoraria,
     HorarioApertura,
     LogAuditoria,
+    Reserva,
     TipoEventoAuditoria,
     TipoMotivoExcepcion,
+    TurnoFijo,
     Usuario,
 )
 from .repositories import CanchaRepository, CatalogoRepository, ComplejoRepository, RolRepository, UsuarioRepository
+from .services import ReservaService
 
 MAXIMO_PASADAS_SANITIZACION = 5
 
@@ -538,3 +543,230 @@ class GrillaSerializer(serializers.Serializer):
     fecha = serializers.DateField()
     dia_semana = serializers.IntegerField()
     canchas = CanchaGrillaSerializer(many=True)
+
+
+MENSAJES_FECHA_ISO = {'invalid': 'Usá el formato AAAA-MM-DD.'}
+MENSAJES_HORA = {'invalid': 'Usá el formato HH:MM.'}
+
+
+class ReservaAltaSerializer(serializers.Serializer):
+    """hora_fin y precio_acordado no se reciben: los calcula el servidor a partir de la cancha y su horario."""
+
+    cancha = serializers.PrimaryKeyRelatedField(queryset=CanchaRepository.vigentes())
+    fecha_turno = serializers.DateField(error_messages=MENSAJES_FECHA_ISO)
+    hora_inicio = serializers.TimeField(error_messages=MENSAJES_HORA)
+
+
+class ReservaManualSerializer(ReservaAltaSerializer):
+    nombre_cliente_manual = TextoLimpioField(max_length=120)
+    telefono_cliente_manual = TelefonoField(max_length=30, allow_blank=True, default='')
+    observaciones = TextoLimpioField(max_length=255, allow_blank=True, default='')
+
+
+ESTADOS_RESERVA_EDITABLES = [
+    (valor, etiqueta) for valor, etiqueta in EstadoReserva.choices
+    if valor in (EstadoReserva.CONFIRMADA, EstadoReserva.SENADA, EstadoReserva.AUSENTE, EstadoReserva.COMPLETADA)
+]
+
+
+class CamposInmutablesMixin:
+    """
+    Un campo que no se edita y llega con otro valor responde 400 con el motivo, en lugar de ignorarse en
+    silencio; si llega con el mismo valor (un formulario que reenvía todo) se descarta sin error.
+    """
+
+    campos_inmutables = {}
+
+    def descartar_inmutables(self, attrs):
+        if self.instance is None:
+            return attrs
+        errores = {
+            campo: mensaje for campo, mensaje in self.campos_inmutables.items()
+            if campo in attrs and attrs[campo] != getattr(self.instance, campo)
+        }
+        if errores:
+            raise serializers.ValidationError(errores)
+        return {campo: valor for campo, valor in attrs.items() if campo not in self.campos_inmutables}
+
+
+MENSAJE_TURNO_NO_EDITABLE = 'No se edita: cancelá la reserva y registrá otra.'
+
+
+class ReservaAgendaEdicionSerializer(CamposInmutablesMixin, serializers.Serializer):
+    """Las cancelaciones tienen su propia ruta; acá solo se confirma, se seña o se cierra el turno."""
+
+    estado = serializers.ChoiceField(choices=ESTADOS_RESERVA_EDITABLES, required=False)
+    observaciones = TextoLimpioField(max_length=255, allow_blank=True, required=False)
+    cancha = serializers.PrimaryKeyRelatedField(queryset=CanchaRepository.vigentes(), required=False)
+    fecha_turno = serializers.DateField(required=False, error_messages=MENSAJES_FECHA_ISO)
+    hora_inicio = serializers.TimeField(required=False, error_messages=MENSAJES_HORA)
+    hora_fin = serializers.TimeField(required=False, error_messages=MENSAJES_HORA)
+    precio_acordado = _precio(required=False)
+
+    campos_inmutables = {
+        'cancha': MENSAJE_TURNO_NO_EDITABLE,
+        'fecha_turno': MENSAJE_TURNO_NO_EDITABLE,
+        'hora_inicio': MENSAJE_TURNO_NO_EDITABLE,
+        'hora_fin': MENSAJE_TURNO_NO_EDITABLE,
+        'precio_acordado': 'El precio acordado lo fija el horario de la cancha al registrar la reserva.',
+    }
+
+    def validate(self, attrs):
+        return _exigir_algun_campo(self.descartar_inmutables(attrs))
+
+
+class ReservaPropiaSerializer(serializers.ModelSerializer):
+    """Vista del jugador: no incluye las observaciones internas del complejo."""
+
+    complejo = serializers.SerializerMethodField()
+    cancha = serializers.SerializerMethodField()
+    deporte = serializers.CharField(source='cancha.deporte.nombre', read_only=True)
+    estado_nombre = serializers.CharField(source='get_estado_display', read_only=True)
+    tipo_ocupacion_nombre = serializers.CharField(source='get_tipo_ocupacion_display', read_only=True)
+    cancelable_hasta = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Reserva
+        fields = (
+            'id',
+            'complejo',
+            'cancha',
+            'deporte',
+            'fecha_turno',
+            'hora_inicio',
+            'hora_fin',
+            'precio_acordado',
+            'tipo_ocupacion',
+            'tipo_ocupacion_nombre',
+            'estado',
+            'estado_nombre',
+            'cancelable_hasta',
+            'fecha_creacion',
+        )
+        read_only_fields = fields
+
+    def get_complejo(self, reserva):
+        return {'id': reserva.cancha.complejo_id, 'nombre': reserva.cancha.complejo.nombre}
+
+    def get_cancha(self, reserva):
+        return {'id': reserva.cancha_id, 'nombre': reserva.cancha.nombre}
+
+    def get_cancelable_hasta(self, reserva):
+        return serializers.DateTimeField().to_representation(ReservaService.limite_de_cancelacion(reserva))
+
+
+def _datos_de_contacto(ocupacion):
+    """Contacto de quien ocupa el turno: la cuenta del jugador si reservó en la web, o el cliente cargado a mano."""
+    usuario = ocupacion.usuario
+    if usuario is not None:
+        return {'nombre': usuario.nombre_completo, 'telefono': usuario.telefono, 'email': usuario.email}
+    return {'nombre': ocupacion.nombre_cliente_manual, 'telefono': ocupacion.telefono_cliente_manual, 'email': None}
+
+
+class ReservaAgendaSerializer(serializers.ModelSerializer):
+    """Vista del personal del complejo: incluye los datos de contacto que necesita la operatoria del predio."""
+
+    complejo = serializers.IntegerField(source='cancha.complejo_id', read_only=True)
+    cancha_nombre = serializers.CharField(source='cancha.nombre', read_only=True)
+    estado_nombre = serializers.CharField(source='get_estado_display', read_only=True)
+    tipo_ocupacion_nombre = serializers.CharField(source='get_tipo_ocupacion_display', read_only=True)
+    cliente = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Reserva
+        fields = (
+            'id',
+            'complejo',
+            'cancha',
+            'cancha_nombre',
+            'fecha_turno',
+            'hora_inicio',
+            'hora_fin',
+            'precio_acordado',
+            'tipo_ocupacion',
+            'tipo_ocupacion_nombre',
+            'turno_fijo',
+            'estado',
+            'estado_nombre',
+            'cliente',
+            'observaciones',
+            'fecha_creacion',
+            'fecha_modificacion',
+        )
+        read_only_fields = fields
+
+    def get_cliente(self, reserva):
+        return _datos_de_contacto(reserva)
+
+
+ESTADOS_TURNO_FIJO_EDITABLES = [
+    (valor, etiqueta) for valor, etiqueta in EstadoTurnoFijo.choices if valor != EstadoTurnoFijo.BAJA
+]
+
+
+MENSAJE_TURNO_FIJO_NO_EDITABLE = 'No se edita: dá de baja el turno fijo y registrá otro.'
+
+
+class TurnoFijoSerializer(CamposInmutablesMixin, serializers.ModelSerializer):
+    """
+    hora_fin la calcula el servidor según la duración del turno de la cancha. La cancha, el día, el horario y el
+    inicio de la vigencia se fijan en el alta; la baja lógica se hace con DELETE.
+    """
+
+    campos_inmutables = {
+        'cancha': MENSAJE_TURNO_FIJO_NO_EDITABLE,
+        'dia_semana': MENSAJE_TURNO_FIJO_NO_EDITABLE,
+        'hora_inicio': MENSAJE_TURNO_FIJO_NO_EDITABLE,
+        'fecha_inicio_vigencia': MENSAJE_TURNO_FIJO_NO_EDITABLE,
+    }
+
+    cancha = serializers.PrimaryKeyRelatedField(queryset=CanchaRepository.vigentes())
+    hora_inicio = serializers.TimeField(error_messages=MENSAJES_HORA)
+    fecha_inicio_vigencia = serializers.DateField(error_messages=MENSAJES_FECHA_ISO)
+    fecha_fin_vigencia = serializers.DateField(allow_null=True, default=None, error_messages=MENSAJES_FECHA_ISO)
+    nombre_cliente_manual = TextoLimpioField(max_length=120)
+    telefono_cliente_manual = TelefonoField(max_length=30, allow_blank=True, default='')
+    estado = serializers.ChoiceField(choices=ESTADOS_TURNO_FIJO_EDITABLES, required=False)
+    cancha_nombre = serializers.CharField(source='cancha.nombre', read_only=True)
+    dia_semana_nombre = serializers.CharField(source='get_dia_semana_display', read_only=True)
+    estado_nombre = serializers.CharField(source='get_estado_display', read_only=True)
+    cliente = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TurnoFijo
+        fields = (
+            'id',
+            'cancha',
+            'cancha_nombre',
+            'dia_semana',
+            'dia_semana_nombre',
+            'hora_inicio',
+            'hora_fin',
+            'fecha_inicio_vigencia',
+            'fecha_fin_vigencia',
+            'nombre_cliente_manual',
+            'telefono_cliente_manual',
+            'cliente',
+            'estado',
+            'estado_nombre',
+            'fecha_creacion',
+        )
+        read_only_fields = ('hora_fin', 'fecha_creacion')
+        validators = []
+
+    def get_fields(self):
+        campos = super().get_fields()
+        if not isinstance(self.instance, TurnoFijo):
+            # Un turno fijo nace vigente; se pausa o se reanuda después con PATCH.
+            campos['estado'] = serializers.IntegerField(read_only=True)
+        return campos
+
+    def validate(self, attrs):
+        return self.descartar_inmutables(attrs)
+
+    def get_cliente(self, turno_fijo):
+        return _datos_de_contacto(turno_fijo)
+
+
+class FechaTurnoFijoSerializer(serializers.Serializer):
+    fecha_turno = serializers.DateField(error_messages=MENSAJES_FECHA_ISO)

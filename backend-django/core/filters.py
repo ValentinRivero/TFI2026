@@ -9,8 +9,25 @@ from django.db.models import CharField, TextField, Transform
 from django.utils import timezone
 from rest_framework.filters import SearchFilter
 
-from .models import Cobertura, DiaSemana, EstadoCancha, EstadoContrato, EstadoUsuario, TipoMotivoExcepcion
-from .repositories import CatalogoRepository, ComplejoRepository, ExcepcionHorariaRepository, RolRepository
+from .models import (
+    Cobertura,
+    DiaSemana,
+    EstadoCancha,
+    EstadoContrato,
+    EstadoReserva,
+    EstadoTurnoFijo,
+    EstadoUsuario,
+    TipoMotivoExcepcion,
+    TipoOcupacion,
+)
+from .repositories import (
+    CatalogoRepository,
+    ComplejoRepository,
+    ExcepcionHorariaRepository,
+    ReservaRepository,
+    RolRepository,
+    TurnoFijoRepository,
+)
 
 
 def quitar_acentos(texto):
@@ -122,3 +139,49 @@ class ExcepcionHorariaFilter(django_filters.FilterSet):
 
     def filtrar_fecha(self, queryset, nombre, valor):
         return ExcepcionHorariaRepository.que_cubren_fecha(queryset, valor)
+
+
+FORMATO_FECHA_ISO = ['%Y-%m-%d']
+
+ESTADOS_RESERVA_VISIBLES = [
+    (valor, etiqueta) for valor, etiqueta in EstadoReserva.choices if valor != EstadoReserva.BAJA
+]
+VIGENCIA_RESERVA = (('proximas', 'Próximas'), ('pasadas', 'Pasadas'))
+
+
+class RangoDeFechasDeTurnoFilter(django_filters.FilterSet):
+    estado = django_filters.TypedChoiceFilter(choices=ESTADOS_RESERVA_VISIBLES, coerce=int)
+    fecha_desde = django_filters.DateFilter(field_name='fecha_turno', lookup_expr='gte', input_formats=FORMATO_FECHA_ISO)
+    fecha_hasta = django_filters.DateFilter(field_name='fecha_turno', lookup_expr='lte', input_formats=FORMATO_FECHA_ISO)
+
+
+class ReservaPropiaFilter(RangoDeFechasDeTurnoFilter):
+    vigencia = django_filters.ChoiceFilter(choices=VIGENCIA_RESERVA, method='filtrar_vigencia')
+
+    def filtrar_vigencia(self, queryset, nombre, valor):
+        ahora = timezone.localtime()
+        return ReservaRepository.filtrar_por_vigencia(queryset, valor == 'proximas', ahora.date(), ahora.time())
+
+
+class AgendaFilter(RangoDeFechasDeTurnoFilter):
+    complejo = django_filters.NumberFilter(field_name='cancha__complejo_id')
+    cancha = django_filters.NumberFilter(field_name='cancha_id')
+    fecha = django_filters.DateFilter(field_name='fecha_turno', input_formats=FORMATO_FECHA_ISO)
+    tipo_ocupacion = django_filters.TypedChoiceFilter(choices=TipoOcupacion.choices, coerce=int)
+
+
+ESTADOS_TURNO_FIJO_VISIBLES = [
+    (valor, etiqueta) for valor, etiqueta in EstadoTurnoFijo.choices if valor != EstadoTurnoFijo.BAJA
+]
+
+
+class TurnoFijoFilter(django_filters.FilterSet):
+    complejo = django_filters.NumberFilter(field_name='cancha__complejo_id')
+    cancha = django_filters.NumberFilter(field_name='cancha_id')
+    dia_semana = django_filters.TypedChoiceFilter(choices=DiaSemana.choices, coerce=int)
+    estado = django_filters.TypedChoiceFilter(choices=ESTADOS_TURNO_FIJO_VISIBLES, coerce=int)
+    # Turnos fijos que caen en esa fecha: la agenda del día los combina con las reservas.
+    fecha = django_filters.DateFilter(method='filtrar_fecha', input_formats=FORMATO_FECHA_ISO)
+
+    def filtrar_fecha(self, queryset, nombre, valor):
+        return TurnoFijoRepository.que_aplican_en(queryset, valor)
