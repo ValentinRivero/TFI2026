@@ -7,19 +7,23 @@ from datetime import datetime, time, timedelta
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.db import DatabaseError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.utils import timezone
-from rest_framework.exceptions import AuthenticationFailed, PermissionDenied, ValidationError
+from rest_framework.exceptions import AuthenticationFailed, NotFound, PermissionDenied, ValidationError
 from rest_framework.settings import api_settings as drf_settings
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .exceptions import ServicioNoDisponible
-from .models import EstadoRegistro, EstadoUsuario, TipoEventoAuditoria
+from .models import EstadoContrato, EstadoRegistro, EstadoUsuario, TipoEventoAuditoria
 from .repositories import (
     AuditoriaRepository,
+    CanchaRepository,
+    CatalogoRepository,
     ComplejoRepository,
+    ComplejoServicioRepository,
+    HorarioAperturaRepository,
     PermisoRepository,
     RolRepository,
     SesionRepository,
@@ -245,6 +249,14 @@ class AuditoriaService:
 
 
 MENSAJE_CREDENCIALES_INVALIDAS = 'Email o contraseña incorrectos.'
+MENSAJE_ULTIMO_SUPERADMIN_PROPIO = (
+    'No podés dar de baja la única cuenta de superadministrador activa. '
+    'Asigná otro superadministrador antes de hacerlo.'
+)
+MENSAJE_ULTIMO_SUPERADMIN_ADMINISTRATIVO = (
+    'No se puede suspender, dar de baja ni cambiar el rol de la única cuenta de superadministrador activa. '
+    'Asigná otro superadministrador antes de hacerlo.'
+)
 
 
 class SesionService:
@@ -371,7 +383,7 @@ class UsuarioService:
         return usuario
 
     @staticmethod
-    def _validar_continuidad_superadmin(usuario):
+    def _validar_continuidad_superadmin(usuario, mensaje=MENSAJE_ULTIMO_SUPERADMIN_PROPIO):
         """
         La plataforma no puede quedar sin superadministrador activo. Se bloquean todas las filas de superadmins
         activos (incluida la propia) para que dos bajas simultáneas no pasen la validación a la vez.
@@ -380,10 +392,7 @@ class UsuarioService:
             return
         activos = UsuarioRepository.bloquear_activos_con_rol(ROL_SUPERADMIN)
         if not [usuario_id for usuario_id in activos if usuario_id != usuario.pk]:
-            raise ValidationError(
-                'No podés dar de baja la única cuenta de superadministrador activa. '
-                'Asigná otro superadministrador antes de hacerlo.'
-            )
+            raise ValidationError(mensaje)
 
     @staticmethod
     def _validar_complejos_sin_responsable(usuario):
@@ -408,3 +417,366 @@ class UsuarioService:
             detalle='Baja solicitada por el titular: datos personales anonimizados y sesiones revocadas.',
             usuario=usuario, ip_origen=ip_origen,
         )
+
+
+def _campos_modificados(instancia, datos):
+    return {campo: valor for campo, valor in datos.items() if getattr(instancia, campo) != valor}
+
+
+class UsuarioAdminService:
+    """Gestión de cuentas por el superadministrador. La baja administrativa no anonimiza: es una medida de seguridad."""
+
+    @staticmethod
+    def listar():
+        return UsuarioRepository.listar()
+
+    @staticmethod
+    def _validar_cambio(usuario, rol_nuevo, estado_nuevo, datos):
+        if usuario.estado == EstadoUsuario.BAJA and not usuario.has_usable_password():
+            raise ValidationError(
+                'La cuenta fue dada de baja por su titular y sus datos personales se anonimizaron: no admite cambios.'
+            )
+
+        sigue_siendo_superadmin = estado_nuevo == EstadoUsuario.ACTIVO and rol_nuevo.nombre == ROL_SUPERADMIN
+        if not sigue_siendo_superadmin:
+            UsuarioService._validar_continuidad_superadmin(usuario, MENSAJE_ULTIMO_SUPERADMIN_ADMINISTRATIVO)
+
+        deja_de_ser_dueno = usuario.rol.nombre == ROL_DUENO and rol_nuevo.nombre != ROL_DUENO
+        if deja_de_ser_dueno and ComplejoRepository.tiene_contratos_vigentes(usuario.pk):
+            raise ValidationError({
+                'rol': 'El usuario es titular de complejos con contrato vigente: '
+                       'dá de baja esos contratos antes de cambiarle el rol.',
+            })
+
+        if rol_nuevo.nombre != ROL_OPERADOR and datos.get('complejo_operado') is not None:
+            raise ValidationError({
+                'complejo_operado': 'Solo un usuario con rol de operador puede tener un complejo asignado.',
+            })
+
+    @staticmethod
+    def _describir_cambios(usuario, campos, estado_anterior, rol_anterior, sesiones_revocadas):
+        # Solo nombres de campos e ids: la auditoría no replica datos personales.
+        partes = [f'Usuario afectado: id {usuario.pk}.']
+        if 'estado' in campos:
+            partes.append(
+                f'Estado: {EstadoUsuario(estado_anterior).label} -> {EstadoUsuario(usuario.estado).label}.'
+            )
+        if 'rol' in campos:
+            partes.append(f'Rol: {rol_anterior.nombre} -> {usuario.rol.nombre}.')
+        if 'complejo_operado' in campos:
+            partes.append(f'Complejo operado: {usuario.complejo_operado_id or "ninguno"}.')
+        editados = sorted(set(campos) & {'nombre_completo', 'telefono'})
+        if editados:
+            partes.append(f'Campos editados: {", ".join(editados)}.')
+        if sesiones_revocadas:
+            partes.append('Sesiones revocadas.')
+        return ' '.join(partes)
+
+    @staticmethod
+    def actualizar(usuario_id, datos, actor, ip_origen):
+        with transaction.atomic():
+            if 'estado' in datos or 'rol' in datos:
+                # Mismo orden de bloqueo que la baja propia (superadmins primero, por id): evita deadlocks
+                # entre dos operaciones concurrentes sobre superadministradores.
+                UsuarioRepository.bloquear_activos_con_rol(ROL_SUPERADMIN)
+            usuario = UsuarioRepository.bloquear_por_id(usuario_id)
+            if usuario is None:
+                raise NotFound()
+
+            rol_nuevo = datos.get('rol', usuario.rol)
+            estado_nuevo = datos.get('estado', usuario.estado)
+            UsuarioAdminService._validar_cambio(usuario, rol_nuevo, estado_nuevo, datos)
+
+            if rol_nuevo.nombre != ROL_OPERADOR:
+                datos = {**datos, 'complejo_operado': None}
+            campos = _campos_modificados(usuario, datos)
+            if not campos:
+                return usuario
+
+            estado_anterior, rol_anterior = usuario.estado, usuario.rol
+            UsuarioRepository.actualizar(usuario, **campos)
+            sesiones_revocadas = 'estado' in campos and usuario.estado != EstadoUsuario.ACTIVO
+            if sesiones_revocadas:
+                SesionRepository.revocar_refresh_de_usuario(usuario.pk)
+
+        es_baja = 'estado' in campos and usuario.estado == EstadoUsuario.BAJA
+        AuditoriaService.registrar(
+            TipoEventoAuditoria.BAJA_USUARIO if es_baja else TipoEventoAuditoria.CAMBIO_USUARIO,
+            'Baja administrativa de usuario' if es_baja else 'Cambio administrativo de usuario',
+            detalle=UsuarioAdminService._describir_cambios(
+                usuario, campos, estado_anterior, rol_anterior, sesiones_revocadas,
+            ),
+            usuario=actor, ip_origen=ip_origen,
+        )
+        return usuario
+
+
+class ContratoService:
+    @staticmethod
+    def listar():
+        return ComplejoRepository.contratos()
+
+    @staticmethod
+    def crear(datos, actor, ip_origen):
+        complejo = ComplejoRepository.crear(**datos)
+        AuditoriaService.registrar(
+            TipoEventoAuditoria.CAMBIO_CONTRATO, 'Alta de contrato de complejo',
+            detalle=f'Estado inicial: {complejo.get_estado_contrato_display()}. '
+                    f'Propietario: id {complejo.propietario_id}.',
+            usuario=actor, complejo=complejo, ip_origen=ip_origen,
+        )
+        return complejo
+
+    @staticmethod
+    def cambiar_estado(complejo_id, estado_nuevo, actor, ip_origen):
+        """
+        El catálogo público solo muestra contratos activos: pasar a Suspendido o Baja oculta el complejo al
+        instante sin tocar sus canchas, reservas ni auditoría, y el titular conserva el acceso a su historial.
+        """
+        with transaction.atomic():
+            complejo = ComplejoRepository.bloquear(complejo_id)
+            estado_anterior = complejo.estado_contrato
+            if estado_anterior == estado_nuevo:
+                return complejo
+            if estado_nuevo == EstadoContrato.ACTIVO:
+                propietario = complejo.propietario
+                es_dueno_activo = (
+                    propietario.estado == EstadoUsuario.ACTIVO
+                    and RbacService.nombre_rol_activo(propietario) == ROL_DUENO
+                )
+                if not es_dueno_activo:
+                    raise ValidationError({
+                        'estado_contrato': 'No se puede activar el contrato: el propietario no es un dueño de '
+                                           'complejo activo.',
+                    })
+            ComplejoRepository.actualizar(complejo, estado_contrato=estado_nuevo)
+
+        AuditoriaService.registrar(
+            TipoEventoAuditoria.CAMBIO_CONTRATO, 'Cambio de estado de contrato',
+            detalle=f'{EstadoContrato(estado_anterior).label} -> {EstadoContrato(estado_nuevo).label}.',
+            usuario=actor, complejo=complejo, ip_origen=ip_origen,
+        )
+        return complejo
+
+
+class CatalogoService:
+    @staticmethod
+    def deportes():
+        return CatalogoRepository.deportes_activos()
+
+    @staticmethod
+    def servicios():
+        return CatalogoRepository.servicios_activos()
+
+    @staticmethod
+    def complejos_publicos():
+        return ComplejoRepository.catalogo_publico()
+
+
+class ComplejoService:
+    @staticmethod
+    def listar_administrables(usuario):
+        return AccesoComplejoService.filtrar_queryset(
+            ComplejoRepository.administrables(), usuario, campo_complejo='',
+        )
+
+    @staticmethod
+    def actualizar_configuracion(complejo, datos, actor, ip_origen):
+        campos = _campos_modificados(complejo, datos)
+        if not campos:
+            return complejo
+        ComplejoRepository.actualizar(complejo, **campos)
+        AuditoriaService.registrar(
+            TipoEventoAuditoria.CAMBIO_CONFIGURACION, 'Cambio de configuración del complejo',
+            detalle=f'Campos modificados: {", ".join(sorted(campos))}.',
+            usuario=actor, complejo=complejo, ip_origen=ip_origen,
+        )
+        return complejo
+
+    @staticmethod
+    def sincronizar_servicios(complejo, servicios, actor, ip_origen):
+        """
+        Deja activos exactamente los servicios pedidos. Las asignaciones quitadas pasan a baja lógica y las
+        que vuelven a pedirse se reactivan, sin duplicar filas (uq_complejo_servicio).
+        """
+        pedidos = {servicio.pk for servicio in servicios}
+        agregados, quitados = [], []
+        with transaction.atomic():
+            ComplejoRepository.bloquear(complejo.pk)
+            existentes = {asignacion.servicio_id: asignacion for asignacion in
+                          ComplejoServicioRepository.de_complejo(complejo.pk)}
+            for servicio_id in sorted(pedidos):
+                asignacion = existentes.get(servicio_id)
+                if asignacion is None:
+                    ComplejoServicioRepository.crear(complejo.pk, servicio_id)
+                    agregados.append(servicio_id)
+                elif asignacion.estado != EstadoRegistro.ACTIVO:
+                    ComplejoServicioRepository.reactivar(asignacion)
+                    agregados.append(servicio_id)
+            for servicio_id, asignacion in sorted(existentes.items()):
+                if servicio_id not in pedidos and asignacion.estado == EstadoRegistro.ACTIVO:
+                    asignacion.desactivar()
+                    quitados.append(servicio_id)
+
+        if agregados or quitados:
+            AuditoriaService.registrar(
+                TipoEventoAuditoria.CAMBIO_CONFIGURACION, 'Cambio de servicios del complejo',
+                detalle=f'Servicios agregados: {agregados or "ninguno"}. Servicios quitados: {quitados or "ninguno"}.',
+                usuario=actor, complejo=complejo, ip_origen=ip_origen,
+            )
+        return ComplejoServicioRepository.servicios_activos_de(complejo.pk)
+
+
+MENSAJE_OPERADOR_NO_DISPONIBLE = 'El email no corresponde a un operador activo disponible para asignar.'
+
+
+class OperadorService:
+    @staticmethod
+    def listar(complejo):
+        return UsuarioRepository.operadores_de(complejo.pk)
+
+    @staticmethod
+    def vincular(complejo, email, actor, ip_origen):
+        """
+        Se vincula por email exacto, que el dueño conoce porque es su personal: con un id bastaría
+        recorrer números para encontrar operadores libres y ver sus datos de contacto.
+        """
+        with transaction.atomic():
+            usuario = UsuarioRepository.bloquear_por_email(email)
+            # Un único mensaje para inexistente, otro rol o asignado a otro complejo: no se revela nada de cuentas ajenas.
+            disponible = (
+                usuario is not None
+                and usuario.estado == EstadoUsuario.ACTIVO
+                and RbacService.nombre_rol_activo(usuario) == ROL_OPERADOR
+            )
+            if not disponible:
+                raise ValidationError({'email': MENSAJE_OPERADOR_NO_DISPONIBLE})
+            if usuario.complejo_operado_id == complejo.pk:
+                raise ValidationError({'email': 'El usuario ya opera este complejo.'})
+            if usuario.complejo_operado_id is not None:
+                raise ValidationError({'email': MENSAJE_OPERADOR_NO_DISPONIBLE})
+            UsuarioRepository.actualizar(usuario, complejo_operado=complejo)
+
+        AuditoriaService.registrar(
+            TipoEventoAuditoria.CAMBIO_CONFIGURACION, 'Alta de operador del complejo',
+            detalle=f'Operador: id {usuario.pk}.', usuario=actor, complejo=complejo, ip_origen=ip_origen,
+        )
+        return usuario
+
+    @staticmethod
+    def desvincular(complejo, usuario_id, actor, ip_origen):
+        with transaction.atomic():
+            usuario = UsuarioRepository.bloquear_por_id(usuario_id)
+            if usuario is None or usuario.complejo_operado_id != complejo.pk:
+                raise NotFound()
+            UsuarioRepository.actualizar(usuario, complejo_operado=None)
+
+        AuditoriaService.registrar(
+            TipoEventoAuditoria.CAMBIO_CONFIGURACION, 'Baja de operador del complejo',
+            detalle=f'Operador: id {usuario.pk}.', usuario=actor, complejo=complejo, ip_origen=ip_origen,
+        )
+
+
+MENSAJE_NOMBRE_CANCHA_REPETIDO = 'Ya existe una cancha con ese nombre en el complejo.'
+
+
+class CanchaService:
+    @staticmethod
+    def listar():
+        return CanchaRepository.vigentes()
+
+    @staticmethod
+    def es_visible_para(usuario, cancha_id):
+        return AccesoComplejoService.filtrar_queryset(CanchaRepository.vigentes(), usuario).filter(id=cancha_id).exists()
+
+    @staticmethod
+    def _validar_nombre(complejo_id, nombre, excluir_id=None):
+        if CanchaRepository.existe_nombre(complejo_id, nombre, excluir_id):
+            raise ValidationError({'nombre': MENSAJE_NOMBRE_CANCHA_REPETIDO})
+
+    @staticmethod
+    def crear(datos):
+        CanchaService._validar_nombre(datos['complejo'].pk, datos['nombre'])
+        try:
+            with transaction.atomic():
+                return CanchaRepository.crear(**datos)
+        except IntegrityError:
+            # Alta simultánea con el mismo nombre: la restricción uq_cancha_nombre_activa decide.
+            raise ValidationError({'nombre': MENSAJE_NOMBRE_CANCHA_REPETIDO})
+
+    @staticmethod
+    def actualizar(cancha, datos):
+        campos = _campos_modificados(cancha, datos)
+        if not campos:
+            return cancha
+        if 'nombre' in campos:
+            CanchaService._validar_nombre(cancha.complejo_id, campos['nombre'], excluir_id=cancha.pk)
+        try:
+            with transaction.atomic():
+                return CanchaRepository.actualizar(cancha, **campos)
+        except IntegrityError:
+            raise ValidationError({'nombre': MENSAJE_NOMBRE_CANCHA_REPETIDO})
+
+    @staticmethod
+    def dar_de_baja(cancha):
+        with transaction.atomic():
+            CanchaRepository.bloquear(cancha.pk)
+            if CanchaRepository.tiene_ocupacion_futura(cancha.pk, timezone.localdate()):
+                raise ValidationError(
+                    'La cancha tiene reservas o turnos fijos vigentes desde hoy en adelante. '
+                    'Cancelalos antes de darla de baja.'
+                )
+            cancha.desactivar()
+
+
+class HorarioAperturaService:
+    @staticmethod
+    def listar():
+        return HorarioAperturaRepository.vigentes()
+
+    @staticmethod
+    def _validar_rango_libre(cancha_id, dia_semana, apertura, cierre, excluir_id=None):
+        """
+        Un día admite varios rangos (por ejemplo, 08:00 a 12:00 y 16:00 a 23:00), cada uno con su precio,
+        siempre que no se superpongan entre sí.
+        """
+        existente = HorarioAperturaRepository.solapado(cancha_id, dia_semana, apertura, cierre, excluir_id)
+        if existente is not None:
+            rango = f'{existente.hora_apertura:%H:%M} a {existente.hora_cierre:%H:%M}'
+            raise ValidationError({
+                'hora_apertura': f'El rango se solapa con otro horario activo de ese día ({rango}).',
+            })
+
+    @staticmethod
+    def _guardar(cancha_id, dia_semana, apertura, cierre, excluir_id, operacion):
+        with transaction.atomic():
+            # Bloquear la cancha serializa altas y ediciones simultáneas de sus horarios: dos rangos
+            # superpuestos no pueden pasar la validación a la vez.
+            CanchaRepository.bloquear(cancha_id)
+            HorarioAperturaService._validar_rango_libre(cancha_id, dia_semana, apertura, cierre, excluir_id)
+            return operacion()
+
+    @staticmethod
+    def crear(datos):
+        return HorarioAperturaService._guardar(
+            datos['cancha'].pk, datos['dia_semana'], datos['hora_apertura'], datos['hora_cierre'], None,
+            lambda: HorarioAperturaRepository.crear(**datos),
+        )
+
+    @staticmethod
+    def actualizar(horario, datos):
+        campos = _campos_modificados(horario, datos)
+        if not campos:
+            return horario
+        return HorarioAperturaService._guardar(
+            horario.cancha_id,
+            campos.get('dia_semana', horario.dia_semana),
+            campos.get('hora_apertura', horario.hora_apertura),
+            campos.get('hora_cierre', horario.hora_cierre),
+            horario.pk,
+            lambda: HorarioAperturaRepository.actualizar(horario, **campos),
+        )
+
+    @staticmethod
+    def dar_de_baja(horario):
+        horario.desactivar()

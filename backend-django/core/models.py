@@ -135,6 +135,7 @@ class TipoEventoAuditoria(models.IntegerChoices):
     RESERVA_CAMBIO_ESTADO = 13, 'Cambio de estado de reserva'
     CAMBIO_CONFIGURACION = 14, 'Cambio de configuración del complejo'
     ACEPTACION_POLITICA = 15, 'Aceptación de la política de privacidad'
+    CAMBIO_USUARIO = 16, 'Cambio administrativo de usuario'
 
 
 class Rol(ModeloBase):
@@ -412,23 +413,19 @@ class HorarioApertura(ModeloBase):
     dia_semana = models.SmallIntegerField(choices=DiaSemana.choices)
     hora_apertura = models.TimeField()
     hora_cierre = models.TimeField()
-    # NULL indica que ese día se cobra el precio_base de la cancha.
+    # NULL indica que en ese rango se cobra el precio_base de la cancha.
     precio_diferenciado = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     class Meta:
         db_table = 'horarios_apertura'
         verbose_name = 'horario de apertura'
         verbose_name_plural = 'horarios de apertura'
-        ordering = ['cancha_id', 'dia_semana']
+        # Un día puede tener varios rangos (cortes); que no se solapen lo valida HorarioAperturaService.
+        ordering = ['cancha_id', 'dia_semana', 'hora_apertura']
         indexes = [
             models.Index(fields=['cancha', 'dia_semana', 'estado'], name='idx_horario_cancha_dia'),
         ]
         constraints = [
-            models.UniqueConstraint(
-                fields=['cancha', 'dia_semana'],
-                condition=~Q(estado=0),
-                name='uq_horario_cancha_dia_activo',
-            ),
             models.CheckConstraint(
                 condition=Q(precio_diferenciado__isnull=True) | Q(precio_diferenciado__gte=0),
                 name='ck_horario_precio_diferenciado',

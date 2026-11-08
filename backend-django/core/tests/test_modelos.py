@@ -140,7 +140,7 @@ class ModeloBaseTests(TestCase):
     def test_usuario_dado_de_baja_queda_inactivo(self):
         rol = Rol.objects.create(nombre='JUGADOR')
         usuario = Usuario.objects.create_user(
-            email='baja@irracional.net', password='ClaveSegura123', rol=rol, nombre_completo='Usuario Baja',
+            email='baja@talibre.test', password='ClaveSegura123', rol=rol, nombre_completo='Usuario Baja',
         )
         self.assertTrue(usuario.is_active)
         usuario.desactivar()
@@ -151,7 +151,7 @@ class ModeloBaseTests(TestCase):
     def test_usuario_suspendido_queda_inactivo(self):
         rol = Rol.objects.create(nombre='JUGADOR')
         usuario = Usuario.objects.create_user(
-            email='suspendido@irracional.net', password='ClaveSegura123', rol=rol, nombre_completo='Usuario Suspendido',
+            email='suspendido@talibre.test', password='ClaveSegura123', rol=rol, nombre_completo='Usuario Suspendido',
         )
         usuario.estado = EstadoUsuario.SUSPENDIDO
         usuario.save(update_fields=['estado', 'fecha_modificacion'])

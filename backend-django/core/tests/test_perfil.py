@@ -42,20 +42,20 @@ class TestConsulta:
 class TestEdicion:
     def test_edita_nombre_y_telefono(self, jugador, cliente_de):
         respuesta = cliente_de(jugador).patch(
-            URL, {'nombre_completo': 'Jugador Editado', 'telefono': '+54 3777 123456'}, format='json',
+            URL, {'nombre_completo': 'Jugador Editado', 'telefono': '+54 3777 001234'}, format='json',
         )
 
         assert respuesta.status_code == status.HTTP_200_OK
         jugador.refresh_from_db()
         assert jugador.nombre_completo == 'Jugador Editado'
-        assert jugador.telefono == '+54 3777 123456'
+        assert jugador.telefono == '+54 3777 001234'
 
     def test_edicion_parcial_conserva_lo_demas(self, jugador, cliente_de):
-        cliente_de(jugador).patch(URL, {'telefono': '3777 999999'}, format='json')
+        cliente_de(jugador).patch(URL, {'telefono': '3777 009999'}, format='json')
 
         jugador.refresh_from_db()
         assert jugador.nombre_completo == 'Jugador Prueba'
-        assert jugador.telefono == '3777 999999'
+        assert jugador.telefono == '3777 009999'
 
     def test_no_permite_cambiar_email_rol_ni_estado(self, jugador, cliente_de):
         cliente_de(jugador).patch(
@@ -207,7 +207,7 @@ class TestAceptacionDePolitica:
         assert 'acepta_politica_privacidad' in respuesta.json()['detail']
 
     def test_editar_datos_no_registra_aceptacion(self, jugador, cliente_de):
-        cliente_de(jugador).patch(URL, {'telefono': '3777 111111'}, format='json')
+        cliente_de(jugador).patch(URL, {'telefono': '3777 001111'}, format='json')
 
         jugador.refresh_from_db()
         assert jugador.fecha_aceptacion_politica is None
@@ -231,7 +231,7 @@ class TestAceptacionDePolitica:
 
 class TestSupresionDeDatos:
     def test_la_baja_anonimiza_los_datos_personales(self, jugador, cliente_de):
-        jugador.telefono = '3777 501122'
+        jugador.telefono = '3777 000206'
         jugador.save(update_fields=['telefono'])
 
         cliente_de(jugador).delete(URL)

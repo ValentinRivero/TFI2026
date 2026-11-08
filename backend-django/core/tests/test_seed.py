@@ -1,4 +1,5 @@
 import os
+from datetime import time
 from io import StringIO
 from unittest import mock
 
@@ -14,6 +15,7 @@ from core.models import (
     EstadoRegistro,
     EstadoReserva,
     ExcepcionHoraria,
+    HorarioApertura,
     Permiso,
     Reserva,
     Rol,
@@ -157,10 +159,24 @@ class SeedInicialTests(TestCase):
         conteos_repetidos = [modelo.objects.count() for modelo in apps.get_app_config('core').get_models()]
         self.assertEqual(conteos, conteos_repetidos)
 
-    def test_correos_demo_usan_dominio_irracional(self):
+    def test_es_idempotente_aunque_un_dia_tenga_cortes(self):
         self._ejecutar_seed()
-        self.assertTrue(Usuario.objects.filter(email='talibre@irracional.net', rol__nombre='SUPERADMIN').exists())
-        self.assertFalse(Usuario.objects.exclude(email__endswith='@irracional.net').exists())
+        cancha = Reserva.objects.filter(turno_fijo__isnull=False).first().cancha
+        primero = HorarioApertura.objects.filter(cancha=cancha, dia_semana=0, estado=EstadoRegistro.ACTIVO).get()
+        corte = time(primero.hora_apertura.hour - 1, 0)
+        HorarioApertura.objects.create(
+            cancha=cancha, dia_semana=0, hora_apertura=time(corte.hour - 2, 0), hora_cierre=corte,
+        )
+        horarios = HorarioApertura.objects.count()
+
+        self._ejecutar_seed()
+
+        self.assertEqual(HorarioApertura.objects.count(), horarios)
+
+    def test_correos_demo_usan_un_dominio_reservado(self):
+        self._ejecutar_seed()
+        self.assertTrue(Usuario.objects.filter(email='superadmin@demo.talibre.test', rol__nombre='SUPERADMIN').exists())
+        self.assertFalse(Usuario.objects.exclude(email__endswith='@demo.talibre.test').exists())
 
     def test_complejos_tienen_propietario_y_contratos(self):
         self._ejecutar_seed()
@@ -170,9 +186,9 @@ class SeedInicialTests(TestCase):
 
     def test_operador_queda_vinculado_a_su_complejo(self):
         self._ejecutar_seed()
-        operador = Usuario.objects.get(email='lucas.benitez@irracional.net')
+        operador = Usuario.objects.get(email='elias.mendieta@demo.talibre.test')
         self.assertEqual(operador.rol.nombre, 'OPERADOR_COMPLEJO')
-        self.assertEqual(operador.complejo_operado.nombre, 'Complejo El Potrero')
+        self.assertEqual(operador.complejo_operado.nombre, 'Complejo El Yacaré')
         self.assertIn(operador, operador.complejo_operado.operadores.all())
 
     def test_turnos_fijos_generan_reservas_vinculadas(self):
@@ -187,7 +203,7 @@ class SeedInicialTests(TestCase):
     def test_login_con_usuario_demo(self):
         self._ejecutar_seed()
         self.assertTrue(
-            self.client.login(email='talibre@irracional.net', password='ClaveDemoTest2026')
+            self.client.login(email='superadmin@demo.talibre.test', password='ClaveDemoTest2026')
         )
 
     def test_sin_demo_carga_solo_catalogos(self):

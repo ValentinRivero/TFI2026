@@ -11,10 +11,10 @@ URL = '/api/registro/'
 
 def _datos(**cambios):
     datos = {
-        'nombre_completo': 'Facundo Gómez',
-        'email': 'facundo@talibre.test',
+        'nombre_completo': 'Fabricio Medina',
+        'email': 'fabricio@talibre.test',
         'password': 'Pelota&Arco#2026',
-        'telefono': '3777 501122',
+        'telefono': '3777 000206',
         'acepta_politica_privacidad': True,
     }
     datos.update(cambios)
@@ -26,11 +26,11 @@ def test_alta_publica_de_jugador(cliente):
 
     assert respuesta.status_code == status.HTTP_201_CREATED
     cuerpo = respuesta.json()
-    assert cuerpo['email'] == 'facundo@talibre.test'
+    assert cuerpo['email'] == 'fabricio@talibre.test'
     assert cuerpo['rol'] == 'JUGADOR'
     assert 'password' not in cuerpo
 
-    usuario = Usuario.objects.get(email='facundo@talibre.test')
+    usuario = Usuario.objects.get(email='fabricio@talibre.test')
     assert usuario.rol.nombre == 'JUGADOR'
     assert usuario.estado == EstadoRegistro.ACTIVO
     assert usuario.password != 'Pelota&Arco#2026'
@@ -41,10 +41,10 @@ def test_registra_el_alta_en_auditoria(cliente):
     cliente.post(URL, _datos(), format='json')
 
     log = LogAuditoria.objects.get(tipo_evento=TipoEventoAuditoria.REGISTRO_USUARIO)
-    assert log.usuario.email == 'facundo@talibre.test'
+    assert log.usuario.email == 'fabricio@talibre.test'
     assert log.ip_origen == '127.0.0.1'
     assert 'Pelota&Arco#2026' not in log.detalle
-    assert 'facundo@talibre.test' not in log.detalle
+    assert 'fabricio@talibre.test' not in log.detalle
 
 
 class TestLimiteDeRegistro:
@@ -80,13 +80,13 @@ class TestLimiteDeRegistro:
 def test_ignora_un_rol_enviado_en_el_body(cliente):
     cliente.post(URL, _datos(rol='SUPERADMIN'), format='json')
 
-    assert Usuario.objects.get(email='facundo@talibre.test').rol.nombre == 'JUGADOR'
+    assert Usuario.objects.get(email='fabricio@talibre.test').rol.nombre == 'JUGADOR'
 
 
 def test_normaliza_el_email(cliente):
-    cliente.post(URL, _datos(email='  Facundo@TaLibre.TEST '), format='json')
+    cliente.post(URL, _datos(email='  Fabricio@TaLibre.TEST '), format='json')
 
-    assert Usuario.objects.filter(email='facundo@talibre.test').exists()
+    assert Usuario.objects.filter(email='fabricio@talibre.test').exists()
 
 
 def test_rechaza_email_duplicado_sin_distinguir_mayusculas(cliente, jugador):
@@ -102,11 +102,11 @@ def test_rechaza_contrasenas_debiles(cliente, password):
 
     assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
     assert 'password' in respuesta.json()['detail']
-    assert not Usuario.objects.filter(email='facundo@talibre.test').exists()
+    assert not Usuario.objects.filter(email='fabricio@talibre.test').exists()
 
 
 def test_rechaza_contrasena_parecida_al_email(cliente):
-    respuesta = cliente.post(URL, _datos(email='facundogomez@talibre.test', password='facundogomez'), format='json')
+    respuesta = cliente.post(URL, _datos(email='fabriciomedina@talibre.test', password='fabriciomedina'), format='json')
 
     assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
     assert 'password' in respuesta.json()['detail']
@@ -115,19 +115,19 @@ def test_rechaza_contrasena_parecida_al_email(cliente):
 def test_sanitiza_etiquetas_html_del_nombre(cliente):
     cliente.post(URL, _datos(nombre_completo='<script>alert(1)</script>Juan <b>Pérez</b>'), format='json')
 
-    assert Usuario.objects.get(email='facundo@talibre.test').nombre_completo == 'Juan Pérez'
+    assert Usuario.objects.get(email='fabricio@talibre.test').nombre_completo == 'Juan Pérez'
 
 
 def test_conserva_el_ampersand_sin_escaparlo(cliente):
     cliente.post(URL, _datos(nombre_completo='Pérez & Hijos'), format='json')
 
-    assert Usuario.objects.get(email='facundo@talibre.test').nombre_completo == 'Pérez & Hijos'
+    assert Usuario.objects.get(email='fabricio@talibre.test').nombre_completo == 'Pérez & Hijos'
 
 
 def test_no_reconstruye_etiquetas_codificadas(cliente):
     cliente.post(URL, _datos(nombre_completo='&lt;script&gt;alert(1)&lt;/script&gt;Ana'), format='json')
 
-    nombre = Usuario.objects.get(email='facundo@talibre.test').nombre_completo
+    nombre = Usuario.objects.get(email='fabricio@talibre.test').nombre_completo
     assert nombre == 'Ana'
 
 
@@ -144,6 +144,24 @@ def test_la_sanitizacion_nunca_devuelve_html_aunque_se_agoten_las_pasadas(capas)
     assert '<' not in salida
     assert '>' not in salida
     assert salida.endswith('Ana')
+
+
+@pytest.mark.parametrize('capas', [6, 8, 20])
+def test_al_agotar_las_pasadas_la_salida_es_la_de_nh3_sin_desescapar(capas):
+    import nh3
+
+    from core.serializers import MAXIMO_PASADAS_SANITIZACION, limpiar_texto
+
+    assert capas > MAXIMO_PASADAS_SANITIZACION
+    entrada = '<script>alert(1)</script><b>Ana</b>'
+    for _ in range(capas):
+        entrada = entrada.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+    salida = limpiar_texto(entrada)
+
+    # La última operación es nh3.clean: la salida es un punto fijo suyo y conserva las entidades escapadas.
+    assert nh3.clean(salida, tags=set()) == salida
+    assert '&lt;script&gt;' in salida or '&amp;' in salida
 
 
 def test_rechaza_nombre_que_queda_vacio_al_sanitizar(cliente):
@@ -167,7 +185,7 @@ def test_telefono_es_opcional(cliente):
     respuesta = cliente.post(URL, datos, format='json')
 
     assert respuesta.status_code == status.HTTP_201_CREATED
-    assert Usuario.objects.get(email='facundo@talibre.test').telefono == ''
+    assert Usuario.objects.get(email='fabricio@talibre.test').telefono == ''
 
 
 def test_sin_rol_jugador_activo_responde_503(cliente):
@@ -177,14 +195,14 @@ def test_sin_rol_jugador_activo_responde_503(cliente):
 
     assert respuesta.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
     assert respuesta.json()['error'] is True
-    assert not Usuario.objects.filter(email='facundo@talibre.test').exists()
+    assert not Usuario.objects.filter(email='fabricio@talibre.test').exists()
 
 
 class TestConsentimiento:
     def test_guarda_la_constancia_de_la_version_aceptada(self, cliente):
         cliente.post(URL, _datos(), format='json')
 
-        usuario = Usuario.objects.get(email='facundo@talibre.test')
+        usuario = Usuario.objects.get(email='fabricio@talibre.test')
         assert usuario.version_politica_aceptada == settings.POLITICA_PRIVACIDAD_VERSION
         assert usuario.fecha_aceptacion_politica is not None
 
@@ -203,7 +221,7 @@ class TestConsentimiento:
         assert respuesta.json()['detail']['acepta_politica_privacidad'] == [
             'Para usar TaLibre tenés que aceptar la política de privacidad.'
         ]
-        assert not Usuario.objects.filter(email='facundo@talibre.test').exists()
+        assert not Usuario.objects.filter(email='fabricio@talibre.test').exists()
 
     def test_rechaza_el_registro_si_falta_el_campo(self, cliente):
         datos = _datos()
