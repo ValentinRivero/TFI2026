@@ -131,6 +131,21 @@ def test_no_reconstruye_etiquetas_codificadas(cliente):
     assert nombre == 'Ana'
 
 
+@pytest.mark.parametrize('capas', [1, 5, 6, 8, 20])
+def test_la_sanitizacion_nunca_devuelve_html_aunque_se_agoten_las_pasadas(capas):
+    from core.serializers import limpiar_texto
+
+    entrada = '<script>alert(1)</script><img src=x onerror=alert(1)>Ana'
+    for _ in range(capas):
+        entrada = entrada.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+    salida = limpiar_texto(entrada)
+
+    assert '<' not in salida
+    assert '>' not in salida
+    assert salida.endswith('Ana')
+
+
 def test_rechaza_nombre_que_queda_vacio_al_sanitizar(cliente):
     respuesta = cliente.post(URL, _datos(nombre_completo='<b></b>'), format='json')
 

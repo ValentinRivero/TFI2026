@@ -77,13 +77,13 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - El claim `rol` se arma desde la base en cada login y en cada refresh: un cambio de rol se refleja sin volver a iniciar sesión.
 - Logout idempotente: un refresh vencido o ya revocado responde 204 y borra la cookie; solo la ausencia de cookie responde 401.
 - La baja de la cuenta propia anonimiza nombre, email, teléfono y contraseña, conserva la fila con `estado = 0` y revoca todos sus refresh tokens. Se rechaza si es la última cuenta de superadmin activa o un dueño con contratos vigentes.
-- El registro exige aceptar la política de privacidad: `usuarios` guarda la versión y la fecha aceptadas (migración `0003_consentimiento_politica_privacidad`). Cuando cambia `POLITICA_PRIVACIDAD_VERSION`, el perfil informa `debe_aceptar_politica` y la aceptación se registra con `PATCH /api/perfil/`. Falta aplicar la migración en Supabase con `python manage.py migrate`.
+- El registro exige aceptar la política de privacidad: `usuarios` guarda la versión y la fecha aceptadas (migración `0003_consentimiento_politica_privacidad`). Cuando cambia `POLITICA_PRIVACIDAD_VERSION`, el perfil informa `debe_aceptar_politica` y la aceptación se registra con `PATCH /api/perfil/`. Aplicada en Supabase.
 - `GET /api/auditoria/` expone `fecha_creacion` como `fecha_accion`.
 - La auditoría identifica al titular por `usuario_id` y nunca guarda contraseñas, tokens ni el email tipeado en un login fallido.
 - Los 429 se registran una vez por IP, usuario y ruta cada 60 segundos, para que un ataque de fuerza bruta no multiplique las escrituras.
 - Registro limitado por IP (`THROTTLE_REGISTRO`, 10 por hora por defecto); login, 5 por minuto.
 - `AccesoComplejoMixin` (`core/views.py`) concentra la doble capa de acceso para los recursos de complejo de las fases siguientes.
-- Pruebas de Fase 2: 315 tests (357 en total).
+- Pruebas de Fase 2: 320 tests (362 en total).
 
 ## Decisiones de arquitectura (05/11/2026)
 - **Frontend:** React con Vite y PWA manual, en capas `services/`, `components/` y `pages/`: solo la capa de servicios conoce las URLs de la API, lo que separa el acceso a datos de la presentación. El access token vive en memoria y el refresh en una cookie HttpOnly, `Secure` y `SameSite=Strict`: un script inyectado por XSS no puede leer el refresh, y `SameSite=Strict` mitiga CSRF. Nada de la sesión se guarda en `localStorage`.
