@@ -1,4 +1,7 @@
+import copy
+
 from .settings import *  # noqa: F401,F403
+from .settings import LOGGING as LOGGING_BASE
 
 DATABASES = {
     'default': {
@@ -23,3 +26,8 @@ CACHES = {
 PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.MD5PasswordHasher',
 ]
+
+# Los tests no escriben en el security.log real; el logger seguridad se verifica capturando sus registros.
+LOGGING = copy.deepcopy(LOGGING_BASE)
+LOGGING['handlers']['archivo_seguridad'] = {'class': 'logging.NullHandler'}
+LOGGING['handlers']['consola'] = {'class': 'logging.NullHandler'}

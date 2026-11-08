@@ -10,11 +10,11 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - [x] **1.5.** Base de calidad y pruebas: tests forzados a SQLite (`config/settings_test.py`), migración a `pytest` + `core/tests/` + cobertura, `core/admin.py` con las 14 tablas sin borrado físico, restricciones de horario (migración `0002`), ajustes de `settings.py` y pipeline de CI base (`.github/workflows/ci.yml`).
 
 ## Fase 2: Seguridad, Autenticación JWT y Permisos Jerárquicos
-- [ ] **2.0.** Rutas base (`core/urls.py`, router), chequeo de salud `GET /api/health/` y `exceptions.py` (`custom_exception_handler`, error 409 de negocio y registro de 403/429).
-- [ ] **2.1.** Implementación de `throttles.py` (`LoginRateThrottle` 5/min) y `permissions.py` (RBAC + herencia de soporte delegado Superadmin).
-- [ ] **2.2.** Implementación de `serializers_auth.py` y endpoints de registro (`CU-01`), login/logout JWT con claim `rol`, refresh en cookie HttpOnly y `CORS_ALLOW_CREDENTIALS` (`CU-02`) y perfil propio con baja lógica (`CU-03`).
-- [ ] **2.3.** Registro dual de auditoría (`logs_auditoria` + `security.log`) y endpoint de consulta de auditoría global para Superadmin (`CU-14`).
-- [ ] **2.4.** Matriz de permisos por rol verificada con tests, incluyendo el control de rol en altas (`perform_create`) y la respuesta 404 ante complejos ajenos.
+- [x] **2.0.** Rutas base (`core/urls.py`, router), chequeo de salud `GET /api/health/` y `exceptions.py` (`custom_exception_handler`, error 409 de negocio y registro de 403/429).
+- [x] **2.1.** Implementación de `throttles.py` (`LoginRateThrottle` 5/min) y `permissions.py` (RBAC + herencia de soporte delegado Superadmin).
+- [x] **2.2.** Implementación de `serializers_auth.py` y endpoints de registro (`CU-01`), login/logout JWT con claim `rol`, refresh en cookie HttpOnly y `CORS_ALLOW_CREDENTIALS` (`CU-02`) y perfil propio con baja lógica (`CU-03`).
+- [x] **2.3.** Registro dual de auditoría (`logs_auditoria` + `security.log`) y endpoint de consulta de auditoría global para Superadmin (`CU-14`).
+- [x] **2.4.** Matriz de permisos por rol verificada con tests, incluyendo el control de rol en altas (`perform_create`) y la respuesta 404 ante complejos ajenos.
 
 ## Fase 3: Catálogo, Personalización de Complejos, Canchas y Contratos
 - [ ] **3.1.** Repositorios, servicios, serializers (con sanitización `nh3`) y vistas para gestión de contratos de complejos por Superadmin (`CU-13`).
@@ -64,11 +64,26 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 
 ## Notas del punto 1.5
 - Los tests corren siempre sobre SQLite en memoria (`config/settings_test.py`), tanto con `pytest --cov=core` como con `python manage.py test`, y nunca tocan la base de `DATABASE_URL`.
-- La migración `0002_restricciones_horarias` agrega `hora_fin > hora_inicio` en reservas y turnos fijos, `hora_cierre > hora_apertura` en horarios de apertura y un único parcial por cancha, fecha y hora de inicio para reservas activas (`1, 2, 3, 7`). Ningún horario puede cerrar pasada la medianoche. Falta aplicarla en Supabase con `python manage.py migrate`.
+- La migración `0002_restricciones_horarias` agrega `hora_fin > hora_inicio` en reservas y turnos fijos, `hora_cierre > hora_apertura` en horarios de apertura y un único parcial por cancha, fecha y hora de inicio para reservas activas (`1, 2, 3, 7`). Ningún horario puede cerrar pasada la medianoche. Aplicada en Supabase.
 - El admin registra las 14 tablas sin borrado físico: solo ofrece la baja lógica, y `logs_auditoria` es de solo lectura.
 - El operador ya no tiene `configurar_complejo`: los parámetros comerciales (`info_sena`, `horas_limite_cancelacion`) los editan solo el dueño y el superadmin. Al re-ejecutarse, `seed_inicial` sincroniza `roles_permisos`: las asignaciones que ya no corresponden quedan con `estado = 0` y las vigentes se reactivan. Las consultas de permisos de la Fase 2 deben filtrar asignaciones activas.
 - CORS y CSRF apuntan por defecto a Vite (`localhost:5173`). Los `.env` locales se actualizan por fuera del repositorio.
 - `.github/workflows/ci.yml` corre `makemigrations --check` y `pytest --cov=core` en cada push y pull request a `main`.
+
+## Notas de la Fase 2
+- Todos los errores de la API responden `{"error": true, "detail": ...}`; `detail` es un texto o un objeto por campo.
+- El login no usa `authenticate()`: `SesionService` distingue email inexistente, contraseña incorrecta y cuenta no activa para la auditoría, y responde lo mismo en los dos primeros casos.
+- SimpleJWT 5.5 emite `usuario_id` como texto. `ws_auth.py` y `backend-node` lo convierten a número al leerlo.
+- El claim `rol` se arma desde la base en cada login y en cada refresh: un cambio de rol se refleja sin volver a iniciar sesión.
+- Logout idempotente: un refresh vencido o ya revocado responde 204 y borra la cookie; solo la ausencia de cookie responde 401.
+- La baja de la cuenta propia anonimiza nombre, email, teléfono y contraseña, conserva la fila con `estado = 0` y revoca todos sus refresh tokens. Se rechaza si es la última cuenta de superadmin activa o un dueño con contratos vigentes.
+- El registro exige aceptar la política de privacidad: `usuarios` guarda la versión y la fecha aceptadas (migración `0003_consentimiento_politica_privacidad`). Cuando cambia `POLITICA_PRIVACIDAD_VERSION`, el perfil informa `debe_aceptar_politica` y la aceptación se registra con `PATCH /api/perfil/`. Falta aplicar la migración en Supabase con `python manage.py migrate`.
+- `GET /api/auditoria/` expone `fecha_creacion` como `fecha_accion`.
+- La auditoría identifica al titular por `usuario_id` y nunca guarda contraseñas, tokens ni el email tipeado en un login fallido.
+- Los 429 se registran una vez por IP, usuario y ruta cada 60 segundos, para que un ataque de fuerza bruta no multiplique las escrituras.
+- Registro limitado por IP (`THROTTLE_REGISTRO`, 10 por hora por defecto); login, 5 por minuto.
+- `AccesoComplejoMixin` (`core/views.py`) concentra la doble capa de acceso para los recursos de complejo de las fases siguientes.
+- Pruebas de Fase 2: 315 tests (357 en total).
 
 ## Decisiones de arquitectura (05/11/2026)
 - **Frontend:** React con Vite y PWA manual, en capas `services/`, `components/` y `pages/`: solo la capa de servicios conoce las URLs de la API, lo que separa el acceso a datos de la presentación. El access token vive en memoria y el refresh en una cookie HttpOnly, `Secure` y `SameSite=Strict`: un script inyectado por XSS no puede leer el refresh, y `SameSite=Strict` mitiga CSRF. Nada de la sesión se guarda en `localStorage`.

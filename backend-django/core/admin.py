@@ -42,6 +42,8 @@ class UsuarioAdmin(AdminBase):
     list_filter = ('estado', 'rol')
     search_fields = ('email', 'nombre_completo')
     exclude = ('password',)
+    # La constancia de consentimiento solo la escribe el titular al aceptar la política.
+    readonly_fields = AdminBase.readonly_fields + ('version_politica_aceptada', 'fecha_aceptacion_politica')
 
 
 @admin.register(LogAuditoria)
