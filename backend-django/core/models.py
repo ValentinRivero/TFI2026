@@ -136,7 +136,6 @@ class TipoEventoAuditoria(models.IntegerChoices):
     CAMBIO_CONFIGURACION = 14, 'Cambio de configuración del complejo'
 
 
-# 1. roles
 class Rol(ModeloBase):
     nombre = models.CharField(max_length=50, unique=True)
     descripcion = models.CharField(max_length=150, blank=True)
@@ -151,7 +150,6 @@ class Rol(ModeloBase):
         return self.nombre
 
 
-# 2. permisos
 class Permiso(ModeloBase):
     codigo = models.CharField(max_length=60, unique=True)
     nombre = models.CharField(max_length=100)
@@ -170,7 +168,6 @@ class Permiso(ModeloBase):
         return self.codigo
 
 
-# 3. roles_permisos
 class RolPermiso(ModeloBase):
     rol = models.ForeignKey(Rol, on_delete=models.PROTECT, related_name='asignaciones')
     permiso = models.ForeignKey(Permiso, on_delete=models.PROTECT, related_name='asignaciones')
@@ -211,7 +208,6 @@ class UsuarioManager(BaseUserManager):
         return self._crear(email, password, rol, **campos)
 
 
-# 4. usuarios
 class Usuario(AbstractBaseUser, ModeloBase):
     estado = models.SmallIntegerField(
         choices=EstadoUsuario.choices,
@@ -279,7 +275,6 @@ class Usuario(AbstractBaseUser, ModeloBase):
         return self.nombre_completo.split(' ')[0]
 
 
-# 5. complejos
 class Complejo(ModeloBase):
     propietario = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name='complejos_propios')
     nombre = models.CharField(max_length=120)
@@ -323,7 +318,6 @@ class Complejo(ModeloBase):
         return self.nombre
 
 
-# 6. servicios
 class Servicio(ModeloBase):
     nombre = models.CharField(max_length=80, unique=True)
 
@@ -337,7 +331,6 @@ class Servicio(ModeloBase):
         return self.nombre
 
 
-# 7. complejos_servicios
 class ComplejoServicio(ModeloBase):
     complejo = models.ForeignKey(Complejo, on_delete=models.PROTECT, related_name='servicios_ofrecidos')
     servicio = models.ForeignKey(Servicio, on_delete=models.PROTECT, related_name='ofrecido_en')
@@ -357,7 +350,6 @@ class ComplejoServicio(ModeloBase):
         return f'{self.complejo} - {self.servicio}'
 
 
-# 8. deportes
 class Deporte(ModeloBase):
     nombre = models.CharField(max_length=60, unique=True)
 
@@ -371,14 +363,13 @@ class Deporte(ModeloBase):
         return self.nombre
 
 
-# 9. canchas
 class Cancha(ModeloBase):
     estado = models.SmallIntegerField(
         choices=EstadoCancha.choices,
         default=EstadoCancha.ACTIVA,
         db_index=True,
     )
-    complejo =models.ForeignKey(Complejo, on_delete=models.PROTECT, related_name='canchas')
+    complejo = models.ForeignKey(Complejo, on_delete=models.PROTECT, related_name='canchas')
     deporte = models.ForeignKey(Deporte, on_delete=models.PROTECT, related_name='canchas')
     nombre = models.CharField(max_length=80)
     tipo_superficie = models.SmallIntegerField(choices=TipoSuperficie.choices)
@@ -412,7 +403,6 @@ class Cancha(ModeloBase):
         return f'{self.nombre} ({self.complejo})'
 
 
-# 10. horarios_apertura
 class HorarioApertura(ModeloBase):
     cancha = models.ForeignKey(Cancha, on_delete=models.PROTECT, related_name='horarios')
     dia_semana = models.SmallIntegerField(choices=DiaSemana.choices)
@@ -439,13 +429,16 @@ class HorarioApertura(ModeloBase):
                 condition=Q(precio_diferenciado__isnull=True) | Q(precio_diferenciado__gte=0),
                 name='ck_horario_precio_diferenciado',
             ),
+            models.CheckConstraint(
+                condition=Q(hora_cierre__gt=F('hora_apertura')),
+                name='ck_horario_apertura_cierre',
+            ),
         ]
 
     def __str__(self):
         return f'{self.cancha.nombre} {self.get_dia_semana_display()} {self.hora_apertura}-{self.hora_cierre}'
 
 
-# 11. excepciones_horarias
 class ExcepcionHoraria(ModeloBase):
     complejo = models.ForeignKey(Complejo, on_delete=models.PROTECT, related_name='excepciones')
     # NULL indica una excepción global que afecta a todas las canchas del complejo.
@@ -500,14 +493,13 @@ class ExcepcionHoraria(ModeloBase):
         return f'{self.complejo} / {alcance}: {self.fecha_inicio} - {self.fecha_fin}'
 
 
-# 12. turnos_fijos
 class TurnoFijo(ModeloBase):
     estado = models.SmallIntegerField(
         choices=EstadoTurnoFijo.choices,
         default=EstadoTurnoFijo.VIGENTE,
         db_index=True,
     )
-    cancha =models.ForeignKey(Cancha, on_delete=models.PROTECT, related_name='turnos_fijos')
+    cancha = models.ForeignKey(Cancha, on_delete=models.PROTECT, related_name='turnos_fijos')
     usuario = models.ForeignKey(
         Usuario,
         on_delete=models.PROTECT,
@@ -544,13 +536,16 @@ class TurnoFijo(ModeloBase):
                 condition=Q(usuario__isnull=False) | ~Q(nombre_cliente_manual=''),
                 name='ck_turnofijo_identifica_cliente',
             ),
+            models.CheckConstraint(
+                condition=Q(hora_fin__gt=F('hora_inicio')),
+                name='ck_turnofijo_horario',
+            ),
         ]
 
     def __str__(self):
         return f'{self.cancha} {self.get_dia_semana_display()} {self.hora_inicio}-{self.hora_fin}'
 
 
-# 13. reservas
 class Reserva(ModeloBase):
     estado = models.SmallIntegerField(
         choices=EstadoReserva.choices,
@@ -599,13 +594,27 @@ class Reserva(ModeloBase):
                 condition=Q(usuario__isnull=False) | ~Q(nombre_cliente_manual=''),
                 name='ck_reserva_identifica_cliente',
             ),
+            models.CheckConstraint(
+                condition=Q(hora_fin__gt=F('hora_inicio')),
+                name='ck_reserva_horario',
+            ),
+            # Última defensa ante dos altas simultáneas del mismo turno; el solapamiento parcial lo valida el servicio.
+            models.UniqueConstraint(
+                fields=['cancha', 'fecha_turno', 'hora_inicio'],
+                condition=Q(estado__in=[
+                    EstadoReserva.PENDIENTE,
+                    EstadoReserva.CONFIRMADA,
+                    EstadoReserva.SENADA,
+                    EstadoReserva.COMPLETADA,
+                ]),
+                name='uq_reserva_cancha_turno_activa',
+            ),
         ]
 
     def __str__(self):
         return f'{self.cancha} {self.fecha_turno} {self.hora_inicio}-{self.hora_fin} [{self.get_estado_display()}]'
 
 
-# 14. logs_auditoria
 class LogAuditoria(ModeloBase):
     usuario = models.ForeignKey(
         Usuario,
