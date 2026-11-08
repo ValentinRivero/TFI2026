@@ -1,3 +1,4 @@
+import asyncio
 import calendar
 import hashlib
 import ipaddress
@@ -6,6 +7,8 @@ import re
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -802,6 +805,26 @@ class HorarioAperturaService:
 
 
 EVENTO_GRILLA_ACTUALIZADA = 'grilla_actualizada'
+# Nombre del handler del consumer: Channels traduce el punto del tipo a guion bajo (grilla_actualizada).
+TIPO_MENSAJE_GRILLA = 'grilla.actualizada'
+
+logger_difusion = logging.getLogger('core.difusion')
+
+
+def grupo_de_complejo(complejo_id):
+    return f'complejo_{int(complejo_id)}'
+
+
+# Referencias a los envíos agendados desde código asíncrono: sin ellas el recolector podría cortarlos a mitad.
+_ENVIOS_EN_CURSO = set()
+
+
+def _cerrar_envio(tarea, complejo_id):
+    _ENVIOS_EN_CURSO.discard(tarea)
+    if not tarea.cancelled() and tarea.exception() is not None:
+        logger_difusion.error(
+            'No se pudo difundir la grilla del complejo %s', complejo_id, exc_info=tarea.exception(),
+        )
 
 
 class DifusionGrillaService:
@@ -812,6 +835,11 @@ class DifusionGrillaService:
     """
 
     @staticmethod
+    def admite_suscripcion(complejo_id):
+        """Solo publican su grilla los complejos con estado = 1 y contrato activo, como el catálogo."""
+        return ComplejoRepository.publico_por_id(complejo_id) is not None
+
+    @staticmethod
     def programar(complejo_id, **cambio):
         evento = {'event': EVENTO_GRILLA_ACTUALIZADA, **cambio}
         transaction.on_commit(lambda: DifusionGrillaService.publicar(complejo_id, evento))
@@ -819,10 +847,25 @@ class DifusionGrillaService:
     @staticmethod
     def publicar(complejo_id, evento):
         """
-        Envía el evento al grupo complejo_<id> del channel layer. Mientras no exista el consumer de
-        disponibilidad no hay grillas suscriptas, así que todavía no hay a quién enviarlo.
+        Envía el evento al grupo complejo_<id>. Corre después del commit: si el channel layer falla (Redis caído,
+        por ejemplo) se registra y se sigue, porque la operación ya quedó confirmada y las grillas abiertas se
+        resincronizan por REST al reconectar.
+        Sirve desde código sincrónico (vistas de DRF, que Daphne ejecuta en un hilo) y desde código asíncrono
+        (consumers o vistas async): ahí no se puede bloquear el loop, así que el envío se agenda como tarea.
         """
-        return None
+        grupo, mensaje = grupo_de_complejo(complejo_id), {'type': TIPO_MENSAJE_GRILLA, 'evento': evento}
+        try:
+            capa = get_channel_layer()
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                async_to_sync(capa.group_send)(grupo, mensaje)
+                return
+            tarea = loop.create_task(capa.group_send(grupo, mensaje))
+            _ENVIOS_EN_CURSO.add(tarea)
+            tarea.add_done_callback(lambda terminada: _cerrar_envio(terminada, complejo_id))
+        except Exception:
+            logger_difusion.exception('No se pudo difundir la grilla del complejo %s', complejo_id)
 
 
 MAXIMO_DIAS_EXCEPCION = 366

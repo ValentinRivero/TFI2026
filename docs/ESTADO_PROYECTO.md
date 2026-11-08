@@ -26,10 +26,10 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - [x] **4.1.** Lógica de cálculo de grilla diaria cruzando horarios de apertura, duración por cancha (60/90/120 min), excepciones vigentes y reservas (`CU-05`).
 - [x] **4.2.** Gestión de excepciones horarias por día completo o franja horaria, por complejo o por cancha (`CU-11`).
 - [x] **4.3.** Motor transaccional de reservas con bloqueo `select_for_update()`, soporte para jugador web (`CU-06`), cancelación con margen horario (`CU-07`), agenda manual telefónica y turnos fijos (`CU-10`).
-- [ ] **4.4.** Configuración de `routing.py` y `consumers.py` para actualización en tiempo real de casilleros por WebSocket al reservar, cancelar o crear excepción (`RF-15`).
-- [ ] **4.5.** Channel layer con Redis (`REDIS_URL` opcional, con respaldo en memoria), `ws_auth.py` permisivo con su edición en `asgi.py`, consumer de lectura pública y publicación de eventos con `transaction.on_commit`.
-- [ ] **4.6.** Test de concurrencia de reservas sobre PostgreSQL en CI (`select_for_update` no bloquea en SQLite).
-- [ ] **4.7.** Advertencias de conflicto al modificar la operatoria con reservas futuras: editar o dar de baja un rango horario, cambiar `duracion_turno_min` o pasar una cancha a mantenimiento informa las reservas afectadas (409 con el detalle) y solo se aplica con confirmación explícita.
+- [x] **4.4.** Configuración de `routing.py` y `consumers.py` para actualización en tiempo real de casilleros por WebSocket al reservar, cancelar o crear excepción (`RF-15`).
+- [x] **4.5.** Channel layer con Redis (`REDIS_URL` opcional, con respaldo en memoria), `ws_auth.py` permisivo con su edición en `asgi.py`, consumer de lectura pública y publicación de eventos con `transaction.on_commit`.
+- [x] **4.6.** Test de concurrencia de reservas sobre PostgreSQL en CI (`select_for_update` no bloquea en SQLite).
+- [ ] **4.7.** Advertencias de conflicto al modificar la operatoria con reservas futuras: editar o dar de baja un rango horario, cambiar `duracion_turno_min` o pasar una cancha a mantenimiento informa las reservas afectadas (409 con el detalle) y solo se aplica con confirmación explícita. Esos cambios, y los de contrato de un complejo, se anuncian a las grillas abiertas por WebSocket.
 - [ ] **4.8.** Baja de cuenta con reservas: vista previa de lo que se cancela, cancelación de las reservas futuras pendientes y confirmadas, conservación de las señadas o pagadas con aviso urgente al complejo, y baja de los turnos fijos del titular.
 - [ ] **4.9.** Ajustes de la operatoria de agenda y turnos fijos: reapertura de una reserva cancelada por error, cambio de horario de un turno fijo a otro turno libre (ambos solo por el personal del complejo y con confirmación explícita), y fechas de turnos fijos alcanzadas por una excepción en espera de una decisión del complejo, con aviso, en lugar de rechazar el alta.
 
@@ -51,7 +51,7 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 
 ## Fase 7: Despliegue, Pruebas Integrales y Entrega
 - [ ] **7.1.** Imágenes Docker (`Dockerfile` y `.dockerignore` por servicio) y `docker-compose.yml` con `web`, `node`, `frontend` y `redis`.
-- [ ] **7.2.** Despliegue en VPS: nginx como proxy, HTTPS con dominio, IP real detrás del proxy (`NUM_PROXIES`, `trust proxy`) y `python manage.py check --deploy` sin pendientes.
+- [ ] **7.2.** Despliegue en VPS: nginx como proxy, HTTPS con dominio, IP real detrás del proxy (`NUM_PROXIES`, `trust proxy`), límite de conexiones WebSocket simultáneas por IP en `/ws/` sin registrar la query string (lleva el token), y `python manage.py check --deploy` sin pendientes.
 - [ ] **7.3.** Pruebas de punta a punta de los flujos principales por rol sobre el despliegue.
 - [ ] **7.4.** Documentación de entrega: `docs/API.md`, `docs/DECISIONES_ARQUITECTURA.md` y reporte de cobertura (`pytest --cov=core`), con CI en verde y tag `v1.0.0`.
 
@@ -146,6 +146,32 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - Cada alta, cancelación o cambio de ocupación programa `grilla_actualizada` con `transaction.on_commit` en el formato unificado (`fecha_desde = fecha_hasta = fecha_turno` en reservas; la vigencia en turnos fijos, con `fecha_hasta` nulo si no tiene fin).
 - Pruebas del punto 4.3: 282 tests (1045 en total). El bloqueo real de `select_for_update` se prueba sobre PostgreSQL en el punto 4.6.
 - El punto 4.9 modifica tres reglas de este punto: las canceladas podrán reabrirse, el horario de un turno fijo podrá cambiarse y una excepción dejará de rechazar el alta de un turno fijo.
+
+## Notas de los puntos 4.4 a 4.6
+- `ws/complejos/<id>/disponibilidad/` (`core/routing.py`) atiende `DisponibilidadConsumer` (`core/consumers.py`):
+  - **Solo lectura:** anónimos y usuarios identificados se unen al grupo `complejo_<id>` y reciben los mismos eventos; los mensajes del cliente se descartan sin decodificarlos.
+  - **Rechazo:** un complejo inexistente, dado de baja o sin contrato activo se rechaza en el handshake, con el mismo criterio que el catálogo. El navegador recibe la conexión rechazada (Daphne responde 403); el código `4404` solo es visible dentro de la aplicación ASGI y en las pruebas.
+- `config/asgi.py` encadena `AllowedHostsOriginValidator(AuthMiddlewareStack(JWTAuthMiddleware(URLRouter(...))))`. El validador de origen corta antes del handshake las conexiones desde sitios ajenos (Cross-Site WebSocket Hijacking).
+- **Identificación permisiva** (`core/ws_auth.py`, `JWTAuthMiddleware`):
+  - Lee `?token=<access>`, lo valida con SimpleJWT, convierte el `usuario_id` de texto a entero y carga al usuario solo si está activo.
+  - Un token ausente, vencido, inválido, un refresh en lugar de un access o una cuenta no activa dejan `AnonymousUser` y la conexión sigue abierta.
+- **Difusión** (`DifusionGrillaService.publicar`): envía al grupo `complejo_<id>` del channel layer desde `transaction.on_commit`, nunca dentro del bloque atómico.
+  - **Qué se anuncia:** alta y cancelación de reservas, cambios de ocupación desde la agenda, fechas de turnos fijos, alta, edición y baja de turnos fijos, y alta y baja de excepciones.
+  - **Tolerancia a fallas:** si el channel layer falla, el error queda en el logger `core.difusion` y la operación ya confirmada no se revierte. Las grillas se resincronizan por REST al reconectar.
+  - **Contexto:** sirve desde código sincrónico (las vistas de DRF, que Daphne ejecuta en un hilo) y desde código asíncrono, donde agenda el envío como tarea en lugar de bloquear el loop y registra igual una falla.
+  - **Fuera de este punto:** los cambios de horarios, canchas y contratos todavía no se anuncian; quedan para 4.7.
+- **Formato del evento:** se mantiene el unificado del punto 4.2: `{"event": "grilla_actualizada", "cancha_id", "fecha_desde", "fecha_hasta", "hora_inicio", "hora_fin"}`.
+  - En una reserva, `fecha_desde = fecha_hasta = fecha_turno`.
+  - `cancha_id` es nulo si afecta a todo el complejo.
+  - Las horas son nulas en un día completo, y `fecha_hasta` es nula en un turno fijo sin fin.
+  - No lleva datos personales.
+- **Redis opcional:** con `REDIS_URL`, el channel layer usa `channels_redis` y la caché usa `RedisCache`, así los limitadores comparten contadores entre procesos. Sin ella, ambos quedan en memoria. `config/settings_test.py` los fuerza siempre en memoria. El cliente `redis` queda fijado en `requirements.txt`, porque la caché lo usa en forma directa.
+- **Pruebas de WebSocket:** solo usan API pública de Django y Channels. El origen permitido sale de `settings.ALLOWED_HOSTS` y cada prueba arranca con un channel layer limpio redefiniendo `CHANNEL_LAYERS`, que dispara `setting_changed`.
+- **Concurrencia** (`core/tests/test_concurrencia.py`, `TransactionTestCase` con hilos reales y barrera):
+  - **Casos:** 8 reservas simultáneas del mismo turno (por servicio y por la API) dejan una sola confirmada (201) y el resto en 409. Reservas contra turnos fijos y turnos fijos entre sí también dejan una sola alta. Canchas distintas no se bloquean entre sí.
+  - **Dónde corre:** sobre SQLite se saltea. En CI corre en un job aparte (`django-concurrencia`) contra un servicio de PostgreSQL descartable, con `config.settings_concurrencia` y `TEST_POSTGRES_URL`; la suite general sigue en SQLite.
+  - **Control:** con el bloqueo de la cancha desactivado, los casos sin restricción de base fallan (turnos fijos duplicados). Eso confirma que los protege `select_for_update` y no la restricción única.
+- Pruebas de los puntos 4.4 a 4.6: 37 tests (32 sobre SQLite y 5 de concurrencia sobre PostgreSQL; 1082 en total).
 
 ## Decisiones de arquitectura
 - **Frontend:** React con Vite y PWA manual, en capas `services/`, `components/` y `pages/`: solo la capa de servicios conoce las URLs de la API, lo que separa el acceso a datos de la presentación. El access token vive en memoria y el refresh en una cookie HttpOnly, `Secure` y `SameSite=Strict`: un script inyectado por XSS no puede leer el refresh, y `SameSite=Strict` mitiga CSRF. Nada de la sesión se guarda en `localStorage`.

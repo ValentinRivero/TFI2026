@@ -82,6 +82,21 @@ Filtros de `GET /api/complejos/`: `deporte` (id), `cobertura` (`1` descubierta, 
 - Todo turno `LIBRE` se puede reservar con `POST /api/reservas/`.
 - La respuesta no incluye datos de quien reservó.
 
+### Disponibilidad en tiempo real (WebSocket)
+
+`wss://<dominio>/ws/complejos/<id>/disponibilidad/` mantiene al día la grilla abierta de un complejo. Es público y de solo lectura: `?token=<access>` es opcional y un token vencido o inválido no impide conectarse.
+
+```json
+{ "event": "grilla_actualizada", "cancha_id": 3, "fecha_desde": "2026-11-18", "fecha_hasta": "2026-11-18", "hora_inicio": "20:00:00", "hora_fin": "21:00:00" }
+```
+
+- El evento avisa que cambió la disponibilidad en ese rango. Si la fecha que se está viendo cae entre `fecha_desde` y `fecha_hasta`, se vuelve a pedir la grilla por REST.
+- `cancha_id` nulo: afecta a todas las canchas del complejo. Horas nulas: el día completo. `fecha_hasta` nulo: sin fecha de fin (turno fijo por tiempo indefinido).
+- No lleva datos de quien reservó.
+- Los mensajes que envía el cliente se ignoran.
+- Un complejo no habilitado o inexistente rechaza la conexión, igual que una página de otro origen.
+- Si la conexión se corta, al reconectar se vuelve a pedir la grilla por REST: los eventos perdidos no se reenvían.
+
 ## Reservas del jugador
 
 | Método y ruta | Acceso | Uso |
