@@ -50,8 +50,6 @@ En Goya, reservar una cancha suele depender de llamadas o mensajes, sin saber de
 ## Flujo de trabajo
 
 - Cada etapa se desarrolla en su propia rama (`feat/<tema>`) y se integra a `main` mediante pull request.
-- No se integra nada a `main` sin que el CI quede en verde y sin revisión.
-- Los secretos nunca se versionan: los `.env` se comparten por fuera del repositorio.
 
 ---
 
