@@ -60,6 +60,7 @@ from .services import (
     BajaDeCuentaService,
     CanchaService,
     CatalogoService,
+    ConflictoOperatoriaService,
     ComplejoService,
     ContratoService,
     ExcepcionHorariaService,
@@ -73,7 +74,7 @@ from .services import (
     UsuarioAdminService,
     UsuarioService,
 )
-from .throttles import LoginRateThrottle, RegistroRateThrottle, ReservaRateThrottle
+from .throttles import GrillaRateThrottle, LoginRateThrottle, RegistroRateThrottle, ReservaRateThrottle
 
 NOMBRE_COOKIE_REFRESH = 'refresh'
 # El navegador solo envía la cookie a /api/token/, /api/token/refresh/ y /api/token/logout/.
@@ -351,6 +352,11 @@ class ComplejoViewSet(AccionesPublicasMixin, mixins.ListModelMixin, mixins.Retri
     def filter_backends(self):
         return BACKENDS_DE_LISTADO if self.action == 'list' else ()
 
+    def get_throttles(self):
+        if self.action == 'grilla':
+            return [GrillaRateThrottle()]
+        return super().get_throttles()
+
     def get_queryset(self):
         if self.action in self.acciones_publicas:
             return CatalogoService.complejos_publicos()
@@ -612,6 +618,10 @@ class AgendaViewSet(AccesoComplejoMixin, mixins.ListModelMixin, mixins.RetrieveM
     http_method_names = ['get', 'post', 'patch', 'head', 'options']
     queryset = ReservaService.agenda()
     filterset_class = AgendaFilter
+
+    def get_queryset(self):
+        # La marca de conflicto depende de la hora del pedido: se anota acá y no en el queryset de la clase.
+        return ConflictoOperatoriaService.anotar(super().get_queryset())
     ordering_fields = ('fecha_turno', 'hora_inicio', 'fecha_creacion', 'id')
     ordering = ('fecha_turno', 'hora_inicio', 'cancha__nombre', 'id')
     filter_backends = (DjangoFilterBackend, OrderingFilter)

@@ -1,8 +1,10 @@
 import json
 from datetime import datetime, time, timedelta
 from decimal import Decimal
+from unittest import mock
 
 import pytest
+from django.core.cache import cache
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
@@ -557,6 +559,8 @@ class TestPrivacidadDeGrilla:
 
 class TestRendimientoDeGrilla:
     def _consultas(self, cliente, complejo, fecha):
+        """Mide el cálculo desde la base: se descarta la caché antes de pedir la grilla."""
+        cache.clear()
         with CaptureQueriesContext(connection) as contexto:
             _grilla(cliente, complejo, fecha)
         return len(contexto.captured_queries)
@@ -578,3 +582,114 @@ class TestRendimientoDeGrilla:
 
         assert self._consultas(cliente, complejo, lunes) == base
         assert base <= 6
+
+
+class TestCacheDeGrilla:
+    def _consultas(self, cliente, complejo, fecha):
+        with CaptureQueriesContext(connection) as contexto:
+            cuerpo = _grilla(cliente, complejo, fecha)
+        return len(contexto.captured_queries), cuerpo
+
+    def test_la_segunda_consulta_sale_de_la_cache(self, cliente, complejo, cancha_abierta, lunes):
+        primera, cuerpo_1 = self._consultas(cliente, complejo, lunes)
+        segunda, cuerpo_2 = self._consultas(cliente, complejo, lunes)
+
+        assert primera > 0
+        assert segunda == 0
+        assert cuerpo_1 == cuerpo_2
+
+    def test_una_reserva_confirmada_invalida_la_cache(
+        self, cliente, jugador, cliente_de, complejo, cancha_abierta, lunes, django_capture_on_commit_callbacks,
+    ):
+        assert _estados(_bloques(cliente, complejo, lunes, cancha_abierta))['14:00'] == 'LIBRE'
+
+        with django_capture_on_commit_callbacks(execute=True):
+            respuesta = cliente_de(jugador).post('/api/reservas/', {
+                'cancha': cancha_abierta.id, 'fecha_turno': lunes.isoformat(), 'hora_inicio': '14:00',
+            }, format='json')
+
+        assert respuesta.status_code == status.HTTP_201_CREATED
+        assert _estados(_bloques(cliente, complejo, lunes, cancha_abierta))['14:00'] == 'OCUPADO'
+
+    def test_suspender_el_contrato_invalida_la_cache(
+        self, cliente, superadmin, cliente_de, complejo, cancha_abierta, lunes, django_capture_on_commit_callbacks,
+    ):
+        _grilla(cliente, complejo, lunes)
+
+        with django_capture_on_commit_callbacks(execute=True):
+            cliente_de(superadmin).patch(
+                f'/api/contratos/{complejo.id}/', {'estado_contrato': EstadoContrato.SUSPENDIDO}, format='json',
+            )
+
+        assert cliente.get(_url(complejo, lunes)).status_code == status.HTTP_404_NOT_FOUND
+
+    def test_cada_fecha_y_cada_complejo_tienen_su_propia_entrada(
+        self, cliente, complejo, complejo_ajeno, cancha_abierta, crear_cancha, lunes,
+    ):
+        _abrir(crear_cancha(complejo_ajeno, 'Ajena'), time(13, 0), time(18, 0))
+        _grilla(cliente, complejo, lunes)
+
+        otra_fecha, _ = self._consultas(cliente, complejo, lunes + timedelta(days=7))
+        otro_complejo, cuerpo = self._consultas(cliente, complejo_ajeno, lunes)
+
+        assert otra_fecha > 0 and otro_complejo > 0
+        assert cuerpo['complejo']['id'] == complejo_ajeno.id
+
+    def test_las_marcas_del_reloj_se_recalculan_sobre_la_cache(self, reloj, cliente, complejo, cancha):
+        _abrir(cancha, time(8, 0), time(13, 0))
+        assert _estados(_bloques(cliente, complejo, HOY_CONGELADO, cancha))['11:00'] == 'LIBRE'
+
+        reloj.return_value = reloj.return_value.replace(hour=11, minute=30)
+        cantidad, cuerpo = self._consultas(cliente, complejo, HOY_CONGELADO)
+
+        assert cantidad == 0
+        assert _estados(cuerpo['canchas'][0]['bloques'])['11:00'] == 'NO_DISPONIBLE'
+        assert _estados(cuerpo['canchas'][0]['bloques'])['12:00'] == 'LIBRE'
+
+    def test_se_guarda_con_un_tiempo_de_vida_corto(self, cliente, complejo, cancha_abierta, lunes):
+        from core.services import SEGUNDOS_DE_VIDA_DE_LA_GRILLA
+
+        with mock.patch('core.services.cache.set', wraps=cache.set) as guardar:
+            _grilla(cliente, complejo, lunes)
+
+        ((clave, _, tiempo_de_vida), _) = guardar.call_args
+        assert clave.startswith(f'grilla:{complejo.id}:{lunes.isoformat()}:v')
+        assert tiempo_de_vida == SEGUNDOS_DE_VIDA_DE_LA_GRILLA <= 60
+
+    def test_si_la_cache_falla_la_grilla_se_calcula_igual(self, cliente, complejo, cancha_abierta, lunes):
+        caida = mock.MagicMock()
+        caida.add.side_effect = caida.get.side_effect = ConnectionError('Redis no responde')
+        with mock.patch('core.services.cache', caida):
+            respuesta = cliente.get(_url(complejo, lunes))
+
+        assert respuesta.status_code == status.HTTP_200_OK
+        assert respuesta.json()['canchas'][0]['bloques']
+
+    def test_si_falla_guardar_o_invalidar_no_se_rompe_nada(
+        self, cliente, complejo, cancha_abierta, lunes,
+    ):
+        from core.services import CacheGrillaService
+
+        caida = mock.MagicMock()
+        caida.get.return_value = None
+        caida.set.side_effect = caida.incr.side_effect = ConnectionError('Redis no responde')
+        with mock.patch('core.services.cache', caida):
+            assert cliente.get(_url(complejo, lunes)).status_code == status.HTTP_200_OK
+            CacheGrillaService.invalidar(complejo.id)
+        caida.incr.assert_called_once()
+
+
+class TestLimiteDeLaGrilla:
+    def test_tiene_un_limite_propio_mas_amplio_que_el_anonimo(self, cliente, complejo, cancha_abierta, lunes):
+        for _ in range(61):
+            assert cliente.get(_url(complejo, lunes)).status_code == status.HTTP_200_OK
+
+        assert cliente.get('/api/complejos/').status_code == status.HTTP_200_OK
+
+    def test_al_superarlo_responde_429(self, cliente, complejo, cancha_abierta, lunes):
+        from core.throttles import GrillaRateThrottle
+
+        with mock.patch.object(GrillaRateThrottle, 'get_rate', return_value='2/minute'):
+            codigos = [cliente.get(_url(complejo, lunes)).status_code for _ in range(3)]
+
+        assert codigos == [200, 200, 429]

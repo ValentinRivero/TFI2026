@@ -715,6 +715,9 @@ class ReservaAgendaSerializer(serializers.ModelSerializer):
         return _datos_de_contacto(reserva)
 
     def get_conflicto_operatoria(self, reserva):
+        # El listado de la agenda lo trae anotado en SQL; una reserva suelta (alta, cambio de estado) se evalúa acá.
+        if hasattr(reserva, 'motivo_conflicto'):
+            return reserva.motivo_conflicto
         return ConflictoOperatoriaService.motivo_de_reserva(reserva)
 
 

@@ -217,6 +217,20 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - **Aviso:** una excepción nueva que deja fechas en espera genera un aviso urgente al complejo (`AvisoComplejoService`, que entrega a `backend-node` desde el punto 5.7).
 - Pruebas del punto 4.9 y del ajuste de la regla de confirmación: 59 tests (1211 en total). Las suites de negocio completas (653 tests) pasaron también sobre PostgreSQL.
 
+## Notas de optimización de la Fase 4
+- **Caché de la grilla pública** (`CacheGrillaService`): se cachea la parte que sale de la base, por complejo y fecha.
+  - **Vigencia:** la clave lleva una versión por complejo que `DifusionGrillaService` incrementa después de cada commit, antes de avisar por WebSocket, así un cambio confirmado nunca se sirve viejo. La versión se lee antes de calcular, de modo que un cálculo concurrente no se vuelve a servir.
+  - **Tiempo de vida:** 60 segundos, para cubrir los cambios que no pasan por la difusión (por ejemplo, el admin de Django).
+  - **Marcas del reloj:** las que dependen de la hora (`NO_DISPONIBLE`) se aplican en cada pedido, sobre la copia cacheada.
+  - **Si la caché falla:** la grilla se calcula directo de la base.
+  - **Efecto:** con N grillas abiertas, un evento cuesta un cálculo y N lecturas de caché, en lugar de N cálculos.
+- **Límite propio de la grilla** (`GrillaRateThrottle`, por IP): más amplio que el anónimo general, para no frenar a varios usuarios detrás de una misma IP que recargan con cada evento.
+- **Conflictos de la agenda en SQL** (`ReservaRepository.anotar_conflicto_operatoria`): un `Exists` sobre los rangos activos verifica día, rango, alineación y duración del turno. `?con_conflicto=` filtra en la base y la marca se anota en la misma consulta, sin cargar reservas en Python ni armar listas de ids. Un test de paridad compara la regla en SQL con la de Python en SQLite y PostgreSQL.
+- **Fechas en espera:** `?en_espera=` prefiltra en SQL los turnos fijos con alguna excepción que los alcanza y solo esos pasan por el cálculo exacto. El aviso de una excepción nueva calcula con esa excepción y los turnos que puede alcanzar.
+- **Validación de cambios de operatoria:** lee una sola vez las reservas, los turnos fijos y los horarios (antes, dos veces), y evalúa las dos configuraciones en memoria con los bloques válidos precalculados por día.
+- **Sin cambios, porque ya estaban acotados:** motor de reservas, cancelaciones, baja de cuenta, depuración diaria y WebSocket. Los índices existentes cubren las consultas nuevas y no hizo falta migración.
+- Pruebas de la optimización: 15 tests (1226 en total). Las suites de negocio (668 tests) pasaron también sobre PostgreSQL.
+
 ## Decisiones de arquitectura
 - **Frontend:** React con Vite y PWA manual, en capas `services/`, `components/` y `pages/`: solo la capa de servicios conoce las URLs de la API, lo que separa el acceso a datos de la presentación. El access token vive en memoria y el refresh en una cookie HttpOnly, `Secure` y `SameSite=Strict`: un script inyectado por XSS no puede leer el refresh, y `SameSite=Strict` mitiga CSRF. Nada de la sesión se guarda en `localStorage`.
 - **`backend-node`:** persiste sus eventos en MongoDB Atlas con Mongoose y consulta a Django por HTTP. No accede a las 14 tablas.

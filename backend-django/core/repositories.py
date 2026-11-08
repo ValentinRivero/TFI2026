@@ -1,8 +1,26 @@
-from django.db.models import Exists, Min, OuterRef, Prefetch, Q, Subquery
+from datetime import date
+
+from django.db.models import (
+    Case,
+    CharField,
+    Exists,
+    ExpressionWrapper,
+    F,
+    IntegerField,
+    Min,
+    OuterRef,
+    Prefetch,
+    Q,
+    Subquery,
+    Value,
+    When,
+)
+from django.db.models.functions import Coalesce, ExtractHour, ExtractIsoWeekDay, ExtractMinute, Mod
 from django.utils import timezone
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 from .models import (
+    AlcanceExcepcion,
     Cancha,
     Complejo,
     ComplejoServicio,
@@ -33,6 +51,16 @@ ESTADOS_RESERVA_OCUPANTES = (
 # Reservas que todavía se van a jugar y pueden necesitar una decisión del complejo o del titular.
 ESTADOS_RESERVA_A_RESOLVER = (EstadoReserva.PENDIENTE, EstadoReserva.CONFIRMADA, EstadoReserva.SENADA)
 ESTADOS_TURNO_FIJO_ACTIVOS = (EstadoTurnoFijo.VIGENTE, EstadoTurnoFijo.PAUSADO)
+
+
+def _minutos_del_dia(campo):
+    """Hora como minutos desde la medianoche, para operar en SQL igual en SQLite y en PostgreSQL."""
+    return ExtractHour(campo) * 60 + ExtractMinute(campo)
+
+
+def _entero_externo(anotacion):
+    """Referencia a una anotación entera de la consulta externa, con tipo explícito para usarla en funciones."""
+    return ExpressionWrapper(OuterRef(anotacion), output_field=IntegerField())
 
 
 class UsuarioRepository:
@@ -515,14 +543,47 @@ class ReservaRepository:
     def agenda():
         return (
             ReservaRepository._vigentes().select_related('cancha__complejo', 'usuario')
-            .prefetch_related(HorarioAperturaRepository.prefetch_activos('cancha__'))
             .order_by('fecha_turno', 'hora_inicio', 'cancha__nombre', 'id')
         )
 
     @staticmethod
-    def a_resolver_desde(queryset, hoy):
-        """Reservas en 1, 2 o 3 desde hoy; la agenda ya precarga la cancha y sus rangos activos."""
-        return queryset.filter(estado__in=ESTADOS_RESERVA_A_RESOLVER, fecha_turno__gte=hoy)
+    def anotar_conflicto_operatoria(queryset, hoy, hora_actual, motivo_mantenimiento, motivo_fuera_de_turnos):
+        """
+        Anota `motivo_conflicto` en SQL con la misma regla que ConflictoOperatoriaService.motivo(): una reserva por
+        jugar sigue en la grilla si su cancha está activa y algún rango activo de ese día la contiene alineada a la
+        duración del turno. Así la agenda filtra y marca sin cargar filas en Python (paridad cubierta por tests).
+        """
+        # Las funciones no reciben OuterRef: el día y los minutos del turno se anotan antes en la consulta externa.
+        queryset = queryset.annotate(
+            dia_del_turno=ExtractIsoWeekDay('fecha_turno') - 1,
+            minuto_de_inicio=_minutos_del_dia('hora_inicio'),
+            minutos_de_turno=_minutos_del_dia('hora_fin') - _minutos_del_dia('hora_inicio'),
+        )
+        bloque_vigente = HorarioApertura.objects.filter(
+            cancha_id=OuterRef('cancha_id'),
+            estado=EstadoRegistro.ACTIVO,
+            dia_semana=OuterRef('dia_del_turno'),
+            hora_apertura__lte=OuterRef('hora_inicio'),
+            hora_cierre__gte=OuterRef('hora_fin'),
+        ).annotate(
+            desfase=Mod(
+                _entero_externo('minuto_de_inicio') - _minutos_del_dia('hora_apertura'),
+                _entero_externo('minutos_de_turno'),
+            ),
+        ).filter(desfase=0)
+        por_jugar = Q(fecha_turno__gt=hoy) | Q(fecha_turno=hoy, hora_inicio__gt=hora_actual)
+        sin_motivo = Value(None, output_field=CharField())
+        return queryset.annotate(
+            en_bloque_vigente=Exists(bloque_vigente),
+        ).annotate(
+            motivo_conflicto=Case(
+                When(~(Q(estado__in=ESTADOS_RESERVA_A_RESOLVER) & por_jugar), then=sin_motivo),
+                When(~Q(cancha__estado=EstadoCancha.ACTIVA), then=Value(motivo_mantenimiento)),
+                When(en_bloque_vigente=True, minutos_de_turno=F('cancha__duracion_turno_min'), then=sin_motivo),
+                default=Value(motivo_fuera_de_turnos),
+                output_field=CharField(),
+            ),
+        )
 
     @staticmethod
     def a_resolver_de_cancha(cancha_id, hoy):
@@ -645,11 +706,40 @@ class TurnoFijoRepository:
         )
 
     @staticmethod
-    def vigentes_alcanzados(complejo_id, cancha_id=None):
-        """Turnos fijos vigentes del complejo; con cancha, solo los de esa cancha (una excepción global los alcanza a todos)."""
-        turnos = TurnoFijo.objects.filter(cancha__complejo_id=complejo_id, estado=EstadoTurnoFijo.VIGENTE)
-        if cancha_id is not None:
-            turnos = turnos.filter(cancha_id=cancha_id)
+    def con_excepcion_que_los_alcanza(queryset, hoy):
+        """
+        Prefiltro en SQL de los turnos fijos que pueden tener fechas en espera: vigentes y con alguna excepción activa
+        del complejo (global o de su cancha) que no terminó, se cruza con su vigencia y cubre su horario. El cálculo
+        exacto (día de la semana dentro del cruce y fechas ya registradas) se hace en Python solo sobre estos.
+        """
+        alcanza = ExcepcionHoraria.objects.filter(
+            Q(cancha__isnull=True) | Q(cancha_id=OuterRef('cancha_id')),
+            Q(es_dia_completo=AlcanceExcepcion.DIA_COMPLETO)
+            | Q(hora_inicio__lt=OuterRef('hora_fin'), hora_fin__gt=OuterRef('hora_inicio')),
+            complejo_id=OuterRef('cancha__complejo_id'),
+            estado=EstadoRegistro.ACTIVO,
+            fecha_fin__gte=hoy,
+            fecha_inicio__lte=OuterRef('fin_de_vigencia'),
+        ).filter(fecha_fin__gte=OuterRef('fecha_inicio_vigencia'))
+        return (
+            queryset.filter(estado=EstadoTurnoFijo.VIGENTE)
+            .annotate(fin_de_vigencia=Coalesce('fecha_fin_vigencia', Value(date.max)))
+            .filter(Exists(alcanza))
+        )
+
+    @staticmethod
+    def alcanzados_por(excepcion):
+        """Turnos fijos vigentes que una excepción puede dejar en espera (mismo complejo, cancha, fechas y horario)."""
+        turnos = TurnoFijo.objects.filter(
+            Q(fecha_fin_vigencia__isnull=True) | Q(fecha_fin_vigencia__gte=excepcion.fecha_inicio),
+            cancha__complejo_id=excepcion.complejo_id,
+            estado=EstadoTurnoFijo.VIGENTE,
+            fecha_inicio_vigencia__lte=excepcion.fecha_fin,
+        )
+        if excepcion.cancha_id is not None:
+            turnos = turnos.filter(cancha_id=excepcion.cancha_id)
+        if excepcion.es_dia_completo != AlcanceExcepcion.DIA_COMPLETO:
+            turnos = turnos.filter(hora_inicio__lt=excepcion.hora_fin, hora_fin__gt=excepcion.hora_inicio)
         return list(turnos.select_related('cancha'))
 
     @staticmethod

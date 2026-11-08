@@ -455,3 +455,113 @@ def test_el_precio_diferenciado_no_altera_las_reservas_ya_tomadas(dueno, cliente
 
     reserva_tarde.refresh_from_db()
     assert reserva_tarde.precio_acordado == Decimal('38000.00')
+
+
+class TestCostoDeLaValidacion:
+    def test_lee_reservas_turnos_y_horarios_una_sola_vez(
+        self, dueno, crear_turno_fijo, cancha, horario, reserva_tarde, reserva_temprano,
+    ):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from core.services import ConflictoOperatoriaService
+
+        crear_turno_fijo(cancha, DiaSemana.MARTES, time(22, 0), time(23, 0), desde=MARTES)
+
+        with CaptureQueriesContext(connection) as capturadas:
+            ConflictoOperatoriaService.validar_cambio(cancha, True, dueno, None, estado=EstadoCancha.EN_MANTENIMIENTO)
+
+        lecturas = [consulta['sql'] for consulta in capturadas.captured_queries if consulta['sql'].startswith('SELECT')]
+        assert len([sql for sql in lecturas if '"reservas"' in sql]) == 1
+        assert len([sql for sql in lecturas if '"turnos_fijos"' in sql]) == 1
+        assert len([sql for sql in lecturas if '"horarios_apertura"' in sql]) == 1
+
+
+class TestConflictoEnSql:
+    """La agenda calcula la marca en SQL; tiene que coincidir siempre con la regla en Python."""
+
+    @pytest.fixture
+    def escenario(self, complejo, crear_cancha, crear_horario, crear_reserva):
+        de_60 = crear_cancha(complejo, 'De 60')
+        crear_horario(de_60, DiaSemana.MARTES, time(8, 0), time(12, 0))
+        crear_horario(de_60, DiaSemana.MARTES, time(16, 0), time(23, 0))
+        crear_horario(de_60, DiaSemana.LUNES, time(9, 0), time(13, 0))
+        crear_horario(de_60, DiaSemana.MIERCOLES, time(8, 0), time(23, 0)).desactivar()
+        de_90 = crear_cancha(complejo, 'De 90', duracion_turno_min=DuracionTurno.NOVENTA)
+        crear_horario(de_90, DiaSemana.MARTES, time(14, 0), time(20, 0))
+        de_120 = crear_cancha(complejo, 'De 120', duracion_turno_min=DuracionTurno.CIENTO_VEINTE)
+        crear_horario(de_120, DiaSemana.MARTES, time(15, 30), time(23, 30))
+        en_mantenimiento = crear_cancha(complejo, 'Mantenimiento', estado=EstadoCancha.EN_MANTENIMIENTO)
+        crear_horario(en_mantenimiento, DiaSemana.MARTES, time(14, 0), time(23, 0))
+
+        casos = [
+            (de_60, MARTES, time(8, 0), time(9, 0)),
+            (de_60, MARTES, time(11, 0), time(12, 0)),
+            (de_60, MARTES, time(12, 0), time(13, 0)),
+            (de_60, MARTES, time(8, 30), time(9, 30)),
+            (de_60, MARTES, time(16, 0), time(17, 30)),
+            (de_60, MARTES, time(22, 0), time(23, 0)),
+            (de_60, MARTES + timedelta(days=1), time(9, 0), time(10, 0)),
+            (de_60, MARTES + timedelta(days=4), time(9, 0), time(10, 0)),
+            (de_60, HOY, time(9, 0), time(10, 0)),
+            (de_60, HOY, time(11, 0), time(12, 0)),
+            (de_60, HOY, time(12, 30), time(13, 30)),
+            (de_90, MARTES, time(14, 0), time(15, 30)),
+            (de_90, MARTES, time(15, 30), time(17, 0)),
+            (de_90, MARTES, time(17, 0), time(18, 30)),
+            (de_90, MARTES, time(18, 30), time(20, 0)),
+            (de_90, MARTES, time(15, 0), time(16, 30)),
+            (de_90, MARTES + timedelta(days=7), time(14, 0), time(15, 0)),
+            (de_120, MARTES, time(15, 30), time(17, 30)),
+            (de_120, MARTES, time(21, 30), time(23, 30)),
+            (de_120, MARTES, time(16, 0), time(18, 0)),
+            (en_mantenimiento, MARTES, time(14, 0), time(15, 0)),
+        ]
+        estados = [EstadoReserva.PENDIENTE, EstadoReserva.CONFIRMADA, EstadoReserva.SENADA]
+        reservas = [
+            crear_reserva(cancha, fecha, inicio, fin, estado=estados[indice % 3], usuario=None)
+            for indice, (cancha, fecha, inicio, fin) in enumerate(casos)
+        ]
+        reservas += [
+            crear_reserva(de_60, MARTES, time(9, 30), time(10, 30), estado=estado, usuario=None)
+            for estado in (EstadoReserva.CANCELADA_COMPLEJO, EstadoReserva.COMPLETADA, EstadoReserva.AUSENTE)
+        ]
+        reservas.append(crear_reserva(de_60, HOY - timedelta(days=7), time(8, 30), time(9, 30), usuario=None))
+        return reservas
+
+    def test_sql_y_python_coinciden_en_cada_caso(self, escenario):
+        from core.models import Reserva
+        from core.services import ConflictoOperatoriaService
+
+        anotadas = {
+            reserva.pk: reserva.motivo_conflicto
+            for reserva in ConflictoOperatoriaService.anotar(Reserva.objects.select_related('cancha'))
+        }
+        en_python = {
+            reserva.pk: ConflictoOperatoriaService.motivo_de_reserva(Reserva.objects.select_related('cancha').get(pk=reserva.pk))
+            for reserva in escenario
+        }
+
+        assert anotadas == en_python
+        assert set(en_python.values()) == {None, MOTIVO_FUERA_DE_LOS_TURNOS, MOTIVO_CANCHA_EN_MANTENIMIENTO}
+
+    def test_el_filtro_no_crece_con_las_reservas(self, superadmin, crear_reserva, cliente_de, cancha, horario):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        api = cliente_de(superadmin)
+
+        def _consultas():
+            with CaptureQueriesContext(connection) as capturadas:
+                assert api.get(URL_AGENDA, {'con_conflicto': 'true'}).status_code == status.HTTP_200_OK
+            return len(capturadas)
+
+        crear_reserva(cancha, MARTES, time(14, 30), time(15, 30), usuario=None)
+        pocas = _consultas()
+        for semana in range(1, 8):
+            for hora in (14, 16, 18):
+                crear_reserva(cancha, MARTES + timedelta(days=7 * semana), time(hora, 30), time(hora + 1, 30),
+                              usuario=None)
+
+        assert _consultas() == pocas
+        assert api.get(URL_AGENDA, {'con_conflicto': 'true'}).json()['count'] == 22

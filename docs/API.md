@@ -112,6 +112,8 @@ Filtros de `GET /api/complejos/`: `deporte` (id), `cobertura` (`1` descubierta, 
 - Los mensajes que envía el cliente se ignoran.
 - Un complejo no habilitado o inexistente rechaza la conexión, igual que una página de otro origen.
 - Si la conexión se corta, al reconectar se vuelve a pedir la grilla por REST: los eventos perdidos no se reenvían.
+- Para no recargar de más: ante un evento, pedir la grilla solo si la fecha que se está viendo cae en el rango y `cancha_id` es nulo o es una de las canchas mostradas; y agrupar los eventos que lleguen casi juntos (alrededor de 1 segundo) en una sola recarga.
+- La grilla tiene su propio límite de solicitudes por origen, más amplio que el del resto de las rutas públicas, y responde `429` al superarlo.
 - Los cambios de canchas y horarios también se anuncian, con `cancha_id`, `fecha_desde` igual a hoy, `fecha_hasta` nulo y horas nulas. Si el complejo deja de estar habilitado, el servidor cierra las conexiones abiertas.
 
 ## Reservas del jugador

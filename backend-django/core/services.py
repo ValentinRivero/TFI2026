@@ -901,7 +901,13 @@ class DifusionGrillaService:
     @staticmethod
     def programar(complejo_id, **cambio):
         evento = {'event': EVENTO_GRILLA_ACTUALIZADA, **cambio}
-        transaction.on_commit(lambda: DifusionGrillaService.publicar(complejo_id, evento))
+        transaction.on_commit(lambda: DifusionGrillaService._confirmado(complejo_id, evento))
+
+    @staticmethod
+    def _confirmado(complejo_id, evento):
+        # Primero se invalida la caché: cuando los clientes reciban el evento y pidan la grilla, ya está fresca.
+        CacheGrillaService.invalidar(complejo_id)
+        DifusionGrillaService.publicar(complejo_id, evento)
 
     @staticmethod
     def programar_operatoria(complejo_id, cancha_id=None):
@@ -917,7 +923,11 @@ class DifusionGrillaService:
     @staticmethod
     def programar_cierre(complejo_id):
         """El complejo dejó de publicar su grilla: las conexiones abiertas se cierran después del commit."""
-        transaction.on_commit(lambda: DifusionGrillaService._enviar(complejo_id, {'type': TIPO_MENSAJE_CIERRE}))
+        def cerrar():
+            CacheGrillaService.invalidar(complejo_id)
+            DifusionGrillaService._enviar(complejo_id, {'type': TIPO_MENSAJE_CIERRE})
+
+        transaction.on_commit(cerrar)
 
     @staticmethod
     def publicar(complejo_id, evento):
@@ -1144,21 +1154,14 @@ class GrillaService:
         return BLOQUE_LIBRE, None
 
     @staticmethod
-    def calcular(complejo_id, fecha):
+    def _calcular_desde_la_base(complejo_id, fecha):
         """
-        Grilla pública de un día: los bloques de cada rango horario activo de las canchas activas, con su
-        precio y su estado. La cantidad de consultas es fija, sin importar canchas ni reservas.
-        Un bloque libre que el motor de reservas rechazaría (hoy, ya iniciado; o más allá de la anticipación
-        máxima) se informa NO_DISPONIBLE.
+        Parte cacheable de la grilla: canchas, bloques, precios y estados según reservas, turnos fijos y
+        excepciones. Seis consultas fijas, sin importar canchas ni reservas. None si el complejo no es público.
         """
-        hoy = timezone.localdate()
-        if fecha < hoy:
-            raise ValidationError({'fecha': 'La grilla se consulta desde hoy en adelante.'})
-        hora_actual = timezone.localtime().time() if fecha == hoy else None
-        fuera_de_anticipacion = fecha > fecha_maxima_de_reserva()
         complejo = ComplejoRepository.publico_por_id(complejo_id)
         if complejo is None:
-            raise NotFound()
+            return None
 
         dia_semana = fecha.weekday()
         canchas = GrillaRepository.canchas_activas(complejo.pk)
@@ -1188,21 +1191,97 @@ class GrillaService:
                     estado, motivo = GrillaService._estado_del_bloque(
                         inicio, fin, ocupaciones[cancha.pk], excepciones[cancha.pk],
                     )
-                    ya_iniciado = hora_actual is not None and inicio <= hora_actual
-                    if estado == BLOQUE_LIBRE and (ya_iniciado or fuera_de_anticipacion):
-                        estado = BLOQUE_NO_DISPONIBLE
                     bloques.append({
                         'hora_inicio': inicio, 'hora_fin': fin, 'precio': precio, 'estado': estado, 'motivo': motivo,
                     })
             resultado.append({
                 'id': cancha.pk,
                 'nombre': cancha.nombre,
-                'deporte': cancha.deporte,
+                'deporte': {'id': cancha.deporte_id, 'nombre': cancha.deporte.nombre},
                 'duracion_turno_min': cancha.duracion_turno_min,
                 'bloques': bloques,
             })
 
-        return {'complejo': complejo, 'fecha': fecha, 'dia_semana': dia_semana, 'canchas': resultado}
+        return {
+            'complejo': {'id': complejo.pk, 'nombre': complejo.nombre},
+            'fecha': fecha,
+            'dia_semana': dia_semana,
+            'canchas': resultado,
+        }
+
+    @staticmethod
+    def calcular(complejo_id, fecha):
+        """
+        Grilla pública de un día: los bloques de cada rango horario activo de las canchas activas, con su
+        precio y su estado. La parte que sale de la base se cachea (CacheGrillaService) y las marcas que dependen
+        del reloj se aplican en cada pedido: un bloque libre que el motor de reservas rechazaría (hoy, ya
+        iniciado; o más allá de la anticipación máxima) se informa NO_DISPONIBLE.
+        """
+        hoy = timezone.localdate()
+        if fecha < hoy:
+            raise ValidationError({'fecha': 'La grilla se consulta desde hoy en adelante.'})
+        grilla = CacheGrillaService.obtener(
+            complejo_id, fecha, lambda: GrillaService._calcular_desde_la_base(complejo_id, fecha),
+        )
+        if grilla is None:
+            raise NotFound()
+
+        hora_actual = timezone.localtime().time() if fecha == hoy else None
+        fuera_de_anticipacion = fecha > fecha_maxima_de_reserva()
+        if hora_actual is not None or fuera_de_anticipacion:
+            for cancha in grilla['canchas']:
+                for bloque in cancha['bloques']:
+                    ya_iniciado = hora_actual is not None and bloque['hora_inicio'] <= hora_actual
+                    if bloque['estado'] == BLOQUE_LIBRE and (ya_iniciado or fuera_de_anticipacion):
+                        bloque['estado'] = BLOQUE_NO_DISPONIBLE
+        return grilla
+
+
+SEGUNDOS_DE_VIDA_DE_LA_GRILLA = 60
+
+
+class CacheGrillaService:
+    """
+    Caché de la grilla pública por complejo y fecha. Cada evento grilla_actualizada hace que todas las grillas
+    abiertas del complejo vuelvan a pedirla: sin caché, N clientes son N cálculos por evento.
+    La clave lleva una versión por complejo que DifusionGrillaService incrementa después de cada commit, así un
+    cambio confirmado nunca se sirve viejo. La versión se lee antes de calcular: un cálculo concurrente queda
+    guardado bajo la versión anterior y no se vuelve a servir. El TTL corto cubre los cambios que no pasan por la
+    difusión (por ejemplo, el admin de Django). Si la caché falla, la grilla se calcula directo de la base.
+    """
+
+    @staticmethod
+    def _clave_version(complejo_id):
+        return f'grilla_version:{int(complejo_id)}'
+
+    @staticmethod
+    def obtener(complejo_id, fecha, calcular):
+        try:
+            cache.add(CacheGrillaService._clave_version(complejo_id), 1, timeout=None)
+            version = cache.get(CacheGrillaService._clave_version(complejo_id), 1)
+            clave = f'grilla:{int(complejo_id)}:{fecha.isoformat()}:v{version}'
+            guardada = cache.get(clave)
+        except Exception:
+            logger_difusion.exception('Caché de la grilla no disponible; se calcula sin caché')
+            return calcular()
+        if guardada is not None:
+            return guardada['grilla']
+        grilla = calcular()
+        try:
+            # Se envuelve para poder cachear también "complejo no público" (None) sin confundirlo con un fallo.
+            cache.set(clave, {'grilla': grilla}, SEGUNDOS_DE_VIDA_DE_LA_GRILLA)
+        except Exception:
+            logger_difusion.exception('No se pudo guardar la grilla en caché')
+        return grilla
+
+    @staticmethod
+    def invalidar(complejo_id):
+        clave = CacheGrillaService._clave_version(complejo_id)
+        try:
+            cache.add(clave, 1, timeout=None)
+            cache.incr(clave)
+        except Exception:
+            logger_difusion.exception('No se pudo invalidar la grilla del complejo %s', complejo_id)
 
 
 class DisponibilidadService:
@@ -1641,17 +1720,18 @@ class TurnoFijoService:
             )
 
     @staticmethod
-    def fechas_en_espera(turnos):
+    def fechas_en_espera(turnos, excepciones=None):
         """
         {turno_id: [{'fecha', 'motivo'}]}: fechas desde hoy de turnos fijos vigentes que cubre una excepción activa y
         que el complejo todavía no decidió (no tienen reserva generada). Siguen ocupando la grilla mientras esperan.
-        Dos consultas para toda la página, sin importar cuántos turnos fijos haya.
+        Dos consultas para toda la página, sin importar cuántos turnos fijos haya; con `excepciones` dadas, una.
         """
         vigentes = [turno for turno in turnos if turno.estado == EstadoTurnoFijo.VIGENTE]
         if not vigentes:
             return {}
         hoy = timezone.localdate()
-        excepciones = ExcepcionHorariaRepository.activas_desde({turno.cancha.complejo_id for turno in vigentes}, hoy)
+        if excepciones is None:
+            excepciones = ExcepcionHorariaRepository.activas_desde({turno.cancha.complejo_id for turno in vigentes}, hoy)
         generadas = ReservaRepository.fechas_generadas([turno.pk for turno in vigentes], hoy)
 
         resultado = {}
@@ -1679,22 +1759,24 @@ class TurnoFijoService:
 
     @staticmethod
     def filtrar_en_espera(queryset, en_espera):
-        con_fechas = set(TurnoFijoService.fechas_en_espera(list(queryset)))
+        """Solo los candidatos que deja el prefiltro en SQL pasan por el cálculo exacto en Python."""
+        candidatos = TurnoFijoRepository.con_excepcion_que_los_alcanza(queryset, timezone.localdate())
+        con_fechas = set(TurnoFijoService.fechas_en_espera(list(candidatos)))
         return queryset.filter(pk__in=con_fechas) if en_espera else queryset.exclude(pk__in=con_fechas)
 
     @staticmethod
     def avisar_fechas_en_espera(excepcion):
         """Una excepción nueva que deja fechas de turnos fijos sin decidir genera un aviso urgente al complejo."""
-        turnos = TurnoFijoRepository.vigentes_alcanzados(excepcion.complejo_id, excepcion.cancha_id)
-        afectados, cantidad = [], 0
-        for turno_id, fechas in TurnoFijoService.fechas_en_espera(turnos).items():
-            propias = [
-                item for item in fechas
-                if excepcion.fecha_inicio.isoformat() <= item['fecha'] <= excepcion.fecha_fin.isoformat()
-            ]
-            if propias:
-                afectados.append(turno_id)
-                cantidad += len(propias)
+        # Solo esta excepción y solo los turnos que puede alcanzar: no se recalcula todo el complejo.
+        propia = {
+            'complejo_id': excepcion.complejo_id, 'cancha_id': excepcion.cancha_id,
+            'fecha_inicio': excepcion.fecha_inicio, 'fecha_fin': excepcion.fecha_fin,
+            'es_dia_completo': excepcion.es_dia_completo, 'hora_inicio': excepcion.hora_inicio,
+            'hora_fin': excepcion.hora_fin, 'tipo_motivo': excepcion.tipo_motivo,
+        }
+        en_espera = TurnoFijoService.fechas_en_espera(TurnoFijoRepository.alcanzados_por(excepcion), [propia])
+        afectados = sorted(en_espera)
+        cantidad = sum(len(fechas) for fechas in en_espera.values())
         if afectados:
             AvisoComplejoService.programar(
                 excepcion.complejo_id, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_URGENTE,
@@ -1842,14 +1924,30 @@ class ConflictoOperatoriaService:
         ]
 
     @staticmethod
-    def motivo(estado_cancha, rangos, duracion, dia_semana, inicio, fin):
+    def bloques_por_dia(rangos, duracion):
+        """{dia_semana: {(inicio, fin)}}: los turnos válidos de la grilla, calculados una sola vez por configuración."""
+        bloques = defaultdict(set)
+        for dia, apertura, cierre in rangos:
+            bloques[dia].update(GrillaService.generar_bloques(apertura, cierre, duracion))
+        return bloques
+
+    @staticmethod
+    def motivo(estado_cancha, bloques, dia_semana, inicio, fin):
         """Por qué un turno quedó fuera de la grilla de su cancha, o None si sigue siendo un bloque válido."""
         if estado_cancha != EstadoCancha.ACTIVA:
             return MOTIVO_CANCHA_EN_MANTENIMIENTO
-        for dia, apertura, cierre in rangos:
-            if dia == dia_semana and (inicio, fin) in GrillaService.generar_bloques(apertura, cierre, duracion):
-                return None
+        if (inicio, fin) in bloques.get(dia_semana, ()):
+            return None
         return MOTIVO_FUERA_DE_LOS_TURNOS
+
+    @staticmethod
+    def _bloques_de_cancha(cancha):
+        horarios = getattr(cancha, 'horarios_activos', None)
+        if horarios is None:
+            horarios = HorarioAperturaRepository.activos_de_cancha(cancha.pk)
+        return ConflictoOperatoriaService.bloques_por_dia(
+            ConflictoOperatoriaService._rangos(horarios), cancha.duracion_turno_min,
+        )
 
     @staticmethod
     def motivo_de_reserva(reserva):
@@ -1857,11 +1955,8 @@ class ConflictoOperatoriaService:
         if reserva.estado not in ESTADOS_RESERVA_A_RESOLVER or _ya_comenzo(reserva.fecha_turno, reserva.hora_inicio):
             return None
         cancha = reserva.cancha
-        horarios = getattr(cancha, 'horarios_activos', None)
-        if horarios is None:
-            horarios = HorarioAperturaRepository.activos_de_cancha(cancha.pk)
         return ConflictoOperatoriaService.motivo(
-            cancha.estado, ConflictoOperatoriaService._rangos(horarios), cancha.duracion_turno_min,
+            cancha.estado, ConflictoOperatoriaService._bloques_de_cancha(cancha),
             reserva.fecha_turno.weekday(), reserva.hora_inicio, reserva.hora_fin,
         )
 
@@ -1871,46 +1966,43 @@ class ConflictoOperatoriaService:
         if turno_fijo.fecha_fin_vigencia is not None and turno_fijo.fecha_fin_vigencia < timezone.localdate():
             return None
         cancha = turno_fijo.cancha
-        horarios = getattr(cancha, 'horarios_activos', None)
-        if horarios is None:
-            horarios = HorarioAperturaRepository.activos_de_cancha(cancha.pk)
         return ConflictoOperatoriaService.motivo(
-            cancha.estado, ConflictoOperatoriaService._rangos(horarios), cancha.duracion_turno_min,
+            cancha.estado, ConflictoOperatoriaService._bloques_de_cancha(cancha),
             turno_fijo.dia_semana, turno_fijo.hora_inicio, turno_fijo.hora_fin,
         )
 
     @staticmethod
-    def filtrar_reservas(queryset, con_conflicto):
-        """
-        Filtro de la agenda. El motivo depende de los horarios vigentes, así que se evalúa en Python sobre las
-        reservas a resolver desde hoy, acotadas por la anticipación máxima de reserva.
-        """
-        en_conflicto = [
-            reserva.pk for reserva in ReservaRepository.a_resolver_desde(queryset, timezone.localdate())
-            if ConflictoOperatoriaService.motivo_de_reserva(reserva) is not None
-        ]
-        return queryset.filter(pk__in=en_conflicto) if con_conflicto else queryset.exclude(pk__in=en_conflicto)
+    def anotar(queryset):
+        """Agrega `motivo_conflicto` calculado en SQL; se aplica por pedido porque depende de la fecha y la hora."""
+        if 'motivo_conflicto' in queryset.query.annotations:
+            return queryset
+        ahora = timezone.localtime()
+        return ReservaRepository.anotar_conflicto_operatoria(
+            queryset, ahora.date(), ahora.time(), MOTIVO_CANCHA_EN_MANTENIMIENTO, MOTIVO_FUERA_DE_LOS_TURNOS,
+        )
 
     @staticmethod
-    def _afectados(cancha, rangos, duracion, estado):
-        """Reservas por jugar y turnos fijos fuera de la grilla en esa configuración, cada uno con su motivo."""
-        hoy = timezone.localdate()
-        reservas, turnos = [], []
-        for reserva in ReservaRepository.a_resolver_de_cancha(cancha.pk, hoy):
-            if _ya_comenzo(reserva['fecha_turno'], reserva['hora_inicio']):
-                continue
+    def filtrar_reservas(queryset, con_conflicto):
+        """Filtro de la agenda resuelto en SQL: no carga reservas en Python ni arma listas de ids."""
+        return ConflictoOperatoriaService.anotar(queryset).filter(motivo_conflicto__isnull=not con_conflicto)
+
+    @staticmethod
+    def _afectados(reservas, turnos, bloques, estado):
+        """Reservas y turnos fijos fuera de la grilla en una configuración, cada uno con su motivo. Sin consultas."""
+        afectadas, afectados = [], []
+        for reserva in reservas:
             motivo = ConflictoOperatoriaService.motivo(
-                estado, rangos, duracion, reserva['fecha_turno'].weekday(), reserva['hora_inicio'], reserva['hora_fin'],
+                estado, bloques, reserva['fecha_turno'].weekday(), reserva['hora_inicio'], reserva['hora_fin'],
             )
             if motivo:
-                reservas.append({**reserva, 'motivo': motivo})
-        for turno in TurnoFijoRepository.activos_de_cancha(cancha.pk, hoy):
+                afectadas.append({**reserva, 'motivo': motivo})
+        for turno in turnos:
             motivo = ConflictoOperatoriaService.motivo(
-                estado, rangos, duracion, turno['dia_semana'], turno['hora_inicio'], turno['hora_fin'],
+                estado, bloques, turno['dia_semana'], turno['hora_inicio'], turno['hora_fin'],
             )
             if motivo:
-                turnos.append({**turno, 'motivo': motivo})
-        return reservas, turnos
+                afectados.append({**turno, 'motivo': motivo})
+        return afectadas, afectados
 
     @staticmethod
     def _con_impacto_nuevo(antes, despues):
@@ -1927,13 +2019,23 @@ class ConflictoOperatoriaService:
         y sin novedades no aporta. Sin `confirmar` responde 409 con el detalle (sin datos personales); con
         `confirmar`, lo audita.
         """
+        # Una sola lectura de reservas y turnos fijos; las dos configuraciones se evalúan en memoria.
+        hoy = timezone.localdate()
+        por_jugar = [
+            reserva for reserva in ReservaRepository.a_resolver_de_cancha(cancha.pk, hoy)
+            if not _ya_comenzo(reserva['fecha_turno'], reserva['hora_inicio'])
+        ]
+        turnos_activos = TurnoFijoRepository.activos_de_cancha(cancha.pk, hoy)
         actuales = ConflictoOperatoriaService._rangos(HorarioAperturaRepository.activos_de_cancha(cancha.pk))
         nuevos = actuales if horarios is None else ConflictoOperatoriaService._rangos(horarios)
         reservas_antes, turnos_antes = ConflictoOperatoriaService._afectados(
-            cancha, actuales, cancha.duracion_turno_min, cancha.estado,
+            por_jugar, turnos_activos,
+            ConflictoOperatoriaService.bloques_por_dia(actuales, cancha.duracion_turno_min), cancha.estado,
         )
         reservas_despues, turnos_despues = ConflictoOperatoriaService._afectados(
-            cancha, nuevos, duracion or cancha.duracion_turno_min, cancha.estado if estado is None else estado,
+            por_jugar, turnos_activos,
+            ConflictoOperatoriaService.bloques_por_dia(nuevos, duracion or cancha.duracion_turno_min),
+            cancha.estado if estado is None else estado,
         )
         reservas = ConflictoOperatoriaService._con_impacto_nuevo(reservas_antes, reservas_despues)
         turnos = ConflictoOperatoriaService._con_impacto_nuevo(turnos_antes, turnos_despues)

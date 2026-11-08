@@ -484,6 +484,40 @@ class TestFechasEnEspera:
 
         assert _consultas() == pocas
 
+    def test_el_filtro_en_espera_no_crece_con_los_turnos_fijos(
+        self, operador, crear_turno_fijo, cliente_de, complejo, crear_cancha, cancha, turno, feriado,
+    ):
+        api = cliente_de(operador)
+
+        def _consultas():
+            with CaptureQueriesContext(connection) as capturadas:
+                respuesta = api.get('/api/turnos-fijos/', {'en_espera': 'true'})
+            return len(capturadas), respuesta.json()['count']
+
+        pocas, cantidad = _consultas()
+        for numero in range(6):
+            otra = crear_cancha(complejo, f'Cancha {numero + 2}')
+            crear_turno_fijo(otra, DiaSemana.MIERCOLES, time(21, 0), time(22, 0), desde=MARTES)
+            crear_turno_fijo(otra, DiaSemana.MARTES, time(14, 0), time(15, 0), desde=MARTES, hasta=_martes(1))
+
+        assert _consultas() == (pocas, cantidad) == (pocas, 1)
+
+    def test_el_aviso_cuenta_solo_las_fechas_de_la_excepcion_nueva(
+        self, dueno, crear_excepcion_horaria, cliente_de, complejo, turno, django_capture_on_commit_callbacks,
+    ):
+        crear_excepcion_horaria(complejo, _martes(4), tipo_motivo=TipoMotivoExcepcion.CLIMA)
+        datos = {
+            'complejo': complejo.id, 'cancha': None, 'fecha_inicio': _martes(1).isoformat(),
+            'fecha_fin': _martes(1).isoformat(), 'es_dia_completo': 1, 'tipo_motivo': TipoMotivoExcepcion.FERIADO,
+        }
+
+        with mock.patch.object(AvisoComplejoService, 'entregar') as entregar:
+            with django_capture_on_commit_callbacks(execute=True):
+                cliente_de(dueno).post('/api/excepciones/', datos, format='json')
+
+        (aviso,) = [llamada.args[0] for llamada in entregar.call_args_list]
+        assert '1 fecha de turnos fijos' in aviso['mensaje']
+
     def test_crear_una_excepcion_que_deja_fechas_en_espera_avisa_con_urgencia(
         self, dueno, cliente_de, complejo, turno, django_capture_on_commit_callbacks,
     ):

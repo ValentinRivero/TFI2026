@@ -20,6 +20,15 @@ class RegistroRateThrottle(PorIpRateThrottle):
     scope = 'registro'
 
 
+class GrillaRateThrottle(PorIpRateThrottle):
+    """
+    La grilla es pública y se vuelve a pedir con cada evento del WebSocket: tiene un límite propio, más amplio que
+    el anónimo general, para no frenar a varios usuarios que comparten una IP. Su costo lo acota la caché.
+    """
+
+    scope = 'grilla'
+
+
 class ReservaRateThrottle(UserRateThrottle):
     """Limita las altas de reservas por cuenta: protege al servidor y evita que una cuenta acapare la grilla."""
 
