@@ -1,14 +1,57 @@
 from django.conf import settings
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.filters import OrderingFilter
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
 
-from .permissions import TienePermisoRBAC
-from .serializers import FiltroAuditoriaSerializer, LogAuditoriaSerializer
+from .filters import (
+    BusquedaFlexibleFilter,
+    CanchaFilter,
+    CatalogoComplejoFilter,
+    ContratoFilter,
+    HorarioAperturaFilter,
+    UsuarioFilter,
+)
+from .permissions import AdministraComplejo, TienePermisoRBAC
+from .serializers import (
+    CanchaSerializer,
+    CatalogoMaestroSerializer,
+    ComplejoAdminSerializer,
+    ComplejoCatalogoSerializer,
+    ComplejoConfiguracionSerializer,
+    ComplejoDetallePublicoSerializer,
+    ContratoAltaSerializer,
+    ContratoEstadoSerializer,
+    ContratoSerializer,
+    FiltroAuditoriaSerializer,
+    HorarioAperturaSerializer,
+    LogAuditoriaSerializer,
+    OperadorSerializer,
+    ServiciosComplejoSerializer,
+    UsuarioAdminEdicionSerializer,
+    UsuarioAdminSerializer,
+    VincularOperadorSerializer,
+)
 from .serializers_auth import LoginSerializer, PerfilEdicionSerializer, PerfilSerializer, RegistroSerializer
-from .services import AccesoComplejoService, AuditoriaService, SesionService, UsuarioService
+from .services import (
+    AccesoComplejoService,
+    AuditoriaService,
+    CanchaService,
+    CatalogoService,
+    ComplejoService,
+    ContratoService,
+    HorarioAperturaService,
+    OperadorService,
+    RbacService,
+    SesionService,
+    UsuarioAdminService,
+    UsuarioService,
+)
 from .throttles import LoginRateThrottle, RegistroRateThrottle
 
 NOMBRE_COOKIE_REFRESH = 'refresh'
@@ -166,10 +209,304 @@ class AccesoComplejoMixin:
         AccesoComplejoService.validar_operacion(
             self.request.user, self._complejo_id_destino(serializer.validated_data),
         )
-        serializer.save()
+        self.guardar(serializer)
 
     def perform_update(self, serializer):
         destino = self._complejo_id_destino(serializer.validated_data)
         if destino is not None:
             AccesoComplejoService.validar_operacion(self.request.user, destino)
+        self.guardar(serializer)
+
+    def guardar(self, serializer):
+        """Persiste el alta o la edición ya autorizada; las vistas de dominio delegan aquí en su servicio."""
         serializer.save()
+
+
+class PermisosPorCampoMixin:
+    """
+    Algunos campos exigen un permiso además del de la acción (por ejemplo, los precios). Se exige solo
+    cuando el valor enviado cambia el vigente; en un alta, cuando se informa un valor.
+    """
+
+    permisos_por_campo = {}
+
+    def validar_permisos_por_campo(self, datos, instancia=None):
+        for campo, codigo in self.permisos_por_campo.items():
+            if campo not in datos:
+                continue
+            actual = getattr(instancia, campo) if instancia is not None else None
+            if datos[campo] != actual and not RbacService.tiene_permiso(self.request.user, codigo):
+                raise PermissionDenied(f'No tenés permiso para modificar el campo {campo}.')
+
+
+class AccionesPublicasMixin:
+    """
+    Las acciones públicas ignoran el header Authorization, como VistaPublica: un access vencido enviado
+    por el interceptor no debe bloquear la consulta del catálogo.
+    """
+
+    acciones_publicas = frozenset()
+
+    def initialize_request(self, request, *args, **kwargs):
+        request = super().initialize_request(request, *args, **kwargs)
+        if self.action in self.acciones_publicas:
+            request.authenticators = ()
+        return request
+
+    def get_permissions(self):
+        if self.action in self.acciones_publicas:
+            return [AllowAny()]
+        return super().get_permissions()
+
+
+class CatalogoMaestroViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    serializer_class = CatalogoMaestroSerializer
+    # Catálogos maestros chicos y acotados que administra la plataforma (unas pocas filas): van completos.
+    pagination_class = None
+    filter_backends = []
+
+
+class DeporteViewSet(CatalogoMaestroViewSet):
+    def get_queryset(self):
+        return CatalogoService.deportes()
+
+
+class ServicioViewSet(CatalogoMaestroViewSet):
+    def get_queryset(self):
+        return CatalogoService.servicios()
+
+
+BACKENDS_DE_LISTADO = (DjangoFilterBackend, BusquedaFlexibleFilter, OrderingFilter)
+
+
+class ComplejoViewSet(AccionesPublicasMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin,
+                      viewsets.GenericViewSet):
+    """
+    Catálogo público (list, retrieve) y administración del complejo sobre la misma ruta. Lo público solo ve
+    contratos activos; lo administrativo, los complejos que el usuario administra (lo ajeno responde 404).
+    """
+
+    acciones_publicas = frozenset({'list', 'retrieve'})
+    permission_classes = [TienePermisoRBAC, AdministraComplejo]
+    permisos_requeridos = {
+        'administrados': ('ver_panel_complejo',),
+        'partial_update': ('configurar_complejo',),
+        'servicios': ('configurar_complejo',),
+        'operadores': ('ver_operadores',),
+        'agregar_operador': ('gestionar_operadores',),
+        'quitar_operador': ('gestionar_operadores',),
+    }
+    campo_complejo = ''
+    lookup_value_regex = r'\d+'
+    filterset_class = CatalogoComplejoFilter
+    search_fields = ('nombre', 'direccion')
+    ordering_fields = ('nombre', 'precio_desde')
+    ordering = ('nombre', 'id')
+
+    @property
+    def filter_backends(self):
+        return BACKENDS_DE_LISTADO if self.action == 'list' else ()
+
+    def get_queryset(self):
+        if self.action in self.acciones_publicas:
+            return CatalogoService.complejos_publicos()
+        return ComplejoService.listar_administrables(self.request.user)
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return ComplejoCatalogoSerializer
+        if self.action == 'retrieve':
+            return ComplejoDetallePublicoSerializer
+        return ComplejoAdminSerializer
+
+    def _respuesta_paginada(self, queryset, serializer_class):
+        pagina = self.paginate_queryset(queryset)
+        return self.get_paginated_response(serializer_class(pagina, many=True).data)
+
+    def partial_update(self, request, pk=None):
+        complejo = self.get_object()
+        entrada = ComplejoConfiguracionSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        complejo = ComplejoService.actualizar_configuracion(
+            complejo, entrada.validated_data, request.user, AuditoriaService.ip_de_request(request),
+        )
+        return Response(ComplejoAdminSerializer(complejo).data)
+
+    @action(detail=False, methods=['get'])
+    def administrados(self, request):
+        return self._respuesta_paginada(self.get_queryset(), ComplejoAdminSerializer)
+
+    @action(detail=True, methods=['put'])
+    def servicios(self, request, pk=None):
+        complejo = self.get_object()
+        entrada = ServiciosComplejoSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        servicios = ComplejoService.sincronizar_servicios(
+            complejo, entrada.validated_data['servicios'], request.user, AuditoriaService.ip_de_request(request),
+        )
+        return Response({'servicios': CatalogoMaestroSerializer(servicios, many=True).data})
+
+    @action(detail=True, methods=['get'])
+    def operadores(self, request, pk=None):
+        complejo = self.get_object()
+        return self._respuesta_paginada(OperadorService.listar(complejo), OperadorSerializer)
+
+    @operadores.mapping.post
+    def agregar_operador(self, request, pk=None):
+        complejo = self.get_object()
+        entrada = VincularOperadorSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        operador = OperadorService.vincular(
+            complejo, entrada.validated_data['email'], request.user, AuditoriaService.ip_de_request(request),
+        )
+        return Response(OperadorSerializer(operador).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['delete'], url_path=r'operadores/(?P<usuario_id>\d+)')
+    def quitar_operador(self, request, pk=None, usuario_id=None):
+        complejo = self.get_object()
+        OperadorService.desvincular(complejo, int(usuario_id), request.user, AuditoriaService.ip_de_request(request))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CanchaViewSet(PermisosPorCampoMixin, AccesoComplejoMixin, viewsets.ModelViewSet):
+    serializer_class = CanchaSerializer
+    permission_classes = [TienePermisoRBAC, AdministraComplejo]
+    permisos_requeridos = {
+        'list': ('ver_canchas',),
+        'retrieve': ('ver_canchas',),
+        'create': ('administrar_canchas',),
+        'partial_update': ('administrar_canchas',),
+        'destroy': ('administrar_canchas',),
+    }
+    # Un alta fija el precio igual que una edición: si no se exigiera también en el alta, dar de baja y
+    # volver a crear la cancha alcanzaría para cambiar el precio sin el permiso.
+    permisos_por_campo = {'precio_base': 'administrar_precios'}
+    lookup_value_regex = r'\d+'
+    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
+    queryset = CanchaService.listar()
+    filterset_class = CanchaFilter
+    ordering_fields = ('nombre', 'precio_base', 'id')
+    ordering = ('complejo_id', 'nombre', 'id')
+    filter_backends = BACKENDS_DE_LISTADO
+
+    def list(self, request, *args, **kwargs):
+        complejo_id = request.query_params.get('complejo', '')
+        if complejo_id.isdigit() and not AccesoComplejoService.puede_administrar(request.user, complejo_id):
+            raise NotFound()
+        return super().list(request, *args, **kwargs)
+
+    def guardar(self, serializer):
+        self.validar_permisos_por_campo(serializer.validated_data, serializer.instance)
+        if serializer.instance is None:
+            serializer.instance = CanchaService.crear(serializer.validated_data)
+        else:
+            serializer.instance = CanchaService.actualizar(serializer.instance, serializer.validated_data)
+
+    def perform_destroy(self, instance):
+        CanchaService.dar_de_baja(instance)
+
+
+class HorarioAperturaViewSet(PermisosPorCampoMixin, AccesoComplejoMixin, viewsets.ModelViewSet):
+    serializer_class = HorarioAperturaSerializer
+    permission_classes = [TienePermisoRBAC, AdministraComplejo]
+    permisos_requeridos = {
+        'list': ('ver_canchas',),
+        'retrieve': ('ver_canchas',),
+        'create': ('administrar_horarios',),
+        'partial_update': ('administrar_horarios',),
+        'destroy': ('administrar_horarios',),
+    }
+    permisos_por_campo = {'precio_diferenciado': 'administrar_precios'}
+    campo_complejo = 'cancha__complejo'
+    lookup_value_regex = r'\d+'
+    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
+    queryset = HorarioAperturaService.listar()
+    filterset_class = HorarioAperturaFilter
+    ordering_fields = ('dia_semana', 'hora_apertura', 'id')
+    ordering = ('cancha_id', 'dia_semana', 'id')
+    filter_backends = BACKENDS_DE_LISTADO
+
+    def list(self, request, *args, **kwargs):
+        cancha_id = request.query_params.get('cancha', '')
+        if cancha_id.isdigit() and not CanchaService.es_visible_para(request.user, cancha_id):
+            raise NotFound()
+        return super().list(request, *args, **kwargs)
+
+    def guardar(self, serializer):
+        self.validar_permisos_por_campo(serializer.validated_data, serializer.instance)
+        if serializer.instance is None:
+            serializer.instance = HorarioAperturaService.crear(serializer.validated_data)
+        else:
+            serializer.instance = HorarioAperturaService.actualizar(serializer.instance, serializer.validated_data)
+
+    def perform_destroy(self, instance):
+        HorarioAperturaService.dar_de_baja(instance)
+
+
+class ContratoViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    serializer_class = ContratoSerializer
+    permission_classes = [TienePermisoRBAC]
+    permisos_requeridos = {
+        'list': ('ver_contratos',),
+        'retrieve': ('ver_contratos',),
+        'create': ('administrar_contratos',),
+        'partial_update': ('administrar_contratos',),
+    }
+    lookup_value_regex = r'\d+'
+    filter_backends = BACKENDS_DE_LISTADO
+    filterset_class = ContratoFilter
+    search_fields = ('nombre',)
+    ordering_fields = ('nombre', 'estado_contrato', 'fecha_creacion')
+    ordering = ('nombre', 'id')
+
+    def get_queryset(self):
+        return ContratoService.listar()
+
+    def create(self, request):
+        entrada = ContratoAltaSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        complejo = ContratoService.crear(entrada.validated_data, request.user, AuditoriaService.ip_de_request(request))
+        return Response(ContratoSerializer(complejo).data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, pk=None):
+        complejo = self.get_object()
+        entrada = ContratoEstadoSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        complejo = ContratoService.cambiar_estado(
+            complejo.pk, entrada.validated_data['estado_contrato'], request.user,
+            AuditoriaService.ip_de_request(request),
+        )
+        return Response(ContratoSerializer(complejo).data)
+
+
+class UsuarioViewSet(PermisosPorCampoMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin,
+                     viewsets.GenericViewSet):
+    serializer_class = UsuarioAdminSerializer
+    permission_classes = [TienePermisoRBAC]
+    permisos_requeridos = {
+        'list': ('ver_usuarios',),
+        'retrieve': ('ver_usuarios',),
+        'partial_update': ('editar_usuarios',),
+    }
+    permisos_por_campo = {'estado': 'desactivar_usuarios'}
+    lookup_value_regex = r'\d+'
+    filter_backends = BACKENDS_DE_LISTADO
+    filterset_class = UsuarioFilter
+    search_fields = ('nombre_completo', 'email')
+    ordering_fields = ('id', 'nombre_completo', 'fecha_creacion')
+    ordering = ('id',)
+
+    def get_queryset(self):
+        return UsuarioAdminService.listar()
+
+    def partial_update(self, request, pk=None):
+        usuario = self.get_object()
+        entrada = UsuarioAdminEdicionSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        self.validar_permisos_por_campo(entrada.validated_data, usuario)
+        usuario = UsuarioAdminService.actualizar(
+            usuario.pk, entrada.validated_data, request.user, AuditoriaService.ip_de_request(request),
+        )
+        return Response(UsuarioAdminSerializer(usuario).data)

@@ -47,16 +47,41 @@ def crear_complejo(db):
 
     def _crear(propietario, nombre='Complejo de Prueba', **campos):
         campos.setdefault('estado_contrato', EstadoContrato.ACTIVO)
-        return Complejo.objects.create(
-            propietario=propietario,
-            nombre=nombre,
-            direccion='Av. Neustadt 100, Goya',
-            latitud=Decimal('-29.140000'),
-            longitud=Decimal('-59.260000'),
-            **campos,
+        campos.setdefault('direccion', 'Calle Los Aromos 100, Goya')
+        campos.setdefault('latitud', Decimal('-29.140000'))
+        campos.setdefault('longitud', Decimal('-59.260000'))
+        return Complejo.objects.create(propietario=propietario, nombre=nombre, **campos)
+
+    return _crear
+
+
+@pytest.fixture
+def crear_cancha(rbac):
+    from core.models import Cancha, Cobertura, Deporte, Iluminacion, TipoSuperficie
+
+    def _crear(complejo, nombre='Cancha 1', deporte='Fútbol 5', **campos):
+        campos.setdefault('tipo_superficie', TipoSuperficie.CESPED_SINTETICO)
+        campos.setdefault('cobertura', Cobertura.DESCUBIERTA)
+        campos.setdefault('iluminacion', Iluminacion.LED)
+        campos.setdefault('precio_base', Decimal('38000.00'))
+        return Cancha.objects.create(
+            complejo=complejo, nombre=nombre, deporte=Deporte.objects.get(nombre=deporte), **campos,
         )
 
     return _crear
+
+
+@pytest.fixture
+def ofrecer_servicios(rbac):
+    from core.models import ComplejoServicio, Servicio
+
+    def _ofrecer(complejo, *nombres):
+        return [
+            ComplejoServicio.objects.create(complejo=complejo, servicio=Servicio.objects.get(nombre=nombre))
+            for nombre in nombres
+        ]
+
+    return _ofrecer
 
 
 @pytest.fixture

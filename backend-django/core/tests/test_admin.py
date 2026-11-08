@@ -11,7 +11,7 @@ class AdminTests(TestCase):
     def setUpTestData(cls):
         rol = Rol.objects.create(nombre='SUPERADMIN')
         cls.superadmin = Usuario.objects.create_user(
-            email='admin@irracional.net', password='ClaveSegura123', rol=rol, nombre_completo='Admin Test',
+            email='admin@talibre.test', password='ClaveSegura123', rol=rol, nombre_completo='Admin Test',
         )
 
     def setUp(self):

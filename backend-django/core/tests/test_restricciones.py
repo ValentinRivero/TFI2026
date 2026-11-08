@@ -26,7 +26,7 @@ class RestriccionesHorariasTests(TestCase):
     def setUpTestData(cls):
         rol = Rol.objects.create(nombre='DUENO_COMPLEJO')
         cls.dueno = Usuario.objects.create_user(
-            email='dueno@irracional.net', password='ClaveSegura123', rol=rol, nombre_completo='Dueño Test',
+            email='dueno@talibre.test', password='ClaveSegura123', rol=rol, nombre_completo='Dueño Test',
         )
         complejo = Complejo.objects.create(
             propietario=cls.dueno,

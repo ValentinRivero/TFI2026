@@ -3,16 +3,30 @@ from rest_framework.routers import SimpleRouter
 
 from .views import (
     AuditoriaViewSet,
+    CanchaViewSet,
+    ComplejoViewSet,
+    ContratoViewSet,
+    DeporteViewSet,
+    HorarioAperturaViewSet,
     LoginView,
     LogoutView,
     PerfilView,
     RefreshView,
     RegistroView,
     SaludView,
+    ServicioViewSet,
+    UsuarioViewSet,
 )
 
 router = SimpleRouter()
 router.register('auditoria', AuditoriaViewSet, basename='auditoria')
+router.register('deportes', DeporteViewSet, basename='deporte')
+router.register('servicios', ServicioViewSet, basename='servicio')
+router.register('complejos', ComplejoViewSet, basename='complejo')
+router.register('canchas', CanchaViewSet, basename='cancha')
+router.register('horarios', HorarioAperturaViewSet, basename='horario')
+router.register('contratos', ContratoViewSet, basename='contrato')
+router.register('usuarios', UsuarioViewSet, basename='usuario')
 
 urlpatterns = [
     path('health/', SaludView.as_view(), name='salud'),

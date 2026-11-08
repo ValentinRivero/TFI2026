@@ -1,5 +1,3 @@
-import re
-
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -8,20 +6,12 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from .repositories import UsuarioRepository
-from .serializers import TextoLimpioField
+from .serializers import TextoLimpioField, validar_telefono
 from .services import RbacService
 
 Usuario = get_user_model()
 
-PATRON_TELEFONO = re.compile(r'^\+?[0-9\s()-]{6,30}$')
-MENSAJE_TELEFONO = 'Ingresá un teléfono válido: solo números, espacios, guiones, paréntesis y un + inicial.'
 MENSAJE_POLITICA = 'Para usar TaLibre tenés que aceptar la política de privacidad.'
-
-
-def _validar_telefono(valor):
-    if valor and not PATRON_TELEFONO.match(valor):
-        raise serializers.ValidationError(MENSAJE_TELEFONO)
-    return valor
 
 
 def _validar_aceptacion(valor):
@@ -57,7 +47,7 @@ class RegistroSerializer(serializers.Serializer):
         return email
 
     def validate_telefono(self, valor):
-        return _validar_telefono(valor)
+        return validar_telefono(valor)
 
     def validate_acepta_politica_privacidad(self, valor):
         return _validar_aceptacion(valor)
@@ -116,7 +106,7 @@ class PerfilEdicionSerializer(serializers.Serializer):
     acepta_politica_privacidad = serializers.BooleanField(required=False)
 
     def validate_telefono(self, valor):
-        return _validar_telefono(valor)
+        return validar_telefono(valor)
 
     def validate_acepta_politica_privacidad(self, valor):
         return _validar_aceptacion(valor)
