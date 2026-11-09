@@ -278,16 +278,20 @@ Si el cambio deja reservas por jugar (pendientes, confirmadas o señadas) o turn
 - El rango incluye ambos extremos, `fecha_hasta` no puede ser anterior a `fecha_desde` y abarca como máximo 366 días; si no, responde `400`.
 - `cancha_id` debe ser una cancha del complejo, incluidas las que están en mantenimiento o dadas de baja, que conservan su historial; si no, responde `400`. `deporte_id` debe ser un deporte existente. Ambos filtros se combinan.
 - Se consulta también con el contrato pendiente o suspendido. Un complejo dado de baja o ajeno responde `404`; el operador no accede a los reportes (`403`).
-- La respuesta incluye `filtros` con los valores aplicados, ya normalizados:
+- Con `fecha_creacion` y `fecha_modificacion`, los días se cuentan en hora de Argentina: una reserva registrada el 30/11 a las 23:30 entra en noviembre.
+- La respuesta incluye `filtros` con los valores aplicados, ya normalizados, y las métricas del rango:
 
 ```json
 {
   "filtros": {
     "complejo": 4, "fecha_desde": "2026-11-01", "fecha_hasta": "2026-11-30",
     "criterio": "fecha_turno", "cancha_id": null, "deporte_id": null
-  }
+  },
+  "recaudacion": { "total": "1254000.00", "senada": "190000.00" }
 }
 ```
+
+- `recaudacion.total` suma `precio_acordado` de las reservas confirmadas, señadas y completadas (`2`, `3` y `7`); `recaudacion.senada`, solo las señadas, que también forman parte del total. Los montos van como texto con dos decimales, igual que los precios del resto de la API, y un rango sin reservas devuelve `"0.00"`. Las reservas manuales y las fechas registradas de turnos fijos cuentan igual que las web.
 
 ## Sistema
 

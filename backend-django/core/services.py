@@ -46,6 +46,7 @@ from .repositories import (
     GrillaRepository,
     HorarioAperturaRepository,
     PermisoRepository,
+    ReporteRepository,
     ReservaRepository,
     RolRepository,
     SesionRepository,
@@ -2245,4 +2246,9 @@ class ReporteService:
 
     @staticmethod
     def dashboard(usuario, filtros):
-        return {'filtros': ReporteService.validar_filtros(usuario, filtros)}
+        filtros = ReporteService.validar_filtros(usuario, filtros)
+        recaudacion = ReporteRepository.recaudacion(filtros)
+        return {
+            'filtros': filtros,
+            'recaudacion': {clave: f'{monto:.2f}' for clave, monto in recaudacion.items()},
+        }

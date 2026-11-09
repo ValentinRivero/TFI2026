@@ -1,8 +1,10 @@
-from datetime import date
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 
 from django.db.models import (
     Case,
     CharField,
+    DecimalField,
     Exists,
     ExpressionWrapper,
     F,
@@ -12,6 +14,7 @@ from django.db.models import (
     Prefetch,
     Q,
     Subquery,
+    Sum,
     Value,
     When,
 )
@@ -51,6 +54,7 @@ ESTADOS_RESERVA_OCUPANTES = (
 # Reservas que todavía se van a jugar y pueden necesitar una decisión del complejo o del titular.
 ESTADOS_RESERVA_A_RESOLVER = (EstadoReserva.PENDIENTE, EstadoReserva.CONFIRMADA, EstadoReserva.SENADA)
 ESTADOS_TURNO_FIJO_ACTIVOS = (EstadoTurnoFijo.VIGENTE, EstadoTurnoFijo.PAUSADO)
+ESTADOS_RESERVA_RECAUDADOS = (EstadoReserva.CONFIRMADA, EstadoReserva.SENADA, EstadoReserva.COMPLETADA)
 
 
 def _minutos_del_dia(campo):
@@ -858,4 +862,48 @@ class AuditoriaRepository:
             LogAuditoria.objects.select_related('usuario', 'complejo')
             .filter(filtros)
             .order_by('-fecha_creacion', '-id')
+        )
+
+
+class ReporteRepository:
+    _MONTO = DecimalField(max_digits=14, decimal_places=2)
+
+    @staticmethod
+    def _rango_del_criterio(criterio, desde, hasta):
+        if criterio == 'fecha_turno':
+            return {'fecha_turno__range': (desde, hasta)}
+        # Límites en hora local y semiabiertos en lugar de `__date`, para que la consulta use el índice del campo.
+        zona = timezone.get_current_timezone()
+        return {
+            f'{criterio}__gte': datetime.combine(desde, time.min, tzinfo=zona),
+            f'{criterio}__lt': datetime.combine(hasta + timedelta(days=1), time.min, tzinfo=zona),
+        }
+
+    @staticmethod
+    def reservas(filtros):
+        reservas = Reserva.objects.filter(
+            cancha__complejo_id=filtros['complejo'],
+            **ReporteRepository._rango_del_criterio(
+                filtros['criterio'], filtros['fecha_desde'], filtros['fecha_hasta'],
+            ),
+        )
+        if filtros['cancha_id'] is not None:
+            reservas = reservas.filter(cancha_id=filtros['cancha_id'])
+        if filtros['deporte_id'] is not None:
+            reservas = reservas.filter(cancha__deporte_id=filtros['deporte_id'])
+        return reservas
+
+    @staticmethod
+    def recaudacion(filtros):
+        cero = Value(Decimal('0.00'), output_field=ReporteRepository._MONTO)
+        return ReporteRepository.reservas(filtros).aggregate(
+            total=Coalesce(
+                Sum('precio_acordado', filter=Q(estado__in=ESTADOS_RESERVA_RECAUDADOS),
+                    output_field=ReporteRepository._MONTO),
+                cero,
+            ),
+            senada=Coalesce(
+                Sum('precio_acordado', filter=Q(estado=EstadoReserva.SENADA), output_field=ReporteRepository._MONTO),
+                cero,
+            ),
         )

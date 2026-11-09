@@ -1,4 +1,7 @@
-from datetime import date
+from datetime import date, datetime, time
+from decimal import Decimal
+from itertools import count
+from zoneinfo import ZoneInfo
 
 import pytest
 from rest_framework import status
@@ -7,14 +10,20 @@ from core.models import (
     EstadoCancha,
     EstadoContrato,
     EstadoRegistro,
+    EstadoReserva,
     LogAuditoria,
+    Reserva,
     RolPermiso,
     TipoEventoAuditoria,
+    TipoOcupacion,
 )
 from core.services import MAXIMO_DIAS_REPORTE, ReporteService
 
 URL = '/api/reportes/dashboard/'
 MENSAJE_CANCHA_AJENA = 'La cancha no pertenece al complejo.'
+HORA_LOCAL = ZoneInfo('America/Argentina/Buenos_Aires')
+MITAD_DE_MES = date(2026, 11, 16)
+SIN_RECAUDACION = {'total': '0.00', 'senada': '0.00'}
 
 
 def _parametros(complejo, /, **cambios):
@@ -243,3 +252,166 @@ class TestFiltrosAplicados:
                 'fecha_hasta': date(2026, 11, 30),
                 'criterio': 'fecha_turno',
             })
+
+
+@pytest.fixture
+def reservar(cancha, crear_reserva):
+    horas = count(8)
+
+    def _reservar(precio, estado=EstadoReserva.CONFIRMADA, fecha=MITAD_DE_MES, en=None, **campos):
+        hora = next(horas)
+        return crear_reserva(
+            en or cancha, fecha, time(hora), time(hora + 1),
+            estado=estado, precio_acordado=Decimal(precio), **campos,
+        )
+
+    return _reservar
+
+
+def _fijar(reserva, **fechas_locales):
+    Reserva.objects.filter(id=reserva.id).update(**{
+        campo: valor.replace(tzinfo=HORA_LOCAL) for campo, valor in fechas_locales.items()
+    })
+
+
+@pytest.mark.django_db
+class TestRecaudacion:
+    def _recaudacion(self, cliente, complejo, **cambios):
+        respuesta = cliente.get(URL, _parametros(complejo, **cambios))
+        assert respuesta.status_code == status.HTTP_200_OK
+        return respuesta.json()['recaudacion']
+
+    def test_rango_sin_reservas_devuelve_ceros(self, dueno, complejo, cancha, cliente_de):
+        assert self._recaudacion(cliente_de(dueno), complejo) == SIN_RECAUDACION
+
+    def test_solo_suman_los_estados_recaudables(self, dueno, complejo, reservar, cliente_de):
+        # Un dígito por estado: cualquier estado de más o de menos altera el resultado.
+        reservar('1', EstadoReserva.PENDIENTE)
+        reservar('10', EstadoReserva.CONFIRMADA)
+        reservar('100', EstadoReserva.SENADA)
+        reservar('1000', EstadoReserva.CANCELADA_JUGADOR)
+        reservar('10000', EstadoReserva.CANCELADA_COMPLEJO)
+        reservar('100000', EstadoReserva.AUSENTE)
+        reservar('1000000', EstadoReserva.COMPLETADA)
+        reservar('20000000', EstadoReserva.BAJA)
+
+        assert self._recaudacion(cliente_de(dueno), complejo) == {'total': '1000110.00', 'senada': '100.00'}
+
+    def test_suma_centavos_sin_redondeos(self, dueno, complejo, reservar, cliente_de):
+        reservar('12500.50')
+        reservar('0.25', EstadoReserva.SENADA)
+        reservar('3333.33', EstadoReserva.COMPLETADA)
+        reservar('0.01', EstadoReserva.SENADA)
+
+        assert self._recaudacion(cliente_de(dueno), complejo) == {'total': '15834.09', 'senada': '0.26'}
+
+    def test_incluye_ambos_extremos_del_rango(self, dueno, complejo, reservar, cliente_de):
+        reservar('1', fecha=date(2026, 10, 31))
+        reservar('10', fecha=date(2026, 11, 1))
+        reservar('100', fecha=date(2026, 11, 30))
+        reservar('1000', fecha=date(2026, 12, 1))
+
+        assert self._recaudacion(cliente_de(dueno), complejo)['total'] == '110.00'
+
+    def test_un_rango_de_un_dia(self, dueno, complejo, reservar, cliente_de):
+        reservar('10', fecha=MITAD_DE_MES)
+        reservar('100', fecha=date(2026, 11, 17))
+
+        recaudacion = self._recaudacion(
+            cliente_de(dueno), complejo, fecha_desde='2026-11-16', fecha_hasta='2026-11-16',
+        )
+
+        assert recaudacion['total'] == '10.00'
+
+    def test_rango_vacio_aunque_haya_reservas_en_otras_fechas(self, dueno, complejo, reservar, cliente_de):
+        reservar('500', EstadoReserva.SENADA)
+
+        recaudacion = self._recaudacion(
+            cliente_de(dueno), complejo, fecha_desde='2027-01-01', fecha_hasta='2027-01-31',
+        )
+
+        assert recaudacion == SIN_RECAUDACION
+
+    def test_no_mezcla_reservas_de_otro_complejo(self, dueno, complejo, cancha_ajena, reservar, cliente_de):
+        reservar('10')
+        reservar('100', en=cancha_ajena)
+
+        assert self._recaudacion(cliente_de(dueno), complejo)['total'] == '10.00'
+
+    def test_filtra_por_cancha(self, dueno, complejo, cancha, crear_cancha, reservar, cliente_de):
+        otra = crear_cancha(complejo, 'Cancha 2')
+        reservar('10')
+        reservar('100', en=otra)
+
+        assert self._recaudacion(cliente_de(dueno), complejo, cancha_id=otra.id)['total'] == '100.00'
+
+    def test_filtra_por_deporte(self, dueno, complejo, crear_cancha, reservar, cliente_de):
+        padel = crear_cancha(complejo, 'Pádel 1', deporte='Pádel')
+        reservar('10')
+        reservar('100', EstadoReserva.SENADA, en=padel)
+
+        recaudacion = self._recaudacion(cliente_de(dueno), complejo, deporte_id=padel.deporte_id)
+
+        assert recaudacion == {'total': '100.00', 'senada': '100.00'}
+
+    def test_cancha_y_deporte_que_no_coinciden_dan_cero(self, dueno, complejo, cancha, crear_cancha, reservar, cliente_de):
+        padel = crear_cancha(complejo, 'Pádel 1', deporte='Pádel')
+        reservar('10')
+
+        recaudacion = self._recaudacion(cliente_de(dueno), complejo, cancha_id=cancha.id, deporte_id=padel.deporte_id)
+
+        assert recaudacion == SIN_RECAUDACION
+
+    def test_conserva_lo_recaudado_en_canchas_dadas_de_baja(self, dueno, complejo, cancha, reservar, cliente_de):
+        reservar('10', EstadoReserva.COMPLETADA)
+        cancha.estado = EstadoCancha.BAJA
+        cancha.save(update_fields=['estado'])
+
+        assert self._recaudacion(cliente_de(dueno), complejo)['total'] == '10.00'
+
+    def test_incluye_reservas_manuales_y_fechas_de_turnos_fijos(self, dueno, complejo, reservar, cliente_de):
+        reservar('10', usuario=None)
+        reservar('100', usuario=None, tipo_ocupacion=TipoOcupacion.TURNO_FIJO)
+
+        assert self._recaudacion(cliente_de(dueno), complejo)['total'] == '110.00'
+
+
+@pytest.mark.django_db
+class TestRecaudacionPorCriterio:
+    def _total(self, cliente, complejo, criterio):
+        return cliente.get(URL, _parametros(complejo, criterio=criterio)).json()['recaudacion']['total']
+
+    def test_fecha_creacion_toma_cuando_se_registro_y_no_cuando_se_juega(self, dueno, complejo, reservar, cliente_de):
+        anticipada = reservar('10', fecha=date(2026, 12, 20))
+        _fijar(anticipada, fecha_creacion=datetime(2026, 11, 10, 12, 0))
+        jugada_en_rango = reservar('100')
+        _fijar(jugada_en_rango, fecha_creacion=datetime(2026, 10, 20, 12, 0))
+        cliente = cliente_de(dueno)
+
+        assert self._total(cliente, complejo, 'fecha_creacion') == '10.00'
+        assert self._total(cliente, complejo, 'fecha_turno') == '100.00'
+
+    @pytest.mark.parametrize('momento,cuenta', [
+        (datetime(2026, 10, 31, 23, 59), False),
+        (datetime(2026, 11, 1, 0, 0), True),
+        (datetime(2026, 11, 30, 23, 30), True),
+        (datetime(2026, 12, 1, 0, 0), False),
+    ])
+    def test_fecha_creacion_se_corta_en_dias_de_hora_argentina(
+        self, dueno, complejo, reservar, cliente_de, momento, cuenta,
+    ):
+        # 30/11 23:30 en Argentina ya es 1/12 en UTC: el día se decide en hora local.
+        _fijar(reservar('10'), fecha_creacion=momento)
+
+        assert self._total(cliente_de(dueno), complejo, 'fecha_creacion') == ('10.00' if cuenta else '0.00')
+
+    @pytest.mark.parametrize('momento,cuenta', [
+        (datetime(2026, 10, 31, 23, 59), False),
+        (datetime(2026, 11, 1, 0, 0), True),
+        (datetime(2026, 11, 30, 23, 59), True),
+        (datetime(2026, 12, 1, 0, 0), False),
+    ])
+    def test_fecha_modificacion_usa_el_ultimo_cambio(self, dueno, complejo, reservar, cliente_de, momento, cuenta):
+        _fijar(reservar('10', fecha=date(2026, 9, 5)), fecha_modificacion=momento)
+
+        assert self._total(cliente_de(dueno), complejo, 'fecha_modificacion') == ('10.00' if cuenta else '0.00')
