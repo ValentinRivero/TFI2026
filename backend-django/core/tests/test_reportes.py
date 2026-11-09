@@ -1,4 +1,4 @@
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from itertools import count
 from zoneinfo import ZoneInfo
@@ -24,6 +24,11 @@ MENSAJE_CANCHA_AJENA = 'La cancha no pertenece al complejo.'
 HORA_LOCAL = ZoneInfo('America/Argentina/Buenos_Aires')
 MITAD_DE_MES = date(2026, 11, 16)
 SIN_RECAUDACION = {'total': '0.00', 'senada': '0.00'}
+SIN_RESERVAS = {
+    'pendientes': 0, 'confirmadas': 0, 'senadas': 0,
+    'canceladas_jugador': 0, 'canceladas_complejo': 0, 'canceladas_total': 0,
+    'ausentes': 0, 'completadas': 0,
+}
 
 
 def _parametros(complejo, /, **cambios):
@@ -256,12 +261,14 @@ class TestFiltrosAplicados:
 
 @pytest.fixture
 def reservar(cancha, crear_reserva):
-    horas = count(8)
+    turnos = count()
 
     def _reservar(precio, estado=EstadoReserva.CONFIRMADA, fecha=MITAD_DE_MES, en=None, **campos):
-        hora = next(horas)
+        # Quince turnos por día, de 8 a 23; los siguientes pasan al día posterior.
+        numero = next(turnos)
+        hora = 8 + numero % 15
         return crear_reserva(
-            en or cancha, fecha, time(hora), time(hora + 1),
+            en or cancha, fecha + timedelta(days=numero // 15), time(hora), time(hora + 1),
             estado=estado, precio_acordado=Decimal(precio), **campos,
         )
 
@@ -415,3 +422,66 @@ class TestRecaudacionPorCriterio:
         _fijar(reservar('10', fecha=date(2026, 9, 5)), fecha_modificacion=momento)
 
         assert self._total(cliente_de(dueno), complejo, 'fecha_modificacion') == ('10.00' if cuenta else '0.00')
+
+
+@pytest.mark.django_db
+class TestConteosPorEstado:
+    def _conteos(self, cliente, complejo, **cambios):
+        respuesta = cliente.get(URL, _parametros(complejo, **cambios))
+        assert respuesta.status_code == status.HTTP_200_OK
+        return respuesta.json()['conteos']
+
+    def _repetir(self, reservar, veces, estado, **campos):
+        for _ in range(veces):
+            reservar('1000', estado, **campos)
+
+    def test_rango_sin_reservas_devuelve_ceros(self, dueno, complejo, cancha, cliente_de):
+        assert self._conteos(cliente_de(dueno), complejo) == SIN_RESERVAS
+
+    def test_cuenta_cada_estado_y_separa_las_canceladas(self, dueno, complejo, reservar, cliente_de):
+        # Cantidades distintas por estado: un estado contado en el lugar de otro altera el resultado.
+        self._repetir(reservar, 1, EstadoReserva.PENDIENTE)
+        self._repetir(reservar, 2, EstadoReserva.CONFIRMADA)
+        self._repetir(reservar, 3, EstadoReserva.SENADA)
+        self._repetir(reservar, 4, EstadoReserva.CANCELADA_JUGADOR)
+        self._repetir(reservar, 5, EstadoReserva.CANCELADA_COMPLEJO)
+        self._repetir(reservar, 6, EstadoReserva.AUSENTE)
+        self._repetir(reservar, 7, EstadoReserva.COMPLETADA)
+        self._repetir(reservar, 2, EstadoReserva.BAJA)
+
+        assert self._conteos(cliente_de(dueno), complejo) == {
+            'pendientes': 1, 'confirmadas': 2, 'senadas': 3,
+            'canceladas_jugador': 4, 'canceladas_complejo': 5, 'canceladas_total': 9,
+            'ausentes': 6, 'completadas': 7,
+        }
+
+    def test_aplica_los_mismos_filtros_que_la_recaudacion(
+        self, dueno, complejo, cancha, cancha_ajena, crear_cancha, reservar, cliente_de,
+    ):
+        otra = crear_cancha(complejo, 'Cancha 2')
+        reservar('1000', EstadoReserva.CANCELADA_JUGADOR)
+        reservar('1000', EstadoReserva.CANCELADA_JUGADOR, en=otra)
+        reservar('1000', EstadoReserva.CANCELADA_JUGADOR, en=cancha_ajena)
+        reservar('1000', EstadoReserva.CANCELADA_JUGADOR, fecha=date(2026, 12, 1))
+        cliente = cliente_de(dueno)
+
+        assert self._conteos(cliente, complejo)['canceladas_jugador'] == 2
+        assert self._conteos(cliente, complejo, cancha_id=otra.id)['canceladas_jugador'] == 1
+
+    def test_las_cancelaciones_del_mes_por_fecha_de_modificacion(self, dueno, complejo, reservar, cliente_de):
+        cancelada_para_diciembre = reservar('1000', EstadoReserva.CANCELADA_COMPLEJO, fecha=date(2026, 12, 20))
+        _fijar(cancelada_para_diciembre, fecha_modificacion=datetime(2026, 11, 12, 9, 0))
+        cliente = cliente_de(dueno)
+
+        assert self._conteos(cliente, complejo, criterio='fecha_modificacion')['canceladas_complejo'] == 1
+        assert self._conteos(cliente, complejo)['canceladas_complejo'] == 0
+
+    def test_conteos_y_recaudacion_salen_de_las_mismas_reservas(self, dueno, complejo, reservar, cliente_de):
+        reservar('100', EstadoReserva.SENADA)
+        reservar('200', EstadoReserva.SENADA)
+        reservar('50', EstadoReserva.AUSENTE)
+
+        cuerpo = cliente_de(dueno).get(URL, _parametros(complejo)).json()
+
+        assert cuerpo['conteos']['senadas'] == 2
+        assert cuerpo['recaudacion'] == {'total': '300.00', 'senada': '300.00'}

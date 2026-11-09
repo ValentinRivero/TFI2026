@@ -2247,8 +2247,9 @@ class ReporteService:
     @staticmethod
     def dashboard(usuario, filtros):
         filtros = ReporteService.validar_filtros(usuario, filtros)
-        recaudacion = ReporteRepository.recaudacion(filtros)
+        resumen = ReporteRepository.resumen(filtros)
         return {
             'filtros': filtros,
-            'recaudacion': {clave: f'{monto:.2f}' for clave, monto in recaudacion.items()},
+            'recaudacion': {clave: f'{monto:.2f}' for clave, monto in resumen['recaudacion'].items()},
+            'conteos': resumen['conteos'],
         }

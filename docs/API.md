@@ -287,11 +287,17 @@ Si el cambio deja reservas por jugar (pendientes, confirmadas o señadas) o turn
     "complejo": 4, "fecha_desde": "2026-11-01", "fecha_hasta": "2026-11-30",
     "criterio": "fecha_turno", "cancha_id": null, "deporte_id": null
   },
-  "recaudacion": { "total": "1254000.00", "senada": "190000.00" }
+  "recaudacion": { "total": "1254000.00", "senada": "190000.00" },
+  "conteos": {
+    "pendientes": 3, "confirmadas": 12, "senadas": 5,
+    "canceladas_jugador": 4, "canceladas_complejo": 1, "canceladas_total": 5,
+    "ausentes": 2, "completadas": 30
+  }
 }
 ```
 
 - `recaudacion.total` suma `precio_acordado` de las reservas confirmadas, señadas y completadas (`2`, `3` y `7`); `recaudacion.senada`, solo las señadas, que también forman parte del total. Los montos van como texto con dos decimales, igual que los precios del resto de la API, y un rango sin reservas devuelve `"0.00"`. Las reservas manuales y las fechas registradas de turnos fijos cuentan igual que las web.
+- `conteos` trae la cantidad de reservas de cada estado en el rango, con las canceladas por el jugador (`4`) y por el complejo (`5`) por separado y su suma en `canceladas_total`. Un rango vacío devuelve ceros. Con `criterio=fecha_modificacion`, por ejemplo, responde cuántas reservas se cancelaron en el período, aunque el turno fuera para más adelante.
 
 ## Sistema
 

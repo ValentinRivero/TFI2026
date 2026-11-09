@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.db.models import (
     Case,
     CharField,
+    Count,
     DecimalField,
     Exists,
     ExpressionWrapper,
@@ -55,6 +56,15 @@ ESTADOS_RESERVA_OCUPANTES = (
 ESTADOS_RESERVA_A_RESOLVER = (EstadoReserva.PENDIENTE, EstadoReserva.CONFIRMADA, EstadoReserva.SENADA)
 ESTADOS_TURNO_FIJO_ACTIVOS = (EstadoTurnoFijo.VIGENTE, EstadoTurnoFijo.PAUSADO)
 ESTADOS_RESERVA_RECAUDADOS = (EstadoReserva.CONFIRMADA, EstadoReserva.SENADA, EstadoReserva.COMPLETADA)
+CONTEOS_POR_ESTADO = {
+    'pendientes': EstadoReserva.PENDIENTE,
+    'confirmadas': EstadoReserva.CONFIRMADA,
+    'senadas': EstadoReserva.SENADA,
+    'canceladas_jugador': EstadoReserva.CANCELADA_JUGADOR,
+    'canceladas_complejo': EstadoReserva.CANCELADA_COMPLEJO,
+    'ausentes': EstadoReserva.AUSENTE,
+    'completadas': EstadoReserva.COMPLETADA,
+}
 
 
 def _minutos_del_dia(campo):
@@ -894,16 +904,21 @@ class ReporteRepository:
         return reservas
 
     @staticmethod
-    def recaudacion(filtros):
+    def resumen(filtros):
+        """Recaudación y conteo por estado en un único `aggregate` sobre las reservas filtradas."""
         cero = Value(Decimal('0.00'), output_field=ReporteRepository._MONTO)
-        return ReporteRepository.reservas(filtros).aggregate(
-            total=Coalesce(
-                Sum('precio_acordado', filter=Q(estado__in=ESTADOS_RESERVA_RECAUDADOS),
-                    output_field=ReporteRepository._MONTO),
-                cero,
-            ),
-            senada=Coalesce(
-                Sum('precio_acordado', filter=Q(estado=EstadoReserva.SENADA), output_field=ReporteRepository._MONTO),
-                cero,
-            ),
+
+        def suma(condicion):
+            return Coalesce(Sum('precio_acordado', filter=condicion, output_field=ReporteRepository._MONTO), cero)
+
+        totales = ReporteRepository.reservas(filtros).aggregate(
+            recaudacion_total=suma(Q(estado__in=ESTADOS_RESERVA_RECAUDADOS)),
+            recaudacion_senada=suma(Q(estado=EstadoReserva.SENADA)),
+            **{clave: Count('id', filter=Q(estado=estado)) for clave, estado in CONTEOS_POR_ESTADO.items()},
         )
+        conteos = {clave: totales[clave] for clave in CONTEOS_POR_ESTADO}
+        conteos['canceladas_total'] = conteos['canceladas_jugador'] + conteos['canceladas_complejo']
+        return {
+            'recaudacion': {'total': totales['recaudacion_total'], 'senada': totales['recaudacion_senada']},
+            'conteos': conteos,
+        }

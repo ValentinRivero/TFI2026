@@ -37,7 +37,7 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - [ ] **5.1.** Endpoint y lógica agregada del Dashboard y Reportes estadísticos filtrables por rangos de fechas (`fecha_turno`, `fecha_creacion`, `fecha_modificacion`), cancha y deporte (`CU-12`).
   - [x] **5.1.1.** Endpoint `GET /api/reportes/dashboard/` con validación de filtros: rango de hasta 366 días, criterio temporal, cancha del complejo y deporte existente; acceso por `ver_reportes` con 404 ante un complejo ajeno o dado de baja.
   - [x] **5.1.2.** Recaudación confirmada o completada (estados `2`, `3` y `7`) y recaudación señada (estado `3`), con ceros en un rango vacío.
-  - [ ] **5.1.3.** Conteo por estado, con canceladas por el jugador y por el complejo separadas y su subtotal.
+  - [x] **5.1.3.** Conteo por estado, con canceladas por el jugador y por el complejo separadas y su subtotal.
   - [ ] **5.1.4.** Porcentaje de ocupación por cancha: minutos de reservas ocupantes sobre minutos ofertables (horarios de apertura menos excepciones), solo con el criterio `fecha_turno`.
   - [ ] **5.1.5.** Ranking de los horarios más solicitados.
   - [ ] **5.1.6.** Cantidad de consultas constante y cierre del punto.
