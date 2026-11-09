@@ -481,6 +481,15 @@ class ExcepcionHorariaRepository:
         )
 
     @staticmethod
+    def activas_en_rango(complejo_id, desde, hasta):
+        """Excepciones activas del complejo que tocan algún día del rango, sin texto libre."""
+        return list(
+            ExcepcionHoraria.objects.filter(
+                complejo_id=complejo_id, estado=EstadoRegistro.ACTIVO, fecha_inicio__lte=hasta, fecha_fin__gte=desde,
+            ).values('cancha_id', 'fecha_inicio', 'fecha_fin', 'es_dia_completo', 'hora_inicio', 'hora_fin')
+        )
+
+    @staticmethod
     def activas_desde(complejo_ids, hoy):
         """Excepciones activas de esos complejos que todavía no terminaron, sin texto libre."""
         return list(
@@ -902,6 +911,31 @@ class ReporteRepository:
         if filtros['deporte_id'] is not None:
             reservas = reservas.filter(cancha__deporte_id=filtros['deporte_id'])
         return reservas
+
+    @staticmethod
+    def canchas(filtros):
+        canchas = Cancha.objects.filter(complejo_id=filtros['complejo'])
+        if filtros['cancha_id'] is not None:
+            canchas = canchas.filter(id=filtros['cancha_id'])
+        if filtros['deporte_id'] is not None:
+            canchas = canchas.filter(deporte_id=filtros['deporte_id'])
+        return list(
+            canchas.order_by('nombre', 'id').values('id', 'nombre', 'estado', 'duracion_turno_min', 'deporte__estado')
+        )
+
+    @staticmethod
+    def horarios_activos(cancha_ids):
+        return list(
+            HorarioApertura.objects.filter(cancha_id__in=cancha_ids, estado=EstadoRegistro.ACTIVO)
+            .values('cancha_id', 'dia_semana', 'hora_apertura', 'hora_cierre')
+        )
+
+    @staticmethod
+    def reservas_ocupantes(filtros):
+        return list(
+            ReporteRepository.reservas(filtros).filter(estado__in=ESTADOS_RESERVA_OCUPANTES)
+            .values('cancha_id', 'fecha_turno', 'hora_inicio', 'hora_fin')
+        )
 
     @staticmethod
     def resumen(filtros):

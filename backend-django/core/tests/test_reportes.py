@@ -7,6 +7,7 @@ import pytest
 from rest_framework import status
 
 from core.models import (
+    DiaSemana,
     EstadoCancha,
     EstadoContrato,
     EstadoRegistro,
@@ -485,3 +486,207 @@ class TestConteosPorEstado:
 
         assert cuerpo['conteos']['senadas'] == 2
         assert cuerpo['recaudacion'] == {'total': '300.00', 'senada': '300.00'}
+
+
+LUNES_16, MIERCOLES_18, DOMINGO_22 = date(2026, 11, 16), date(2026, 11, 18), date(2026, 11, 22)
+SEMANA = {'fecha_desde': '2026-11-16', 'fecha_hasta': '2026-11-22'}
+SOLO_LUNES = {'fecha_desde': '2026-11-16', 'fecha_hasta': '2026-11-16'}
+DIAS_HABILES = range(DiaSemana.LUNES, DiaSemana.SABADO)
+
+
+@pytest.fixture
+def abrir(crear_horario):
+    def _abrir(cancha, desde, hasta, dias=DIAS_HABILES):
+        for dia in dias:
+            crear_horario(cancha, dia, desde, hasta)
+
+    return _abrir
+
+
+@pytest.fixture
+def ocupar(crear_reserva):
+    def _ocupar(cancha, fecha, desde, hasta, estado=EstadoReserva.CONFIRMADA):
+        return crear_reserva(cancha, fecha, desde, hasta, estado=estado)
+
+    return _ocupar
+
+
+def _ocupacion(cliente, complejo, rango=SEMANA, **cambios):
+    respuesta = cliente.get(URL, _parametros(complejo, **rango, **cambios))
+    assert respuesta.status_code == status.HTTP_200_OK
+    return respuesta.json()['ocupacion']
+
+
+def _de(ocupacion, cancha):
+    return next(fila for fila in ocupacion if fila['cancha_id'] == cancha.id)
+
+
+@pytest.mark.django_db
+class TestOcupacionPorCancha:
+    def test_descuenta_el_dia_cerrado_por_excepcion(
+        self, dueno, complejo, cancha, abrir, ocupar, crear_excepcion_horaria, cliente_de,
+    ):
+        # 18 a 23 de lunes a viernes, turnos de 60: 5 turnos por día, 25 en la semana; el feriado deja 20.
+        abrir(cancha, time(18), time(23))
+        crear_excepcion_horaria(complejo, MIERCOLES_18)
+        turnos_por_dia = {16: (18, 19, 20), 17: (18, 19), 19: (18, 19), 20: (18, 19, 20)}
+        for dia, horas in turnos_por_dia.items():
+            for hora in horas:
+                ocupar(cancha, date(2026, 11, dia), time(hora), time(hora + 1))
+
+        assert _de(_ocupacion(cliente_de(dueno), complejo), cancha) == {
+            'cancha_id': cancha.id, 'cancha': cancha.nombre,
+            'minutos_ofertables': 1200, 'minutos_ocupados': 600, 'porcentaje': 50.0,
+        }
+
+    def test_la_oferta_son_turnos_completos_de_la_grilla(self, dueno, complejo, cancha, abrir, ocupar, cliente_de):
+        # Turnos de 90 entre 18 y 23: 18:00, 19:30 y 21:00; la media hora restante no se ofrece.
+        cancha.duracion_turno_min = 90
+        cancha.save(update_fields=['duracion_turno_min'])
+        abrir(cancha, time(18), time(23), dias=[DiaSemana.LUNES])
+        ocupar(cancha, LUNES_16, time(19, 30), time(21))
+
+        fila = _de(_ocupacion(cliente_de(dueno), complejo, rango=SOLO_LUNES), cancha)
+
+        assert (fila['minutos_ofertables'], fila['minutos_ocupados'], fila['porcentaje']) == (270, 90, 33.33)
+
+    def test_suma_los_rangos_de_un_dia_con_cortes(self, dueno, complejo, cancha, crear_horario, cliente_de):
+        crear_horario(cancha, DiaSemana.LUNES, time(8), time(12))
+        crear_horario(cancha, DiaSemana.LUNES, time(17), time(21))
+
+        assert _de(_ocupacion(cliente_de(dueno), complejo, rango=SOLO_LUNES), cancha)['minutos_ofertables'] == 480
+
+    @pytest.mark.parametrize('desde,hasta,ofertables', [
+        (time(10), time(11), 420),
+        (time(10, 30), time(11, 30), 360),
+    ])
+    def test_una_franja_cierra_cada_turno_que_toca(
+        self, dueno, complejo, cancha, crear_horario, crear_excepcion_horaria, cliente_de, desde, hasta, ofertables,
+    ):
+        crear_horario(cancha, DiaSemana.LUNES, time(8), time(12))
+        crear_horario(cancha, DiaSemana.LUNES, time(17), time(21))
+        crear_excepcion_horaria(complejo, LUNES_16, cancha=cancha, inicio=desde, fin=hasta)
+
+        fila = _de(_ocupacion(cliente_de(dueno), complejo, rango=SOLO_LUNES), cancha)
+
+        assert fila['minutos_ofertables'] == ofertables
+
+    def test_una_excepcion_que_empieza_antes_del_rango(
+        self, dueno, complejo, cancha, abrir, crear_excepcion_horaria, cliente_de,
+    ):
+        abrir(cancha, time(18), time(23))
+        crear_excepcion_horaria(complejo, date(2026, 11, 10), date(2026, 11, 17))
+
+        assert _de(_ocupacion(cliente_de(dueno), complejo), cancha)['minutos_ofertables'] == 900
+
+    def test_ignora_excepciones_dadas_de_baja_de_otra_cancha_o_de_otro_complejo(
+        self, dueno, complejo, complejo_ajeno, cancha, crear_cancha, abrir, crear_excepcion_horaria, cliente_de,
+    ):
+        abrir(cancha, time(18), time(23), dias=[DiaSemana.LUNES])
+        crear_excepcion_horaria(complejo, LUNES_16).desactivar()
+        crear_excepcion_horaria(complejo, LUNES_16, cancha=crear_cancha(complejo, 'Cancha 2'))
+        crear_excepcion_horaria(complejo_ajeno, LUNES_16)
+
+        assert _de(_ocupacion(cliente_de(dueno), complejo, rango=SOLO_LUNES), cancha)['minutos_ofertables'] == 300
+
+    def test_un_horario_dado_de_baja_no_se_ofrece(self, dueno, complejo, cancha, crear_horario, cliente_de):
+        crear_horario(cancha, DiaSemana.LUNES, time(18), time(23))
+        crear_horario(cancha, DiaSemana.LUNES, time(8), time(12)).desactivar()
+
+        assert _de(_ocupacion(cliente_de(dueno), complejo, rango=SOLO_LUNES), cancha)['minutos_ofertables'] == 300
+
+    @pytest.mark.parametrize('estado,ocupa', [
+        (EstadoReserva.PENDIENTE, True),
+        (EstadoReserva.CONFIRMADA, True),
+        (EstadoReserva.SENADA, True),
+        (EstadoReserva.COMPLETADA, True),
+        (EstadoReserva.CANCELADA_JUGADOR, False),
+        (EstadoReserva.CANCELADA_COMPLEJO, False),
+        (EstadoReserva.AUSENTE, False),
+        (EstadoReserva.BAJA, False),
+    ])
+    def test_solo_ocupan_los_estados_ocupantes(
+        self, dueno, complejo, cancha, abrir, ocupar, cliente_de, estado, ocupa,
+    ):
+        abrir(cancha, time(18), time(23), dias=[DiaSemana.LUNES])
+        ocupar(cancha, LUNES_16, time(18), time(19), estado=estado)
+
+        fila = _de(_ocupacion(cliente_de(dueno), complejo, rango=SOLO_LUNES), cancha)
+
+        assert (fila['minutos_ocupados'], fila['porcentaje']) == ((60, 20.0) if ocupa else (0, 0.0))
+
+    def test_un_turno_tomado_antes_de_un_cierre_sigue_ofrecido(
+        self, dueno, complejo, cancha, abrir, ocupar, crear_excepcion_horaria, cliente_de,
+    ):
+        abrir(cancha, time(18), time(23), dias=[DiaSemana.LUNES])
+        ocupar(cancha, LUNES_16, time(19), time(20))
+        crear_excepcion_horaria(complejo, LUNES_16)
+
+        fila = _de(_ocupacion(cliente_de(dueno), complejo, rango=SOLO_LUNES), cancha)
+
+        assert (fila['minutos_ofertables'], fila['minutos_ocupados'], fila['porcentaje']) == (60, 60, 100.0)
+
+    def test_una_reserva_fuera_de_la_grilla_actual_suma_a_la_oferta(
+        self, dueno, complejo, cancha, abrir, ocupar, cliente_de,
+    ):
+        abrir(cancha, time(18), time(23), dias=[DiaSemana.LUNES])
+        ocupar(cancha, LUNES_16, time(15), time(16), estado=EstadoReserva.COMPLETADA)
+        ocupar(cancha, LUNES_16, time(22, 30), time(23, 30))
+
+        fila = _de(_ocupacion(cliente_de(dueno), complejo, rango=SOLO_LUNES), cancha)
+
+        assert (fila['minutos_ofertables'], fila['minutos_ocupados'], fila['porcentaje']) == (390, 120, 30.77)
+
+    def test_rango_sin_reservas_da_cero_por_ciento(self, dueno, complejo, cancha, abrir, cliente_de):
+        abrir(cancha, time(18), time(23))
+
+        assert _de(_ocupacion(cliente_de(dueno), complejo), cancha)['porcentaje'] == 0.0
+
+    def test_cancha_sin_horarios_no_tiene_porcentaje(self, dueno, complejo, cancha, cliente_de):
+        assert _de(_ocupacion(cliente_de(dueno), complejo), cancha) == {
+            'cancha_id': cancha.id, 'cancha': cancha.nombre,
+            'minutos_ofertables': 0, 'minutos_ocupados': 0, 'porcentaje': None,
+        }
+
+    def test_cancha_inactiva_con_reservas_informa_solo_lo_ocupado(
+        self, dueno, complejo, cancha, crear_cancha, abrir, ocupar, cliente_de,
+    ):
+        en_mantenimiento = crear_cancha(complejo, 'Cancha 2', estado=EstadoCancha.EN_MANTENIMIENTO)
+        abrir(en_mantenimiento, time(18), time(23))
+        ocupar(en_mantenimiento, LUNES_16, time(18), time(19), estado=EstadoReserva.COMPLETADA)
+        crear_cancha(complejo, 'Cancha 3', estado=EstadoCancha.BAJA)
+
+        ocupacion = _ocupacion(cliente_de(dueno), complejo)
+
+        assert [fila['cancha'] for fila in ocupacion] == ['Cancha 2', 'Cancha Propia']
+        assert _de(ocupacion, en_mantenimiento) == {
+            'cancha_id': en_mantenimiento.id, 'cancha': 'Cancha 2',
+            'minutos_ofertables': None, 'minutos_ocupados': 60, 'porcentaje': None,
+        }
+
+    def test_aplica_los_filtros_de_cancha_y_deporte(
+        self, dueno, complejo, cancha, cancha_ajena, crear_cancha, cliente_de,
+    ):
+        padel = crear_cancha(complejo, 'Pádel 1', deporte='Pádel')
+        cliente = cliente_de(dueno)
+
+        assert {fila['cancha_id'] for fila in _ocupacion(cliente, complejo)} == {cancha.id, padel.id}
+        assert [fila['cancha_id'] for fila in _ocupacion(cliente, complejo, cancha_id=cancha.id)] == [cancha.id]
+        assert [fila['cancha_id'] for fila in _ocupacion(cliente, complejo, deporte_id=padel.deporte_id)] == [padel.id]
+
+    @pytest.mark.parametrize('criterio', ['fecha_creacion', 'fecha_modificacion'])
+    def test_sin_dias_de_juego_no_hay_ocupacion(self, dueno, complejo, cancha, abrir, cliente_de, criterio):
+        abrir(cancha, time(18), time(23))
+
+        assert _ocupacion(cliente_de(dueno), complejo, criterio=criterio) is None
+
+    def test_cancha_de_un_deporte_dado_de_baja_no_tiene_oferta(
+        self, dueno, complejo, cancha, abrir, ocupar, cliente_de,
+    ):
+        abrir(cancha, time(18), time(23))
+        ocupar(cancha, LUNES_16, time(18), time(19))
+        cancha.deporte.desactivar()
+
+        fila = _de(_ocupacion(cliente_de(dueno), complejo), cancha)
+
+        assert (fila['minutos_ofertables'], fila['minutos_ocupados'], fila['porcentaje']) == (None, 60, None)

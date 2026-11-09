@@ -292,12 +292,21 @@ Si el cambio deja reservas por jugar (pendientes, confirmadas o señadas) o turn
     "pendientes": 3, "confirmadas": 12, "senadas": 5,
     "canceladas_jugador": 4, "canceladas_complejo": 1, "canceladas_total": 5,
     "ausentes": 2, "completadas": 30
-  }
+  },
+  "ocupacion": [
+    { "cancha_id": 7, "cancha": "Cancha 1", "minutos_ofertables": 1200, "minutos_ocupados": 600, "porcentaje": 50.0 }
+  ]
 }
 ```
 
 - `recaudacion.total` suma `precio_acordado` de las reservas confirmadas, señadas y completadas (`2`, `3` y `7`); `recaudacion.senada`, solo las señadas, que también forman parte del total. Los montos van como texto con dos decimales, igual que los precios del resto de la API, y un rango sin reservas devuelve `"0.00"`. Las reservas manuales y las fechas registradas de turnos fijos cuentan igual que las web.
 - `conteos` trae la cantidad de reservas de cada estado en el rango, con las canceladas por el jugador (`4`) y por el complejo (`5`) por separado y su suma en `canceladas_total`. Un rango vacío devuelve ceros. Con `criterio=fecha_modificacion`, por ejemplo, responde cuántas reservas se cancelaron en el período, aunque el turno fuera para más adelante.
+- `ocupacion` trae una fila por cancha del complejo (con los filtros de cancha y deporte), ordenadas por nombre:
+  - **Oferta:** `minutos_ofertables` suma, día por día, los turnos completos que ofrecería la grilla según los horarios de apertura vigentes y la duración del turno, menos los que cierra una excepción activa. Un turno tomado cuenta como ofrecido aunque después se haya cargado un cierre o cambiado el horario.
+  - **Ocupado:** `minutos_ocupados` suma la duración de las reservas pendientes, confirmadas, señadas y completadas. Las fechas de turnos fijos cuentan solo si se registraron en la agenda.
+  - **Porcentaje:** `porcentaje` es ocupado sobre ofertable, con dos decimales y nunca mayor que 100. Es `null` si la cancha no tiene oferta en el rango.
+  - **Canchas sin oferta vigente:** una cancha en mantenimiento, dada de baja o de un deporte dado de baja figura solo si tuvo reservas en el rango, con `minutos_ofertables` y `porcentaje` en `null`.
+  - **Criterio:** con `criterio` distinto de `fecha_turno`, `ocupacion` es `null`, porque el rango no describe días de juego.
 
 ## Sistema
 

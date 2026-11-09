@@ -38,7 +38,7 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - [x] **5.1.1.** Endpoint `GET /api/reportes/dashboard/` con validación de filtros: rango de hasta 366 días, criterio temporal, cancha del complejo y deporte existente; acceso por `ver_reportes` con 404 ante un complejo ajeno o dado de baja.
   - [x] **5.1.2.** Recaudación confirmada o completada (estados `2`, `3` y `7`) y recaudación señada (estado `3`), con ceros en un rango vacío.
   - [x] **5.1.3.** Conteo por estado, con canceladas por el jugador y por el complejo separadas y su subtotal.
-  - [ ] **5.1.4.** Porcentaje de ocupación por cancha: minutos de reservas ocupantes sobre minutos ofertables (horarios de apertura menos excepciones), solo con el criterio `fecha_turno`.
+  - [x] **5.1.4.** Porcentaje de ocupación por cancha: minutos de reservas ocupantes sobre minutos ofertables (horarios de apertura menos excepciones), solo con el criterio `fecha_turno`.
   - [ ] **5.1.5.** Ranking de los horarios más solicitados.
   - [ ] **5.1.6.** Cantidad de consultas constante y cierre del punto.
 - [ ] **5.2.** GraphQL mínimo en `/graphql/` (`core/schema.py`, `core/graphql_views.py`, `config/schema.py`) reutilizando los servicios y permisos de la API REST.

@@ -2205,6 +2205,22 @@ class BajaDeCuentaService:
         return ReservaRepository.limpiar_contactos_de_bajas_hasta(limite)
 
 
+def _minutos(hora):
+    return hora.hour * 60 + hora.minute
+
+
+def _minutos_de_la_union(intervalos):
+    """Minutos cubiertos por intervalos [inicio, fin) que pueden superponerse, contando una sola vez cada minuto."""
+    total, fin_cubierto = 0, None
+    for inicio, fin in sorted((_minutos(inicio), _minutos(fin)) for inicio, fin in intervalos):
+        if fin_cubierto is not None and inicio < fin_cubierto:
+            inicio = fin_cubierto
+        if fin > inicio:
+            total += fin - inicio
+            fin_cubierto = fin
+    return total
+
+
 MAXIMO_DIAS_REPORTE = 366
 CRITERIO_REPORTE_POR_DEFECTO = 'fecha_turno'
 CRITERIOS_REPORTE = ('fecha_turno', 'fecha_creacion', 'fecha_modificacion')
@@ -2245,6 +2261,84 @@ class ReporteService:
         }
 
     @staticmethod
+    def _minutos_ofertables(bloques, excepciones, ocupados):
+        """
+        Turnos de la grilla que ninguna excepción cierra, unidos a los turnos tomados. Una reserva ocupa su horario
+        aunque después se haya cargado un cierre o cambiado la grilla: ese tiempo se ofreció, y así el porcentaje
+        nunca supera el 100 %.
+        """
+        abiertos = [
+            (inicio, fin) for inicio, fin in bloques
+            if not any(_excepcion_cubre(excepcion, inicio, fin) for excepcion in excepciones)
+        ]
+        return _minutos_de_la_union(abiertos + ocupados)
+
+    @staticmethod
+    def ocupacion(filtros):
+        """
+        Minutos ocupados sobre minutos ofertables por cancha, día por día. Solo con el criterio de fecha de turno:
+        con los otros el rango no describe días de juego. La oferta usa los horarios vigentes, porque no se guarda
+        su historial; por eso una cancha inactiva no tiene oferta y aparece solo si tuvo reservas.
+        """
+        if filtros['criterio'] != CRITERIO_REPORTE_POR_DEFECTO:
+            return None
+
+        canchas = ReporteRepository.canchas(filtros)
+        horarios = defaultdict(list)
+        for horario in ReporteRepository.horarios_activos([cancha['id'] for cancha in canchas]):
+            horarios[(horario['cancha_id'], horario['dia_semana'])].append(horario)
+        reservas = defaultdict(list)
+        for reserva in ReporteRepository.reservas_ocupantes(filtros):
+            reservas[(reserva['cancha_id'], reserva['fecha_turno'])].append((reserva['hora_inicio'], reserva['hora_fin']))
+        excepciones = ExcepcionHorariaRepository.activas_en_rango(
+            filtros['complejo'], filtros['fecha_desde'], filtros['fecha_hasta'],
+        )
+        dias = [
+            filtros['fecha_desde'] + timedelta(days=numero)
+            for numero in range((filtros['fecha_hasta'] - filtros['fecha_desde']).days + 1)
+        ]
+
+        filas = []
+        for cancha in canchas:
+            ocupados = sum(
+                _minutos(fin) - _minutos(inicio) for dia in dias for inicio, fin in reservas[(cancha['id'], dia)]
+            )
+            ofrece = cancha['estado'] == EstadoCancha.ACTIVA and cancha['deporte__estado'] == EstadoRegistro.ACTIVO
+            if not ofrece:
+                if ocupados:
+                    filas.append({
+                        'cancha_id': cancha['id'], 'cancha': cancha['nombre'],
+                        'minutos_ofertables': None, 'minutos_ocupados': ocupados, 'porcentaje': None,
+                    })
+                continue
+
+            excepciones_de_la_cancha = [
+                excepcion for excepcion in excepciones if excepcion['cancha_id'] in (None, cancha['id'])
+            ]
+            ofertables = 0
+            for dia in dias:
+                bloques = [
+                    bloque
+                    for horario in horarios[(cancha['id'], dia.weekday())]
+                    for bloque in GrillaService.generar_bloques(
+                        horario['hora_apertura'], horario['hora_cierre'], cancha['duracion_turno_min'],
+                    )
+                ]
+                excepciones_del_dia = [
+                    excepcion for excepcion in excepciones_de_la_cancha
+                    if excepcion['fecha_inicio'] <= dia <= excepcion['fecha_fin']
+                ]
+                ofertables += ReporteService._minutos_ofertables(
+                    bloques, excepciones_del_dia, reservas[(cancha['id'], dia)],
+                )
+            filas.append({
+                'cancha_id': cancha['id'], 'cancha': cancha['nombre'],
+                'minutos_ofertables': ofertables, 'minutos_ocupados': ocupados,
+                'porcentaje': round(ocupados * 100 / ofertables, 2) if ofertables else None,
+            })
+        return filas
+
+    @staticmethod
     def dashboard(usuario, filtros):
         filtros = ReporteService.validar_filtros(usuario, filtros)
         resumen = ReporteRepository.resumen(filtros)
@@ -2252,4 +2346,5 @@ class ReporteService:
             'filtros': filtros,
             'recaudacion': {clave: f'{monto:.2f}' for clave, monto in resumen['recaudacion'].items()},
             'conteos': resumen['conteos'],
+            'ocupacion': ReporteService.ocupacion(filtros),
         }
