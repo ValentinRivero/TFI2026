@@ -1,6 +1,8 @@
 import logging
+from datetime import date, datetime, time
 from decimal import Decimal
 from io import StringIO
+from unittest import mock
 
 import pytest
 from django.core.cache import cache
@@ -8,6 +10,9 @@ from django.core.management import call_command
 from rest_framework.test import APIClient
 
 PASSWORD_PRUEBA = 'CanchaLibre#2026'
+
+# Lunes: las pruebas de reservas razonan sobre fechas y horas fijas, sin depender del día en que corren.
+HOY_CONGELADO = date(2026, 11, 16)
 
 
 @pytest.fixture(autouse=True)
@@ -133,6 +138,78 @@ def cliente_de():
         return api
 
     return _cliente
+
+
+@pytest.fixture
+def reloj():
+    """Congela el reloj de Django el lunes 16/11/2026 a las 10:00 de Goya; `return_value` permite moverlo."""
+    from django.utils import timezone
+
+    ahora = timezone.make_aware(datetime.combine(HOY_CONGELADO, time(10, 0)))
+    with mock.patch('django.utils.timezone.now', return_value=ahora) as congelado:
+        yield congelado
+
+
+@pytest.fixture
+def crear_horario(db):
+    from core.models import HorarioApertura
+
+    def _crear(cancha, dia_semana, apertura, cierre, precio=None):
+        return HorarioApertura.objects.create(
+            cancha=cancha, dia_semana=dia_semana, hora_apertura=apertura, hora_cierre=cierre,
+            precio_diferenciado=precio,
+        )
+
+    return _crear
+
+
+@pytest.fixture
+def crear_reserva(jugador):
+    from core.models import EstadoReserva, Reserva, TipoOcupacion
+
+    def _crear(cancha, fecha, inicio, fin, estado=EstadoReserva.CONFIRMADA, **campos):
+        if campos.get('usuario', jugador) is None:
+            campos.setdefault('nombre_cliente_manual', 'Cliente Mostrador')
+            campos.setdefault('tipo_ocupacion', TipoOcupacion.MANUAL)
+        campos.setdefault('usuario', jugador)
+        campos.setdefault('creado_por', jugador)
+        campos.setdefault('precio_acordado', Decimal('38000.00'))
+        return Reserva.objects.create(
+            cancha=cancha, fecha_turno=fecha, hora_inicio=inicio, hora_fin=fin, estado=estado, **campos,
+        )
+
+    return _crear
+
+
+@pytest.fixture
+def crear_turno_fijo(dueno):
+    from core.models import TurnoFijo
+
+    def _crear(cancha, dia_semana, inicio, fin, desde, hasta=None, **campos):
+        campos.setdefault('nombre_cliente_manual', 'Los del Martes')
+        campos.setdefault('telefono_cliente_manual', '3777 000401')
+        campos.setdefault('creado_por', dueno)
+        return TurnoFijo.objects.create(
+            cancha=cancha, dia_semana=dia_semana, hora_inicio=inicio, hora_fin=fin,
+            fecha_inicio_vigencia=desde, fecha_fin_vigencia=hasta, **campos,
+        )
+
+    return _crear
+
+
+@pytest.fixture
+def crear_excepcion_horaria(dueno):
+    from core.models import AlcanceExcepcion, ExcepcionHoraria, TipoMotivoExcepcion
+
+    def _crear(complejo, desde, hasta=None, cancha=None, inicio=None, fin=None, **campos):
+        campos.setdefault('tipo_motivo', TipoMotivoExcepcion.MANTENIMIENTO)
+        alcance = AlcanceExcepcion.DIA_COMPLETO if inicio is None else AlcanceExcepcion.FRANJA_HORARIA
+        return ExcepcionHoraria.objects.create(
+            complejo=complejo, cancha=cancha, creado_por=dueno, fecha_inicio=desde, fecha_fin=hasta or desde,
+            es_dia_completo=alcance, hora_inicio=inicio, hora_fin=fin, **campos,
+        )
+
+    return _crear
 
 
 @pytest.fixture

@@ -167,6 +167,8 @@ REST_FRAMEWORK = {
         'user': os.environ.get('THROTTLE_USER', '240/minute'),
         'login': '5/minute',
         'registro': os.environ.get('THROTTLE_REGISTRO', '10/hour'),
+        'reservas': '20/hour',
+        'grilla': '300/minute',
     },
     'EXCEPTION_HANDLER': 'core.exceptions.custom_exception_handler',
 }
@@ -210,11 +212,23 @@ if REDIS_URL:
             'CONFIG': {'hosts': [REDIS_URL]},
         },
     }
+    # Con varios procesos, los limitadores de peticiones necesitan contadores compartidos.
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_URL,
+        },
+    }
 else:
-    # Sin Redis el channel layer vive en memoria: alcanza con un solo proceso de Daphne.
+    # Sin Redis el channel layer y la caché viven en memoria: alcanza con un solo proceso de Daphne.
     CHANNEL_LAYERS = {
         'default': {
             'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        },
+    }
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         },
     }
 
@@ -266,6 +280,12 @@ LOGGING = {
         'django': {
             'handlers': ['consola'],
             'level': os.environ.get('DJANGO_LOG_LEVEL', 'INFO'),
+        },
+        # Fallas operativas del núcleo que no son de seguridad, como un channel layer caído.
+        'core': {
+            'handlers': ['consola'],
+            'level': 'WARNING',
+            'propagate': False,
         },
     },
 }

@@ -1,10 +1,33 @@
+import logging
+from datetime import time, timedelta
+from io import StringIO
+from unittest import mock
+
 import pytest
 from django.conf import settings
+from django.core.management import call_command
 from django.test import override_settings
 from rest_framework import status
 
-from conftest import PASSWORD_PRUEBA
-from core.models import EstadoContrato, EstadoRegistro, EstadoUsuario, LogAuditoria, RolPermiso, TipoEventoAuditoria
+from conftest import HOY_CONGELADO, PASSWORD_PRUEBA
+from core.models import (
+    DiaSemana,
+    EstadoContrato,
+    EstadoRegistro,
+    EstadoReserva,
+    EstadoTurnoFijo,
+    EstadoUsuario,
+    LogAuditoria,
+    RolPermiso,
+    TipoEventoAuditoria,
+)
+from core.services import (
+    PRIORIDAD_AVISO_NORMAL,
+    PRIORIDAD_AVISO_URGENTE,
+    AvisoComplejoService,
+    BajaDeCuentaService,
+    DifusionGrillaService,
+)
 
 URL = '/api/perfil/'
 
@@ -295,3 +318,323 @@ class TestSupresionDeDatos:
         superadmin.refresh_from_db()
         assert superadmin.email == 'superadmin@talibre.test'
         assert superadmin.has_usable_password()
+
+
+URL_BAJA = '/api/perfil/baja/'
+MARTES = HOY_CONGELADO + timedelta(days=1)
+
+
+@pytest.fixture
+def con_reservas(reloj, jugador, complejo, crear_cancha, crear_horario, crear_reserva, crear_turno_fijo):
+    """
+    El reloj marca el lunes 16/11/2026 a las 10:00. La jugadora tiene, para el martes, una reserva pendiente,
+    una confirmada y una señada; además, una completada de la semana pasada, una cancelada y un turno fijo.
+    """
+    jugador.nombre_completo = 'Lucía Benítez'
+    jugador.telefono = '3777 000615'
+    jugador.save()
+    cancha = crear_cancha(complejo, 'Cancha 1')
+    crear_horario(cancha, DiaSemana.MARTES, time(14, 0), time(23, 0))
+    return {
+        'cancha': cancha,
+        'pendiente': crear_reserva(cancha, MARTES, time(14, 0), time(15, 0), estado=EstadoReserva.PENDIENTE),
+        'confirmada': crear_reserva(cancha, MARTES, time(15, 0), time(16, 0), estado=EstadoReserva.CONFIRMADA),
+        'senada': crear_reserva(cancha, MARTES, time(20, 0), time(21, 0), estado=EstadoReserva.SENADA),
+        'pasada': crear_reserva(cancha, MARTES - timedelta(days=7), time(20, 0), time(21, 0),
+                                estado=EstadoReserva.COMPLETADA),
+        'cancelada': crear_reserva(cancha, MARTES, time(16, 0), time(17, 0), estado=EstadoReserva.CANCELADA_JUGADOR),
+        'turno_fijo': crear_turno_fijo(
+            cancha, DiaSemana.MARTES, time(21, 0), time(22, 0), desde=MARTES, usuario=jugador,
+            nombre_cliente_manual='', telefono_cliente_manual='',
+        ),
+    }
+
+
+def _baja(cliente_de, usuario, captura=None):
+    if captura is None:
+        return cliente_de(usuario).delete(URL)
+    with captura(execute=True):
+        return cliente_de(usuario).delete(URL)
+
+
+class TestVistaPreviaDeLaBaja:
+    def test_informa_que_se_cancela_y_que_se_conserva(self, jugador, cliente_de, con_reservas):
+        respuesta = cliente_de(jugador).get(URL_BAJA)
+
+        assert respuesta.status_code == status.HTTP_200_OK
+        cuerpo = respuesta.json()
+        assert cuerpo['reservas_a_cancelar'] == 2
+        assert cuerpo['reservas_senadas_conservadas'] == 1
+        assert cuerpo['turnos_fijos_a_dar_de_baja'] == 1
+        assert cuerpo['impedimento'] is None
+        (aviso,) = cuerpo['avisos']
+        assert aviso.startswith('1 reserva señada o pagada no se cancela')
+        assert 'nombre y tu teléfono' in aviso and '30 días' in aviso
+
+    def test_no_modifica_nada(self, jugador, cliente_de, con_reservas):
+        cliente_de(jugador).get(URL_BAJA)
+
+        con_reservas['pendiente'].refresh_from_db()
+        jugador.refresh_from_db()
+        assert con_reservas['pendiente'].estado == EstadoReserva.PENDIENTE
+        assert jugador.estado == EstadoRegistro.ACTIVO
+
+    def test_sin_reservas_no_hay_avisos(self, reloj, jugador, cliente_de):
+        assert cliente_de(jugador).get(URL_BAJA).json() == {
+            'reservas_a_cancelar': 0, 'reservas_senadas_conservadas': 0, 'turnos_fijos_a_dar_de_baja': 0,
+            'avisos': [], 'impedimento': None,
+        }
+
+    def test_un_turno_ya_iniciado_no_se_cuenta(self, reloj, jugador, cliente_de, con_reservas):
+        reloj.return_value = reloj.return_value.replace(day=17, hour=15, minute=30)
+
+        cuerpo = cliente_de(jugador).get(URL_BAJA).json()
+
+        assert cuerpo['reservas_a_cancelar'] == 0
+        assert cuerpo['reservas_senadas_conservadas'] == 1
+
+    def test_anticipa_el_rechazo_del_ultimo_superadmin(self, superadmin, cliente_de):
+        assert 'única cuenta de superadministrador' in cliente_de(superadmin).get(URL_BAJA).json()['impedimento']
+
+    def test_anticipa_el_rechazo_de_un_dueno_con_contratos(self, dueno, complejo, cliente_de):
+        assert 'contrato vigente' in cliente_de(dueno).get(URL_BAJA).json()['impedimento']
+
+    def test_sin_sesion_responde_401(self, cliente):
+        assert cliente.get(URL_BAJA).status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_sin_el_permiso_de_baja_responde_403(self, jugador, cliente_de):
+        RolPermiso.objects.get(rol__nombre='JUGADOR', permiso__codigo='desactivar_perfil_propio').desactivar()
+
+        assert cliente_de(jugador).get(URL_BAJA).status_code == status.HTTP_403_FORBIDDEN
+
+
+class TestBajaConReservas:
+    def test_cancela_las_pendientes_y_confirmadas_futuras(self, jugador, cliente_de, con_reservas):
+        assert _baja(cliente_de, jugador).status_code == status.HTTP_204_NO_CONTENT
+
+        for clave in ('pendiente', 'confirmada'):
+            con_reservas[clave].refresh_from_db()
+            assert con_reservas[clave].estado == EstadoReserva.CANCELADA_JUGADOR
+            assert con_reservas[clave].nombre_cliente_manual == ''
+
+    def test_conserva_las_senadas_con_una_copia_del_contacto(self, jugador, cliente_de, con_reservas):
+        _baja(cliente_de, jugador)
+
+        senada = con_reservas['senada']
+        senada.refresh_from_db()
+        jugador.refresh_from_db()
+        assert senada.estado == EstadoReserva.SENADA
+        assert (senada.nombre_cliente_manual, senada.telefono_cliente_manual) == ('Lucía Benítez', '3777 000615')
+        assert jugador.nombre_completo == 'Usuario dado de baja' and jugador.telefono == ''
+
+    def test_no_toca_el_historial_ni_lo_ya_cancelado(self, jugador, cliente_de, con_reservas):
+        _baja(cliente_de, jugador)
+
+        for clave, estado in (('pasada', EstadoReserva.COMPLETADA), ('cancelada', EstadoReserva.CANCELADA_JUGADOR)):
+            con_reservas[clave].refresh_from_db()
+            assert con_reservas[clave].estado == estado
+            assert con_reservas[clave].nombre_cliente_manual == ''
+
+    def test_un_turno_en_curso_no_se_cancela(self, reloj, jugador, cliente_de, con_reservas):
+        reloj.return_value = reloj.return_value.replace(day=17, hour=14, minute=30)
+
+        _baja(cliente_de, jugador)
+
+        con_reservas['pendiente'].refresh_from_db()
+        con_reservas['confirmada'].refresh_from_db()
+        assert con_reservas['pendiente'].estado == EstadoReserva.PENDIENTE
+        assert con_reservas['confirmada'].estado == EstadoReserva.CANCELADA_JUGADOR
+
+    def test_da_de_baja_los_turnos_fijos_vigentes_y_pausados(self, jugador, crear_turno_fijo, cliente_de, con_reservas):
+        pausado = crear_turno_fijo(
+            con_reservas['cancha'], DiaSemana.JUEVES, time(21, 0), time(22, 0), desde=MARTES, usuario=jugador,
+            nombre_cliente_manual='', estado=EstadoTurnoFijo.PAUSADO,
+        )
+
+        _baja(cliente_de, jugador)
+
+        for turno in (con_reservas['turno_fijo'], pausado):
+            turno.refresh_from_db()
+            assert turno.estado == EstadoTurnoFijo.BAJA
+
+    def test_no_toca_las_reservas_de_otros(self, jugador, crear_usuario, crear_reserva, cliente_de, con_reservas):
+        otra = crear_usuario('otra.jugadora@talibre.test')
+        ajena = crear_reserva(con_reservas['cancha'], MARTES, time(17, 0), time(18, 0), usuario=otra, creado_por=otra)
+
+        _baja(cliente_de, jugador)
+
+        ajena.refresh_from_db()
+        assert ajena.estado == EstadoReserva.CONFIRMADA
+
+    def test_los_horarios_liberados_se_pueden_volver_a_reservar(self, jugador, crear_usuario, cliente_de, con_reservas):
+        _baja(cliente_de, jugador)
+        api = cliente_de(crear_usuario('otra.jugadora@talibre.test'))
+
+        def reservar(hora):
+            return api.post('/api/reservas/', {
+                'cancha': con_reservas['cancha'].id, 'fecha_turno': MARTES.isoformat(), 'hora_inicio': hora,
+            }, format='json').status_code
+
+        assert reservar('14:00') == status.HTTP_201_CREATED
+        assert reservar('21:00') == status.HTTP_201_CREATED
+        assert reservar('20:00') == status.HTTP_409_CONFLICT
+
+    def test_las_grillas_se_actualizan_despues_del_commit(
+        self, jugador, complejo, cliente_de, con_reservas, django_capture_on_commit_callbacks,
+    ):
+        with mock.patch.object(DifusionGrillaService, 'publicar') as publicar:
+            _baja(cliente_de, jugador, django_capture_on_commit_callbacks)
+
+        eventos = {(llamada.args[1]['hora_inicio'], llamada.args[1]['fecha_hasta']) for llamada in publicar.call_args_list}
+        assert eventos == {('14:00:00', MARTES.isoformat()), ('15:00:00', MARTES.isoformat()), ('21:00:00', None)}
+        assert {llamada.args[0] for llamada in publicar.call_args_list} == {complejo.id}
+
+    def test_avisa_al_complejo_sin_datos_personales(
+        self, jugador, complejo, cliente_de, con_reservas, django_capture_on_commit_callbacks,
+    ):
+        with mock.patch.object(AvisoComplejoService, 'entregar') as entregar:
+            _baja(cliente_de, jugador, django_capture_on_commit_callbacks)
+
+        avisos = {llamada.args[0]['prioridad']: llamada.args[0] for llamada in entregar.call_args_list}
+        urgente, normal = avisos[PRIORIDAD_AVISO_URGENTE], avisos[PRIORIDAD_AVISO_NORMAL]
+        assert urgente['complejo_id'] == complejo.id
+        assert urgente['referencias'] == {'reservas': [con_reservas['senada'].id]}
+        assert normal['referencias'] == {'turnos_fijos': [con_reservas['turno_fijo'].id]}
+        for aviso in (urgente, normal):
+            assert 'Lucía' not in aviso['mensaje'] and '000615' not in aviso['mensaje']
+
+    def test_sin_mensajeria_conectada_el_aviso_queda_en_el_log(
+        self, jugador, cliente_de, con_reservas, caplog, django_capture_on_commit_callbacks,
+    ):
+        logger = logging.getLogger('core')
+        logger.addHandler(caplog.handler)
+        try:
+            respuesta = _baja(cliente_de, jugador, django_capture_on_commit_callbacks)
+        finally:
+            logger.removeHandler(caplog.handler)
+
+        assert respuesta.status_code == status.HTTP_204_NO_CONTENT
+        assert 'sin entregar' in caplog.text and 'prioridad 2' in caplog.text
+        assert 'Lucía' not in caplog.text
+
+    def test_una_falla_al_avisar_no_revierte_la_baja(
+        self, jugador, cliente_de, con_reservas, django_capture_on_commit_callbacks,
+    ):
+        with mock.patch.object(AvisoComplejoService, 'entregar', side_effect=ConnectionError('Node caído')):
+            respuesta = _baja(cliente_de, jugador, django_capture_on_commit_callbacks)
+
+        jugador.refresh_from_db()
+        assert respuesta.status_code == status.HTTP_204_NO_CONTENT
+        assert jugador.estado == EstadoRegistro.BAJA
+
+    def test_audita_el_resumen_y_cada_cancelacion_sin_datos_personales(self, jugador, cliente_de, con_reservas):
+        _baja(cliente_de, jugador)
+
+        baja = LogAuditoria.objects.get(tipo_evento=TipoEventoAuditoria.BAJA_USUARIO)
+        cancelaciones = list(LogAuditoria.objects.filter(tipo_evento=TipoEventoAuditoria.RESERVA_CANCELADA))
+        assert 'Reservas canceladas: 2. Reservas señadas conservadas: 1. Turnos fijos dados de baja: 1.' in baja.detalle
+        assert len(cancelaciones) == 2
+        assert all('-> Cancelada por el jugador.' in log.detalle for log in cancelaciones)
+        for log in (baja, *cancelaciones):
+            assert 'Lucía' not in log.detalle and '000615' not in log.detalle
+
+    def test_si_la_baja_se_rechaza_las_reservas_quedan_como_estaban(
+        self, superadmin, crear_reserva, cliente_de, con_reservas,
+    ):
+        reserva = crear_reserva(con_reservas['cancha'], MARTES, time(18, 0), time(19, 0),
+                                usuario=superadmin, creado_por=superadmin)
+
+        assert _baja(cliente_de, superadmin).status_code == status.HTTP_400_BAD_REQUEST
+        reserva.refresh_from_db()
+        assert reserva.estado == EstadoReserva.CONFIRMADA
+
+
+class TestContactoConservadoDeLaSenada:
+    @pytest.fixture
+    def senada_de_baja(self, jugador, cliente_de, con_reservas):
+        _baja(cliente_de, jugador)
+        senada = con_reservas['senada']
+        senada.refresh_from_db()
+        return senada
+
+    def test_la_agenda_muestra_la_copia_y_nunca_la_cuenta_anonimizada(
+        self, dueno, cliente_de, con_reservas, senada_de_baja,
+    ):
+        agenda = {r['id']: r for r in cliente_de(dueno).get('/api/agenda/').json()['results']}
+
+        assert agenda[senada_de_baja.id]['cliente'] == {
+            'nombre': 'Lucía Benítez', 'telefono': '3777 000615', 'email': None,
+        }
+        assert agenda[con_reservas['pendiente'].id]['cliente'] == {
+            'nombre': 'Titular dado de baja', 'telefono': '', 'email': None,
+        }
+        assert 'talibre.invalid' not in str(agenda)
+
+    @pytest.mark.parametrize('estado', [EstadoReserva.AUSENTE, EstadoReserva.COMPLETADA])
+    def test_se_borra_al_cerrar_el_turno(self, reloj, dueno, cliente_de, senada_de_baja, estado):
+        reloj.return_value = reloj.return_value.replace(day=17, hour=21, minute=5)
+
+        respuesta = cliente_de(dueno).patch(f'/api/agenda/{senada_de_baja.id}/', {'estado': estado}, format='json')
+
+        assert respuesta.status_code == status.HTTP_200_OK
+        senada_de_baja.refresh_from_db()
+        assert (senada_de_baja.nombre_cliente_manual, senada_de_baja.telefono_cliente_manual) == ('', '')
+        assert respuesta.json()['cliente']['nombre'] == 'Titular dado de baja'
+
+    def test_un_turno_en_curso_sin_copia_se_cierra_sin_tocar_nada_mas(self, reloj, jugador, dueno, cliente_de, con_reservas):
+        reloj.return_value = reloj.return_value.replace(day=17, hour=14, minute=30)
+        _baja(cliente_de, jugador)
+        reloj.return_value = reloj.return_value.replace(hour=15, minute=5)
+        en_curso = con_reservas['pendiente']
+
+        respuesta = cliente_de(dueno).patch(f'/api/agenda/{en_curso.id}/', {'estado': EstadoReserva.AUSENTE}, format='json')
+
+        assert respuesta.status_code == status.HTTP_200_OK
+        assert respuesta.json()['cliente'] == {'nombre': 'Titular dado de baja', 'telefono': '', 'email': None}
+
+    def test_se_borra_al_cancelarla_desde_el_complejo(self, dueno, cliente_de, senada_de_baja):
+        cliente_de(dueno).post(f'/api/agenda/{senada_de_baja.id}/cancelar/')
+
+        senada_de_baja.refresh_from_db()
+        assert (senada_de_baja.nombre_cliente_manual, senada_de_baja.telefono_cliente_manual) == ('', '')
+
+    def test_editar_las_observaciones_no_la_borra(self, dueno, cliente_de, senada_de_baja):
+        cliente_de(dueno).patch(f'/api/agenda/{senada_de_baja.id}/', {'observaciones': 'Llamar'}, format='json')
+
+        senada_de_baja.refresh_from_db()
+        assert senada_de_baja.nombre_cliente_manual == 'Lucía Benítez'
+
+    def test_la_depuracion_diaria_la_borra_pasados_30_dias_del_turno(
+        self, reloj, crear_reserva, con_reservas, senada_de_baja,
+    ):
+        titular = senada_de_baja.usuario
+        reciente = crear_reserva(
+            con_reservas['cancha'], MARTES + timedelta(days=7), time(20, 0), time(21, 0), estado=EstadoReserva.SENADA,
+            usuario=titular, creado_por=titular, nombre_cliente_manual='Lucía Benítez',
+            telefono_cliente_manual='3777 000615',
+        )
+        salida = StringIO()
+
+        # El turno fue el martes 17/11: el 17/12 se cumplen 30 días y el 18/12 ya se depura.
+        reloj.return_value += timedelta(days=31)
+        call_command('purgar_contactos_de_bajas', stdout=StringIO())
+        senada_de_baja.refresh_from_db()
+        assert senada_de_baja.nombre_cliente_manual == 'Lucía Benítez'
+
+        reloj.return_value += timedelta(days=1)
+        call_command('purgar_contactos_de_bajas', stdout=salida)
+
+        senada_de_baja.refresh_from_db()
+        reciente.refresh_from_db()
+        assert (senada_de_baja.nombre_cliente_manual, senada_de_baja.telefono_cliente_manual) == ('', '')
+        assert senada_de_baja.estado == EstadoReserva.SENADA
+        assert reciente.nombre_cliente_manual == 'Lucía Benítez'
+        assert 'Reservas con datos de contacto depurados: 1' in salida.getvalue()
+
+    def test_la_depuracion_no_toca_clientes_manuales(self, reloj, crear_reserva, con_reservas):
+        manual = crear_reserva(con_reservas['cancha'], MARTES - timedelta(days=60), time(20, 0), time(21, 0),
+                               usuario=None, nombre_cliente_manual='Rosendo Aquino')
+
+        assert BajaDeCuentaService.purgar_contactos_vencidos() == 0
+        manual.refresh_from_db()
+        assert manual.nombre_cliente_manual == 'Rosendo Aquino'
