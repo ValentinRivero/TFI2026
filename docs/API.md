@@ -313,6 +313,31 @@ Si el cambio deja reservas por jugar (pendientes, confirmadas o señadas) o turn
   - **Criterio:** con `criterio` distinto de `fecha_turno`, `ocupacion` es `null`, porque el rango no describe días de juego.
 - `ranking_horarios` trae hasta 10 horarios de inicio, con la cantidad de reservas pendientes, confirmadas, señadas y completadas de cada uno, sumando todas las canchas filtradas. Ordena de mayor a menor y, a igual cantidad, por el horario más temprano. Respeta el `criterio` y un rango sin reservas devuelve `[]`.
 
+## GraphQL
+
+| Método y ruta | Acceso | Uso |
+|---|---|---|
+| `POST /graphql/` | Público; cada campo aplica sus permisos | `{ "query", "variables" }` en JSON |
+
+- Usa el mismo access token que REST en `Authorization: Bearer <access>`. Igual que en las rutas públicas de REST, un token inválido o vencido no impide consultar los campos públicos.
+- Solo admite POST: GET responde `405`.
+- Los errores de un campo responden HTTP 200 con `data` en `null` para ese campo y la lista `errors`; cada error lleva el código HTTP equivalente en `extensions.codigo` (`400`, `401`, `403`, `404`, `429`) y, en los de validación, el detalle por campo en `extensions.detalle`. Una consulta mal formada o con campos inexistentes responde `400`.
+
+### `catalogoComplejos`
+
+Mismos complejos, filtros, orden y paginación que `GET /api/complejos/`. Argumentos opcionales: `deporte`, `cobertura`, `servicio` (lista de ids, se exigen todos), `search`, `ordering` y `page`.
+
+```graphql
+query {
+  catalogoComplejos(deporte: 2, ordering: "precio_desde") {
+    count
+    results { id nombre direccion latitud longitud precioDesde servicios { id nombre } deportes { id nombre } }
+  }
+}
+```
+
+Cada complejo expone `id`, `nombre`, `direccion`, `latitud`, `longitud`, `telefonoContacto`, `horasLimiteCancelacion`, `infoSena`, `precioDesde`, `servicios` y `deportes`. Los decimales llegan como texto, igual que en REST.
+
 ## Sistema
 
 | Método y ruta | Acceso | Uso |
