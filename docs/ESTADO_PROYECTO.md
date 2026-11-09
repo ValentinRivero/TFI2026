@@ -34,7 +34,13 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - [x] **4.9.** Ajustes de la operatoria de agenda y turnos fijos: reapertura de una reserva cancelada por error, cambio de horario de un turno fijo a otro turno libre (ambos solo por el personal del complejo y con confirmación explícita), y fechas de turnos fijos alcanzadas por una excepción en espera de una decisión del complejo, con aviso, en lugar de rechazar el alta.
 
 ## Fase 5: Reportes, GraphQL y Servicio Complementario Node.js
-- [ ] **5.1.** Endpoint y lógica agregada del Dashboard y Reportes estadísticos filtrables por rangos de fechas (`fecha_turno`, `fecha_creacion`, `fecha_modificacion`), cancha y estado (`CU-12`).
+- [ ] **5.1.** Endpoint y lógica agregada del Dashboard y Reportes estadísticos filtrables por rangos de fechas (`fecha_turno`, `fecha_creacion`, `fecha_modificacion`), cancha y deporte (`CU-12`).
+  - [x] **5.1.1.** Endpoint `GET /api/reportes/dashboard/` con validación de filtros: rango de hasta 366 días, criterio temporal, cancha del complejo y deporte existente; acceso por `ver_reportes` con 404 ante un complejo ajeno o dado de baja.
+  - [ ] **5.1.2.** Recaudación confirmada o completada (estados `2`, `3` y `7`) y recaudación señada (estado `3`), con ceros en un rango vacío.
+  - [ ] **5.1.3.** Conteo por estado, con canceladas por el jugador y por el complejo separadas y su subtotal.
+  - [ ] **5.1.4.** Porcentaje de ocupación por cancha: minutos de reservas ocupantes sobre minutos ofertables (horarios de apertura menos excepciones), solo con el criterio `fecha_turno`.
+  - [ ] **5.1.5.** Ranking de los horarios más solicitados.
+  - [ ] **5.1.6.** Cantidad de consultas constante y cierre del punto.
 - [ ] **5.2.** GraphQL mínimo en `/graphql/` (`core/schema.py`, `core/graphql_views.py`, `config/schema.py`) reutilizando los servicios y permisos de la API REST.
 - [ ] **5.3.** Base y seguridad de `backend-node`: ES Modules, `app.js`, `server.js`, un router por módulo, Morgan, Helmet, CORS con lista blanca y middlewares `auth`, `rol`, `rateLimit` y `validarCampos`, validando el JWT de Django.
 - [ ] **5.4.** Persistencia en MongoDB Atlas con Mongoose: `conectarDB`, modelos `Evento` y `Notificacion`, baja lógica y `populate`.

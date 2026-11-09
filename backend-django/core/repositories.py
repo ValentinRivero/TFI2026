@@ -309,6 +309,11 @@ class CatalogoRepository:
     def servicios_activos():
         return Servicio.objects.filter(estado=EstadoRegistro.ACTIVO).order_by('nombre')
 
+    @staticmethod
+    def existe_deporte(deporte_id):
+        # Incluye los dados de baja: sus reservas siguen formando parte del historial de los reportes.
+        return Deporte.objects.filter(id=deporte_id).exists()
+
 
 class ComplejoServicioRepository:
     @staticmethod
@@ -341,6 +346,11 @@ class CanchaRepository:
     @staticmethod
     def bloquear(cancha_id):
         return Cancha.objects.select_for_update(of=('self',)).get(id=cancha_id)
+
+    @staticmethod
+    def pertenece_a_complejo(cancha_id, complejo_id):
+        # Incluye las dadas de baja: sus reservas siguen formando parte del historial de los reportes.
+        return Cancha.objects.filter(id=cancha_id, complejo_id=complejo_id).exists()
 
     @staticmethod
     def existe_nombre(complejo_id, nombre, excluir_id=None):

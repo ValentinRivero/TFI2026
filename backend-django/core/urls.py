@@ -16,6 +16,7 @@ from .views import (
     PerfilView,
     RefreshView,
     RegistroView,
+    ReporteDashboardView,
     ReservaViewSet,
     SaludView,
     ServicioViewSet,
@@ -45,5 +46,6 @@ urlpatterns = [
     path('token/logout/', LogoutView.as_view(), name='token_logout'),
     path('perfil/', PerfilView.as_view(), name='perfil'),
     path('perfil/baja/', PerfilBajaView.as_view(), name='perfil_baja'),
+    path('reportes/dashboard/', ReporteDashboardView.as_view(), name='reportes_dashboard'),
     *router.urls,
 ]

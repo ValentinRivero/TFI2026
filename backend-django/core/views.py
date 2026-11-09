@@ -37,6 +37,7 @@ from .serializers import (
     FechaTurnoFijoSerializer,
     FiltroAuditoriaSerializer,
     FiltroGrillaSerializer,
+    FiltroReporteSerializer,
     GrillaSerializer,
     HorarioAperturaSerializer,
     LogAuditoriaSerializer,
@@ -68,6 +69,7 @@ from .services import (
     HorarioAperturaService,
     OperadorService,
     RbacService,
+    ReporteService,
     ReservaService,
     SesionService,
     TurnoFijoService,
@@ -715,6 +717,16 @@ class TurnoFijoViewSet(AccesoComplejoMixin, viewsets.ModelViewSet):
             entrada.validated_data['accion'],
         )
         return Response(ReservaAgendaSerializer(reserva).data, status=status.HTTP_201_CREATED)
+
+
+class ReporteDashboardView(APIView):
+    permission_classes = [TienePermisoRBAC]
+    permisos_requeridos = {'GET': ('ver_reportes',)}
+
+    def get(self, request):
+        filtros = FiltroReporteSerializer(data=request.query_params)
+        filtros.is_valid(raise_exception=True)
+        return Response(ReporteService.dashboard(request.user, filtros.validated_data))
 
 
 class ContratoViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):

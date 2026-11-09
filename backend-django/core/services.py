@@ -2202,3 +2202,47 @@ class BajaDeCuentaService:
         """Plazo máximo de conservación: 30 días después del turno, aunque la reserva siga sin resolverse."""
         limite = timezone.localdate() - timedelta(days=DIAS_DE_CONSERVACION_DE_CONTACTO)
         return ReservaRepository.limpiar_contactos_de_bajas_hasta(limite)
+
+
+MAXIMO_DIAS_REPORTE = 366
+CRITERIO_REPORTE_POR_DEFECTO = 'fecha_turno'
+CRITERIOS_REPORTE = ('fecha_turno', 'fecha_creacion', 'fecha_modificacion')
+MENSAJE_CANCHA_AJENA_REPORTE = 'La cancha no pertenece al complejo.'
+
+
+class ReporteService:
+    """Dashboard comercial de un complejo, calculado sobre un rango de fechas acotado."""
+
+    @staticmethod
+    def validar_filtros(usuario, filtros):
+        complejo_id = filtros['complejo']
+        if not AccesoComplejoService.puede_administrar(usuario, complejo_id):
+            raise NotFound()
+
+        desde, hasta = filtros['fecha_desde'], filtros['fecha_hasta']
+        if (hasta - desde).days >= MAXIMO_DIAS_REPORTE:
+            raise ValidationError({
+                'fecha_hasta': f'El rango del reporte abarca como máximo {MAXIMO_DIAS_REPORTE} días.',
+            })
+
+        cancha_id = filtros.get('cancha_id')
+        # Mismo mensaje para una cancha ajena o inexistente, para no confirmar ids de otros complejos.
+        if cancha_id is not None and not CanchaRepository.pertenece_a_complejo(cancha_id, complejo_id):
+            raise ValidationError({'cancha_id': MENSAJE_CANCHA_AJENA_REPORTE})
+
+        deporte_id = filtros.get('deporte_id')
+        if deporte_id is not None and not CatalogoRepository.existe_deporte(deporte_id):
+            raise ValidationError({'deporte_id': 'El deporte indicado no existe.'})
+
+        return {
+            'complejo': complejo_id,
+            'fecha_desde': desde,
+            'fecha_hasta': hasta,
+            'criterio': filtros.get('criterio') or CRITERIO_REPORTE_POR_DEFECTO,
+            'cancha_id': cancha_id,
+            'deporte_id': deporte_id,
+        }
+
+    @staticmethod
+    def dashboard(usuario, filtros):
+        return {'filtros': ReporteService.validar_filtros(usuario, filtros)}

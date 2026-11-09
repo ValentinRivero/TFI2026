@@ -268,6 +268,27 @@ Si el cambio deja reservas por jugar (pendientes, confirmadas o señadas) o turn
 - La baja no cancela las fechas ya registradas en la agenda.
 - `conflicto_operatoria`: igual que en la agenda, marca los turnos fijos vigentes o pausados que un cambio de operatoria dejó fuera de la grilla.
 
+### Reportes
+
+| Método y ruta | Acceso | Uso |
+|---|---|---|
+| `GET /api/reportes/dashboard/` | Dueño | Dashboard de un complejo en un rango de fechas: `complejo`, `fecha_desde` y `fecha_hasta` (`AAAA-MM-DD`, obligatorios), `criterio` y, opcionales, `cancha_id` y `deporte_id` |
+
+- `criterio` indica qué fecha de la reserva se compara con el rango: `fecha_turno` (por defecto, el día que se juega), `fecha_creacion` (el día que se registró) o `fecha_modificacion` (el último cambio, por ejemplo una cancelación).
+- El rango incluye ambos extremos, `fecha_hasta` no puede ser anterior a `fecha_desde` y abarca como máximo 366 días; si no, responde `400`.
+- `cancha_id` debe ser una cancha del complejo, incluidas las que están en mantenimiento o dadas de baja, que conservan su historial; si no, responde `400`. `deporte_id` debe ser un deporte existente. Ambos filtros se combinan.
+- Se consulta también con el contrato pendiente o suspendido. Un complejo dado de baja o ajeno responde `404`; el operador no accede a los reportes (`403`).
+- La respuesta incluye `filtros` con los valores aplicados, ya normalizados:
+
+```json
+{
+  "filtros": {
+    "complejo": 4, "fecha_desde": "2026-11-01", "fecha_hasta": "2026-11-30",
+    "criterio": "fecha_turno", "cancha_id": null, "deporte_id": null
+  }
+}
+```
+
 ## Sistema
 
 | Método y ruta | Acceso | Uso |
