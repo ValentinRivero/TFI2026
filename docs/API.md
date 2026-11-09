@@ -371,6 +371,16 @@ mutation {
 - Devuelve la reserva creada con los mismos campos que `misReservas`.
 - Errores en `extensions.codigo`: `400` (turno inválido, pasado, fuera de la anticipación o complejo no habilitado), `401`, `403`, `409` (turno ocupado, turno fijo o excepción, con el mismo mensaje que REST) y `429`.
 
+## Servicio complementario (Node)
+
+Servicio de actividad y notificaciones, con su propia URL base. Sus errores siguen la forma `{ "error": true, "mensaje": "..." }`; los de validación suman `detalles`.
+
+| Método y ruta | Acceso | Uso |
+|---|---|---|
+| `GET /api/salud` | Público | Estado del servicio: `{ "estado": "ok" }` |
+
+- Una ruta inexistente responde `404`, un JSON mal formado `400` y un cuerpo demasiado grande `413`.
+
 ## Sistema
 
 | Método y ruta | Acceso | Uso |
