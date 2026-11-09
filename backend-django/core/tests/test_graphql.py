@@ -371,3 +371,166 @@ class TestMisReservas:
 
         assert cuerpo['data'] == {'catalogoComplejos': {'count': 1}, 'misReservas': None}
         assert cuerpo['errors'][0]['extensions']['codigo'] == 401
+
+
+CREAR_RESERVA = '''
+mutation CrearReserva($cancha: Int!, $fechaTurno: String!, $horaInicio: String!) {
+  crearReserva(cancha: $cancha, fechaTurno: $fechaTurno, horaInicio: $horaInicio) {
+    reserva {
+      id complejo { id nombre } cancha { id nombre } deporte fechaTurno horaInicio horaFin precioAcordado
+      tipoOcupacion tipoOcupacionNombre estado estadoNombre cancelableHasta fechaCreacion
+    }
+  }
+}
+'''
+URL_REST_RESERVAS = '/api/reservas/'
+MARTES_17 = '2026-11-17'
+
+
+@pytest.fixture
+def cancha_reservable(complejo, crear_cancha, crear_horario):
+    from datetime import time
+
+    from core.models import DiaSemana
+
+    cancha = crear_cancha(complejo, 'Cancha 1')
+    crear_horario(cancha, DiaSemana.MARTES, time(14), time(23))
+    return cancha
+
+
+def _crear(cliente, cancha, fecha=MARTES_17, hora='14:00', **extra):
+    return _consultar(cliente, CREAR_RESERVA, cancha=cancha.id, fechaTurno=fecha, horaInicio=hora, **extra)
+
+
+def _error_de_alta(respuesta):
+    assert respuesta.status_code == status.HTTP_200_OK
+    cuerpo = respuesta.json()
+    assert cuerpo['data'] == {'crearReserva': None}
+    assert cuerpo['errors'][0]['path'] == ['crearReserva']
+    return cuerpo['errors'][0]
+
+
+@pytest.mark.django_db
+class TestCrearReserva:
+    def test_el_jugador_reserva_y_recibe_lo_mismo_que_rest(self, reloj, jugador, cancha_reservable, cliente_de):
+        from core.models import Reserva
+
+        api = cliente_de(jugador)
+
+        reserva = _crear(api, cancha_reservable).json()['data']['crearReserva']['reserva']
+
+        creada = Reserva.objects.get()
+        assert (creada.usuario, creada.creado_por) == (jugador, jugador)
+        rest = api.get(URL_REST_MIAS).json()['results'][0]
+        assert {EQUIVALENCIAS_RESERVA.get(clave, clave): valor for clave, valor in reserva.items()} == rest
+        assert (reserva['horaFin'], reserva['precioAcordado'], reserva['estado']) == ('15:00:00', '38000.00', 1)
+
+    def test_el_turno_tomado_responde_409_con_el_mensaje_de_rest(
+        self, reloj, jugador, crear_usuario, cancha_reservable, cliente_de,
+    ):
+        otra = cliente_de(crear_usuario('otra.jugadora@talibre.test'))
+        assert _crear(otra, cancha_reservable).json()['data']['crearReserva']['reserva']
+        mensaje_rest = otra.post(
+            URL_REST_RESERVAS, {'cancha': cancha_reservable.id, 'fecha_turno': MARTES_17, 'hora_inicio': '14:00'},
+            format='json',
+        ).json()['detail']
+
+        error = _error_de_alta(_crear(cliente_de(jugador), cancha_reservable))
+
+        assert (error['extensions']['codigo'], error['message']) == (409, mensaje_rest)
+
+    @pytest.mark.parametrize('fecha,hora', [
+        (MARTES_17, '14:30'),
+        ('2026-11-16', '09:00'),
+        ('2027-03-02', '14:00'),
+        ('17/11/2026', '14:00'),
+    ])
+    def test_un_alta_invalida_responde_400(self, reloj, jugador, cancha_reservable, cliente_de, fecha, hora):
+        from core.models import Reserva
+
+        error = _error_de_alta(_crear(cliente_de(jugador), cancha_reservable, fecha=fecha, hora=hora))
+
+        assert error['extensions']['codigo'] == 400
+        assert not Reserva.objects.exists()
+
+    def test_un_complejo_suspendido_no_recibe_reservas(
+        self, reloj, jugador, complejo, cancha_reservable, cliente_de,
+    ):
+        complejo.estado_contrato = EstadoContrato.SUSPENDIDO
+        complejo.save(update_fields=['estado_contrato'])
+
+        assert _error_de_alta(_crear(cliente_de(jugador), cancha_reservable))['extensions']['codigo'] == 400
+
+    def test_sin_token_responde_401(self, reloj, cancha_reservable, cliente):
+        assert _error_de_alta(_crear(cliente, cancha_reservable))['extensions']['codigo'] == 401
+
+    def test_el_operador_recibe_403_auditado(self, reloj, operador, cancha_reservable, cliente_de):
+        from core.models import LogAuditoria, Reserva, TipoEventoAuditoria
+
+        error = _error_de_alta(_crear(cliente_de(operador), cancha_reservable))
+
+        assert error['extensions']['codigo'] == 403
+        assert not Reserva.objects.exists()
+        assert LogAuditoria.objects.filter(
+            usuario=operador, tipo_evento=TipoEventoAuditoria.ACCESO_DENEGADO,
+        ).exists()
+
+    def test_el_alta_se_audita_con_la_ip_del_pedido(self, reloj, jugador, cancha_reservable, cliente_de):
+        from core.models import LogAuditoria, TipoEventoAuditoria
+
+        api = cliente_de(jugador)
+        respuesta = api.post(
+            URL, {'query': CREAR_RESERVA, 'variables': {
+                'cancha': cancha_reservable.id, 'fechaTurno': MARTES_17, 'horaInicio': '14:00',
+            }}, format='json', REMOTE_ADDR='203.0.113.7',
+        )
+        assert 'errors' not in respuesta.json()
+
+        log = LogAuditoria.objects.get(tipo_evento=TipoEventoAuditoria.RESERVA_CREADA)
+        assert (log.usuario, log.ip_origen) == (jugador, '203.0.113.7')
+
+    def test_la_grilla_se_avisa_recien_al_confirmar(
+        self, reloj, jugador, complejo, cancha_reservable, cliente_de, django_capture_on_commit_callbacks,
+    ):
+        from unittest import mock
+
+        from core.services import DifusionGrillaService
+
+        with mock.patch.object(DifusionGrillaService, 'publicar') as publicar:
+            with django_capture_on_commit_callbacks() as pendientes:
+                _crear(cliente_de(jugador), cancha_reservable)
+                publicar.assert_not_called()
+            for callback in pendientes:
+                callback()
+
+        publicar.assert_called_once()
+        assert publicar.call_args.args[0] == complejo.id
+
+    def test_comparte_el_limite_de_altas_con_rest(self, reloj, jugador, cancha_reservable, cliente_de):
+        api = cliente_de(jugador)
+        pedido = {'cancha': cancha_reservable.id, 'fecha_turno': MARTES_17, 'hora_inicio': '14:30'}
+        for _ in range(20):
+            assert api.post(URL_REST_RESERVAS, pedido, format='json').status_code == status.HTTP_400_BAD_REQUEST
+
+        assert _error_de_alta(_crear(api, cancha_reservable))['extensions']['codigo'] == 429
+
+    def test_faltan_argumentos_obligatorios(self, reloj, jugador, cliente_de):
+        consulta = 'mutation { crearReserva(cancha: 1) { reserva { id } } }'
+
+        assert _consultar(cliente_de(jugador), consulta).status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_la_mutation_no_se_ejecuta_por_get(self, reloj, jugador, cancha_reservable, cliente_de):
+        from core.models import Reserva
+
+        respuesta = cliente_de(jugador).get(URL, {'query': 'mutation { crearReserva(cancha: 1, fechaTurno: "x", horaInicio: "y") { reserva { id } } }'})
+
+        assert respuesta.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+        assert not Reserva.objects.exists()
+
+    def test_la_reserva_creada_aparece_en_misreservas(self, reloj, jugador, cancha_reservable, cliente_de):
+        api = cliente_de(jugador)
+        creada = _crear(api, cancha_reservable).json()['data']['crearReserva']['reserva']['id']
+
+        datos = _mis_reservas(api).json()['data']['misReservas']
+
+        assert [fila['id'] for fila in datos['results']] == [creada]

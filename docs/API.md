@@ -354,6 +354,21 @@ query {
 - Cada reserva expone los campos de REST en camelCase: `id`, `complejo`, `cancha`, `deporte`, `fechaTurno`, `horaInicio`, `horaFin`, `precioAcordado`, `tipoOcupacion`, `tipoOcupacionNombre`, `estado`, `estadoNombre`, `cancelableHasta` y `fechaCreacion`. Fechas y horas llegan como texto con el mismo formato que REST.
 - Sin token, o con un token inválido o vencido, el campo responde `null` con un error `401` y el mismo mensaje que REST; los campos públicos de la misma consulta se resuelven igual. Dueños y operadores reciben `403`.
 
+### `crearReserva` (mutation)
+
+Mismo alta que `POST /api/reservas/`: mismas reglas de turno, anticipación y disponibilidad, mismos errores, mismo límite de altas por cuenta (compartido con REST) y misma auditoría. Argumentos obligatorios: `cancha` (id), `fechaTurno` (`AAAA-MM-DD`) y `horaInicio` (`HH:MM`).
+
+```graphql
+mutation {
+  crearReserva(cancha: 3, fechaTurno: "2026-11-24", horaInicio: "20:00") {
+    reserva { id fechaTurno horaInicio horaFin precioAcordado estado estadoNombre cancelableHasta }
+  }
+}
+```
+
+- Devuelve la reserva creada con los mismos campos que `misReservas`.
+- Errores en `extensions.codigo`: `400` (turno inválido, pasado, fuera de la anticipación o complejo no habilitado), `401`, `403`, `409` (turno ocupado, turno fijo o excepción, con el mismo mensaje que REST) y `429`.
+
 ## Sistema
 
 | Método y ruta | Acceso | Uso |
