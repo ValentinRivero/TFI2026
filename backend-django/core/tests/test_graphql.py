@@ -211,4 +211,163 @@ class TestTransporteDeGraphQL:
         assert respuesta.status_code == status.HTTP_200_OK
         cuerpo = respuesta.content.decode()
         assert '10.0.0.5' not in cuerpo
+        error = respuesta.json()['errors'][0]
+        assert (error['message'], error['extensions']['codigo']) == ('Error interno del servidor.', 500)
+
+    def test_un_error_fuera_de_la_api_rest_tampoco_filtra_detalles(self, cliente, catalogo, monkeypatch):
+        import core.schema
+
+        def _falla(*args, **kwargs):
+            raise RuntimeError('/srv/talibre/core/schema.py linea 40')
+
+        monkeypatch.setattr(core.schema, 'listar_como_en_rest', _falla)
+
+        respuesta = _consultar(cliente)
+
+        assert '/srv/talibre' not in respuesta.content.decode()
         assert respuesta.json()['errors'][0]['message'] == 'Error interno del servidor.'
+
+
+MIS_RESERVAS = '''
+query MisReservas($estado: Int, $vigencia: String, $fechaDesde: String, $fechaHasta: String, $ordering: String, $page: Int) {
+  misReservas(
+    estado: $estado, vigencia: $vigencia, fechaDesde: $fechaDesde, fechaHasta: $fechaHasta,
+    ordering: $ordering, page: $page
+  ) {
+    count
+    results {
+      id complejo { id nombre } cancha { id nombre } deporte fechaTurno horaInicio horaFin precioAcordado
+      tipoOcupacion tipoOcupacionNombre estado estadoNombre cancelableHasta fechaCreacion
+    }
+  }
+}
+'''
+URL_REST_MIAS = '/api/reservas/mias/'
+EQUIVALENCIAS_RESERVA = {
+    'fechaTurno': 'fecha_turno', 'horaInicio': 'hora_inicio', 'horaFin': 'hora_fin',
+    'precioAcordado': 'precio_acordado', 'tipoOcupacion': 'tipo_ocupacion',
+    'tipoOcupacionNombre': 'tipo_ocupacion_nombre', 'estadoNombre': 'estado_nombre',
+    'cancelableHasta': 'cancelable_hasta', 'fechaCreacion': 'fecha_creacion',
+}
+
+
+@pytest.fixture
+def reservas_del_jugador(jugador, crear_usuario, complejo, crear_cancha, crear_reserva):
+    from datetime import date, time
+
+    from core.models import EstadoReserva
+
+    cancha = crear_cancha(complejo, 'Cancha 1')
+    otro = crear_usuario('otro.jugador@talibre.test')
+    propias = [
+        crear_reserva(cancha, date(2026, 11, 10), time(18), time(19), estado=EstadoReserva.COMPLETADA),
+        crear_reserva(cancha, date(2026, 11, 20), time(20), time(21), estado=EstadoReserva.PENDIENTE),
+        crear_reserva(cancha, date(2026, 11, 25), time(19), time(20), estado=EstadoReserva.CANCELADA_JUGADOR),
+    ]
+    crear_reserva(cancha, date(2026, 11, 20), time(18), time(19), usuario=otro, creado_por=otro)
+    return propias
+
+
+def _mis_reservas(cliente, **variables):
+    return _consultar(cliente, MIS_RESERVAS, **variables)
+
+
+def _error(respuesta):
+    assert respuesta.status_code == status.HTTP_200_OK
+    cuerpo = respuesta.json()
+    assert cuerpo['data'] == {'misReservas': None}
+    assert cuerpo['errors'][0]['path'] == ['misReservas']
+    return cuerpo['errors'][0]
+
+
+@pytest.mark.django_db
+class TestMisReservas:
+    def test_devuelve_solo_las_reservas_propias(self, jugador, reservas_del_jugador, cliente_de):
+        datos = _mis_reservas(cliente_de(jugador)).json()['data']['misReservas']
+
+        assert datos['count'] == 3
+        assert {fila['id'] for fila in datos['results']} == {reserva.id for reserva in reservas_del_jugador}
+
+    @pytest.mark.parametrize('variables,parametros', [
+        ({}, {}),
+        ({'estado': 1}, {'estado': 1}),
+        ({'vigencia': 'proximas'}, {'vigencia': 'proximas'}),
+        ({'vigencia': 'pasadas'}, {'vigencia': 'pasadas'}),
+        ({'fechaDesde': '2026-11-15', 'fechaHasta': '2026-11-22'}, {'fecha_desde': '2026-11-15', 'fecha_hasta': '2026-11-22'}),
+        ({'ordering': '-fecha_turno'}, {'ordering': '-fecha_turno'}),
+    ])
+    def test_devuelve_lo_mismo_que_la_api_rest(
+        self, reloj, jugador, reservas_del_jugador, cliente_de, variables, parametros,
+    ):
+        api = cliente_de(jugador)
+        rest = api.get(URL_REST_MIAS, parametros).json()
+
+        graphql = _mis_reservas(api, **variables).json()['data']['misReservas']
+
+        assert graphql['count'] == rest['count']
+        assert [
+            {EQUIVALENCIAS_RESERVA.get(clave, clave): valor for clave, valor in fila.items()}
+            for fila in graphql['results']
+        ] == rest['results']
+
+    def test_sin_token_responde_401_como_rest(self, reservas_del_jugador, cliente):
+        error = _error(_mis_reservas(cliente))
+
+        assert error['extensions']['codigo'] == 401
+        assert error['message'] == cliente.get(URL_REST_MIAS).json()['detail']
+
+    def test_token_invalido_responde_401_como_rest(self, reservas_del_jugador):
+        api = _con_token('no-es-un-jwt')
+
+        error = _error(_mis_reservas(api))
+
+        assert error['extensions']['codigo'] == 401
+        assert error['message'] == api.get(URL_REST_MIAS).json()['detail']
+
+    def test_la_sesion_de_django_no_autentica(self, jugador, reservas_del_jugador):
+        navegador = Client()
+        navegador.force_login(jugador)
+
+        respuesta = navegador.post(URL, {'query': MIS_RESERVAS}, content_type='application/json')
+
+        assert respuesta.json()['errors'][0]['extensions']['codigo'] == 401
+
+    @pytest.mark.parametrize('rol', ['dueno', 'operador'])
+    def test_el_personal_del_complejo_recibe_403_auditado(self, request, rol, reservas_del_jugador, cliente_de):
+        from core.models import LogAuditoria, TipoEventoAuditoria
+
+        usuario = request.getfixturevalue(rol)
+
+        error = _error(_mis_reservas(cliente_de(usuario)))
+
+        assert error['extensions']['codigo'] == 403
+        assert LogAuditoria.objects.filter(
+            usuario=usuario, tipo_evento=TipoEventoAuditoria.ACCESO_DENEGADO,
+        ).exists()
+
+    def test_un_filtro_invalido_responde_400_con_el_detalle(self, jugador, reservas_del_jugador, cliente_de):
+        error = _error(_mis_reservas(cliente_de(jugador), estado=9, fechaDesde='16/11/2026'))
+
+        assert error['extensions']['codigo'] == 400
+        assert set(error['extensions']['detalle']) == {'estado', 'fecha_desde'}
+
+    def test_no_expone_las_observaciones_internas_del_complejo(self, jugador, reservas_del_jugador, cliente_de):
+        respuesta = _consultar(cliente_de(jugador), '{ misReservas { results { id observaciones } } }')
+
+        assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'observaciones' in respuesta.json()['errors'][0]['message']
+
+    def test_catalogo_y_reservas_en_una_misma_consulta(self, jugador, reservas_del_jugador, cliente_de):
+        consulta = '{ catalogoComplejos { count } misReservas { count } }'
+
+        datos = _consultar(cliente_de(jugador), consulta).json()['data']
+
+        assert (datos['catalogoComplejos']['count'], datos['misReservas']['count']) == (1, 3)
+
+    def test_un_anonimo_ve_el_catalogo_aunque_falle_misreservas(self, reservas_del_jugador, cliente):
+        consulta = '{ catalogoComplejos { count } misReservas { count } }'
+
+        cuerpo = _consultar(cliente, consulta).json()
+
+        assert cuerpo['data'] == {'catalogoComplejos': {'count': 1}, 'misReservas': None}
+        assert cuerpo['errors'][0]['extensions']['codigo'] == 401

@@ -1,36 +1,16 @@
-from functools import wraps
-
 import graphene
 from django.http import HttpRequest, QueryDict
 from graphql import GraphQLError
-from rest_framework.exceptions import APIException, ValidationError
 
-from .views import ComplejoViewSet
-
-
-def _error_de_api(error):
-    mensaje = 'Datos inválidos.' if isinstance(error, ValidationError) else str(error.detail)
-    return GraphQLError(mensaje, extensions={'codigo': error.status_code, 'detalle': error.detail})
+from .views import ComplejoViewSet, ReservaViewSet
 
 
-def con_errores_de_api(resolver):
-    """Las excepciones de DRF (400, 401, 403, 404, 429) llegan al cliente con su código en `extensions`."""
-
-    @wraps(resolver)
-    def _resolver(*args, **kwargs):
-        try:
-            return resolver(*args, **kwargs)
-        except APIException as error:
-            raise _error_de_api(error) from error
-
-    return _resolver
-
-
-def listar_como_en_rest(clase_vista, info, argumentos):
+def listar_como_en_rest(clase_vista, accion, info, argumentos):
     """
-    Ejecuta la acción `list` del ViewSet de la API REST con los argumentos de GraphQL como parámetros de consulta.
-    Pasa por la misma autenticación, permisos, limitadores, filtros, búsqueda, orden, paginación y serializer, así
-    las dos APIs no pueden divergir en qué muestran ni a quién.
+    Ejecuta la acción de listado de un ViewSet de la API REST, con los argumentos de GraphQL como parámetros de
+    consulta, a través de su propio `as_view`: misma autenticación, permisos RBAC, limitadores, filtros, orden,
+    paginación, serializer y manejo de errores, incluida la auditoría de los 403. Las dos APIs no pueden divergir
+    en qué muestran ni a quién.
     """
     consulta = QueryDict(mutable=True)
     for clave, valor in argumentos.items():
@@ -39,13 +19,17 @@ def listar_como_en_rest(clase_vista, info, argumentos):
     peticion = HttpRequest()
     peticion.method = 'GET'
     peticion.GET = consulta
+    # Solo los encabezados: el token sale de Authorization y nunca de una cookie de sesión.
     peticion.META = info.context.META
 
-    vista = clase_vista(action_map={'get': 'list'}, args=(), kwargs={}, format_kwarg=None)
-    vista.request = vista.initialize_request(peticion)
-    vista.initial(vista.request)
-    pagina = vista.paginate_queryset(vista.filter_queryset(vista.get_queryset()))
-    return {'count': vista.paginator.page.paginator.count, 'results': vista.get_serializer(pagina, many=True).data}
+    respuesta = clase_vista.as_view({'get': accion})(peticion)
+    if respuesta.status_code >= 400:
+        detalle = respuesta.data['detail']
+        raise GraphQLError(
+            detalle if isinstance(detalle, str) else 'Datos inválidos.',
+            extensions={'codigo': respuesta.status_code, 'detalle': detalle},
+        )
+    return {'count': respuesta.data['count'], 'results': respuesta.data['results']}
 
 
 class ReferenciaType(graphene.ObjectType):
@@ -72,6 +56,28 @@ class PaginaCatalogoType(graphene.ObjectType):
     results = graphene.List(graphene.NonNull(ComplejoCatalogoType), required=True)
 
 
+class ReservaPropiaType(graphene.ObjectType):
+    id = graphene.Int(required=True)
+    complejo = graphene.Field(ReferenciaType, required=True)
+    cancha = graphene.Field(ReferenciaType, required=True)
+    deporte = graphene.String(required=True)
+    fecha_turno = graphene.String(required=True, description='AAAA-MM-DD')
+    hora_inicio = graphene.String(required=True, description='HH:MM:SS')
+    hora_fin = graphene.String(required=True, description='HH:MM:SS')
+    precio_acordado = graphene.Decimal(required=True)
+    tipo_ocupacion = graphene.Int(required=True)
+    tipo_ocupacion_nombre = graphene.String(required=True)
+    estado = graphene.Int(required=True)
+    estado_nombre = graphene.String(required=True)
+    cancelable_hasta = graphene.String(description='Fecha y hora ISO 8601 con zona horaria')
+    fecha_creacion = graphene.String(required=True, description='Fecha y hora ISO 8601 con zona horaria')
+
+
+class PaginaReservasType(graphene.ObjectType):
+    count = graphene.Int(required=True)
+    results = graphene.List(graphene.NonNull(ReservaPropiaType), required=True)
+
+
 class Query(graphene.ObjectType):
     catalogo_complejos = graphene.Field(
         PaginaCatalogoType,
@@ -84,10 +90,24 @@ class Query(graphene.ObjectType):
         description='Complejos habilitados del catálogo público, con los filtros y la paginación de la API REST.',
     )
 
+    mis_reservas = graphene.Field(
+        PaginaReservasType,
+        estado=graphene.Int(),
+        vigencia=graphene.String(),
+        fecha_desde=graphene.String(),
+        fecha_hasta=graphene.String(),
+        ordering=graphene.String(),
+        page=graphene.Int(),
+        description='Reservas de la cuenta autenticada, con los filtros y la paginación de la API REST.',
+    )
+
     @staticmethod
-    @con_errores_de_api
     def resolve_catalogo_complejos(root, info, **argumentos):
-        return listar_como_en_rest(ComplejoViewSet, info, argumentos)
+        return listar_como_en_rest(ComplejoViewSet, 'list', info, argumentos)
+
+    @staticmethod
+    def resolve_mis_reservas(root, info, **argumentos):
+        return listar_como_en_rest(ReservaViewSet, 'mias', info, argumentos)
 
 
 schema = graphene.Schema(query=Query)

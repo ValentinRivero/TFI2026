@@ -338,6 +338,22 @@ query {
 
 Cada complejo expone `id`, `nombre`, `direccion`, `latitud`, `longitud`, `telefonoContacto`, `horasLimiteCancelacion`, `infoSena`, `precioDesde`, `servicios` y `deportes`. Los decimales llegan como texto, igual que en REST.
 
+### `misReservas`
+
+Mismas reservas, filtros, orden, paginación y permisos que `GET /api/reservas/mias/`: requiere sesión de jugador (o superadmin). Argumentos opcionales: `estado`, `vigencia` (`proximas` o `pasadas`), `fechaDesde` y `fechaHasta` (`AAAA-MM-DD`), `ordering` y `page`.
+
+```graphql
+query {
+  misReservas(vigencia: "proximas") {
+    count
+    results { id complejo { nombre } cancha { nombre } fechaTurno horaInicio estado estadoNombre cancelableHasta }
+  }
+}
+```
+
+- Cada reserva expone los campos de REST en camelCase: `id`, `complejo`, `cancha`, `deporte`, `fechaTurno`, `horaInicio`, `horaFin`, `precioAcordado`, `tipoOcupacion`, `tipoOcupacionNombre`, `estado`, `estadoNombre`, `cancelableHasta` y `fechaCreacion`. Fechas y horas llegan como texto con el mismo formato que REST.
+- Sin token, o con un token inválido o vencido, el campo responde `null` con un error `401` y el mismo mensaje que REST; los campos públicos de la misma consulta se resuelven igual. Dueños y operadores reciben `403`.
+
 ## Sistema
 
 | Método y ruta | Acceso | Uso |

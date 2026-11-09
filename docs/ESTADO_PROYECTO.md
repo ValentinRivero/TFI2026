@@ -43,7 +43,7 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - [x] **5.1.6.** Cantidad de consultas constante y cierre del punto.
 - [ ] **5.2.** GraphQL mínimo en `/graphql/` (`core/schema.py`, `core/graphql_views.py`, `config/schema.py`) reutilizando los servicios y permisos de la API REST.
   - [x] **5.2.1.** Endpoint `POST /graphql/` con `JWTGraphQLView` (JWT del encabezado, sin sesión ni CSRF, GraphiQL solo con `DEBUG`) y query pública `catalogoComplejos`, que ejecuta el mismo ViewSet que REST.
-  - [ ] **5.2.2.** Query `misReservas` con los permisos y filtros del listado de reservas del jugador.
+  - [x] **5.2.2.** Query `misReservas` con los permisos y filtros del listado de reservas del jugador.
   - [ ] **5.2.3.** Mutation `crearReserva` con las mismas validaciones, bloqueos y errores que el alta por REST.
   - [ ] **5.2.4.** Profundidad máxima de consulta, introspección apagada fuera de desarrollo y limitador propio del endpoint.
 - [ ] **5.3.** Base y seguridad de `backend-node`: ES Modules, `app.js`, `server.js`, un router por módulo, Morgan, Helmet, CORS con lista blanca y middlewares `auth`, `rol`, `rateLimit` y `validarCampos`, validando el JWT de Django.
