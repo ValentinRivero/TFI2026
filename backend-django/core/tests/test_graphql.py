@@ -5,8 +5,10 @@ from django.test import Client
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from core.graphql_views import MAXIMO_CAMPOS_RAIZ_GRAPHQL, MAXIMO_PROFUNDIDAD_GRAPHQL, MENSAJE_DEMASIADOS_CAMPOS
 from core.models import EstadoContrato, Servicio
 from core.serializers_auth import TokenConRolSerializer
+from core.throttles import GraphQLRateThrottle
 
 URL = '/graphql/'
 URL_REST = '/api/complejos/'
@@ -534,3 +536,128 @@ class TestCrearReserva:
         datos = _mis_reservas(api).json()['data']['misReservas']
 
         assert [fila['id'] for fila in datos['results']] == [creada]
+
+
+INTROSPECCION = '{ __schema { queryType { name } } }'
+
+
+@pytest.mark.django_db
+class TestEndurecimientoDeGraphQL:
+    def test_la_introspeccion_esta_apagada_fuera_de_desarrollo(self, cliente):
+        respuesta = _consultar(cliente, INTROSPECCION)
+
+        assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'introspection is disabled' in respuesta.json()['errors'][0]['message']
+
+    def test_tampoco_se_filtra_por_typename_del_tipo_raiz(self, cliente):
+        respuesta = _consultar(cliente, '{ __type(name: "ReservaPropiaType") { fields { name } } }')
+
+        assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_en_desarrollo_la_introspeccion_funciona_para_graphiql(self, cliente, settings):
+        settings.DEBUG = True
+
+        respuesta = _consultar(cliente, INTROSPECCION)
+
+        assert respuesta.json()['data'] == {'__schema': {'queryType': {'name': 'Query'}}}
+
+    def test_admite_las_consultas_reales_mas_profundas(self, jugador, catalogo, cliente_de):
+        consulta = '{ catalogoComplejos { results { servicios { nombre } } } misReservas { results { complejo { id } } } }'
+
+        assert 'errors' not in _consultar(cliente_de(jugador), consulta).json()
+
+    def test_rechaza_una_consulta_mas_profunda_que_el_maximo(self, cliente):
+        anidado = 'nombre'
+        for _ in range(MAXIMO_PROFUNDIDAD_GRAPHQL + 1):
+            anidado = f'servicios {{ {anidado} }}'
+
+        respuesta = _consultar(cliente, f'query Profunda {{ catalogoComplejos {{ results {{ {anidado} }} }} }}')
+
+        assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
+        mensajes = [error['message'] for error in respuesta.json()['errors']]
+        assert any('exceeds maximum operation depth' in mensaje for mensaje in mensajes)
+
+    def test_admite_hasta_el_maximo_de_campos_raiz(self, cliente, catalogo):
+        alias = ' '.join(f'c{numero}: catalogoComplejos {{ count }}' for numero in range(MAXIMO_CAMPOS_RAIZ_GRAPHQL))
+
+        assert 'errors' not in _consultar(cliente, f'{{ {alias} }}').json()
+
+    def test_rechaza_alias_que_multiplican_la_consulta(self, cliente, catalogo):
+        from unittest import mock
+
+        alias = ' '.join(f'c{numero}: catalogoComplejos {{ count }}' for numero in range(100))
+
+        with mock.patch('core.schema.listar_como_en_rest') as listar:
+            respuesta = _consultar(cliente, f'{{ {alias} }}')
+
+        assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
+        assert respuesta.json()['errors'][0]['message'] == MENSAJE_DEMASIADOS_CAMPOS
+        listar.assert_not_called()
+
+    def test_los_fragmentos_cuentan_como_campos_raiz(self, cliente, catalogo):
+        campos = ' '.join(f'c{numero}: catalogoComplejos {{ count }}' for numero in range(4))
+        consulta = f'query {{ ...Raiz ... on Query {{ x: catalogoComplejos {{ count }} y: catalogoComplejos {{ count }} }} }} fragment Raiz on Query {{ {campos} }}'
+
+        respuesta = _consultar(cliente, consulta)
+
+        assert respuesta.json()['errors'][0]['message'] == MENSAJE_DEMASIADOS_CAMPOS
+
+    def test_el_mismo_fragmento_repetido_se_cuenta_una_vez(self, cliente, catalogo):
+        consulta = 'query { ...Raiz ...Raiz ...Raiz } fragment Raiz on Query { a: catalogoComplejos { count } }'
+
+        assert 'errors' not in _consultar(cliente, consulta).json()
+
+    def test_rechaza_varias_altas_en_una_misma_mutation(self, reloj, jugador, cancha_reservable, cliente_de):
+        from core.models import Reserva
+
+        altas = ' '.join(
+            f'a{numero}: crearReserva(cancha: {cancha_reservable.id}, fechaTurno: "{MARTES_17}", '
+            f'horaInicio: "{14 + numero}:00") {{ reserva {{ id }} }}'
+            for numero in range(MAXIMO_CAMPOS_RAIZ_GRAPHQL + 1)
+        )
+
+        respuesta = _consultar(cliente_de(jugador), f'mutation {{ {altas} }}')
+
+        assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
+        assert not Reserva.objects.exists()
+
+    def test_el_endpoint_tiene_su_propio_limite_de_solicitudes(self, cliente, monkeypatch):
+        monkeypatch.setattr(GraphQLRateThrottle, 'rate', '3/minute', raising=False)
+        for _ in range(3):
+            assert _consultar(cliente, '{ noExiste }').status_code == status.HTTP_400_BAD_REQUEST
+
+        respuesta = _consultar(cliente, '{ catalogoComplejos { count } }')
+
+        assert respuesta.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+        assert respuesta.json()['errors'][0]['message']
+        assert int(respuesta['Retry-After']) > 0
+
+    def test_el_limite_cuenta_por_cuenta_y_no_por_ip(self, jugador, crear_usuario, catalogo, cliente_de, monkeypatch):
+        monkeypatch.setattr(GraphQLRateThrottle, 'rate', '2/minute', raising=False)
+        api = cliente_de(jugador)
+        for _ in range(2):
+            _consultar(api)
+
+        otra = cliente_de(crear_usuario('otra.jugadora@talibre.test'))
+
+        assert _consultar(api).status_code == status.HTTP_429_TOO_MANY_REQUESTS
+        assert _consultar(otra).status_code == status.HTTP_200_OK
+
+    def test_el_429_del_endpoint_se_audita_como_en_rest(self, cliente, monkeypatch):
+        from core.models import LogAuditoria, TipoEventoAuditoria
+
+        monkeypatch.setattr(GraphQLRateThrottle, 'rate', '1/minute', raising=False)
+        _consultar(cliente, '{ noExiste }')
+
+        mensaje = _consultar(cliente, '{ noExiste }').json()['errors'][0]['message']
+
+        log = LogAuditoria.objects.get(tipo_evento=TipoEventoAuditoria.LIMITE_PETICIONES)
+        assert (log.accion, log.detalle) == ('POST /graphql/', mensaje)
+
+    def test_un_403_queda_auditado_con_el_campo_graphql(self, operador, cliente_de):
+        from core.models import LogAuditoria, TipoEventoAuditoria
+
+        _mis_reservas(cliente_de(operador))
+
+        log = LogAuditoria.objects.get(usuario=operador, tipo_evento=TipoEventoAuditoria.ACCESO_DENEGADO)
+        assert log.accion == 'GET /graphql/misReservas'

@@ -170,6 +170,7 @@ REST_FRAMEWORK = {
         'registro': os.environ.get('THROTTLE_REGISTRO', '10/hour'),
         'reservas': '20/hour',
         'grilla': '300/minute',
+        'graphql': os.environ.get('THROTTLE_GRAPHQL', '120/minute'),
     },
     'EXCEPTION_HANDLER': 'core.exceptions.custom_exception_handler',
 }

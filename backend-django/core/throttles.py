@@ -33,3 +33,12 @@ class ReservaRateThrottle(UserRateThrottle):
     """Limita las altas de reservas por cuenta: protege al servidor y evita que una cuenta acapare la grilla."""
 
     scope = 'reservas'
+
+
+class GraphQLRateThrottle(UserRateThrottle):
+    """
+    Límite del endpoint GraphQL por cuenta o, sin sesión, por IP. Cubre lo que no llega a una vista REST: consultas
+    inválidas, demasiado profundas o con demasiados campos, que también consumen análisis y validación.
+    """
+
+    scope = 'graphql'

@@ -321,6 +321,8 @@ Si el cambio deja reservas por jugar (pendientes, confirmadas o señadas) o turn
 
 - Usa el mismo access token que REST en `Authorization: Bearer <access>`. Igual que en las rutas públicas de REST, un token inválido o vencido no impide consultar los campos públicos.
 - Solo admite POST: GET responde `405`.
+- Cada operación admite como máximo 5 campos de primer nivel, contando alias y fragmentos, y la profundidad de anidamiento está limitada; si se excede, responde `400` sin ejecutar nada. La introspección del esquema está deshabilitada en producción.
+- El endpoint tiene su propio límite de solicitudes por cuenta (o por IP sin sesión), además de los de cada operación; al superarlo responde `429` con el encabezado `Retry-After`.
 - Los errores de un campo responden HTTP 200 con `data` en `null` para ese campo y la lista `errors`; cada error lleva el código HTTP equivalente en `extensions.codigo` (`400`, `401`, `403`, `404`, `429`) y, en los de validación, el detalle por campo en `extensions.detalle`. Una consulta mal formada o con campos inexistentes responde `400`.
 
 ### `catalogoComplejos`

@@ -15,6 +15,8 @@ def ejecutar_como_en_rest(clase_vista, accion, info, metodo='get', parametros=No
     """
     peticion = HttpRequest()
     peticion.method = metodo.upper()
+    # La auditoría registra método y ruta: la ruta lleva el campo GraphQL que originó el pedido.
+    peticion.path = peticion.path_info = f'{info.context.path}{info.field_name}'
     peticion.GET = QueryDict(mutable=True)
     for clave, valor in (parametros or {}).items():
         if valor is not None:
