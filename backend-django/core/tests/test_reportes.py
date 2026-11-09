@@ -4,6 +4,8 @@ from itertools import count
 from zoneinfo import ZoneInfo
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from rest_framework import status
 
 from core.models import (
@@ -505,8 +507,8 @@ def abrir(crear_horario):
 
 @pytest.fixture
 def ocupar(crear_reserva):
-    def _ocupar(cancha, fecha, desde, hasta, estado=EstadoReserva.CONFIRMADA):
-        return crear_reserva(cancha, fecha, desde, hasta, estado=estado)
+    def _ocupar(cancha, fecha, desde, hasta, estado=EstadoReserva.CONFIRMADA, **campos):
+        return crear_reserva(cancha, fecha, desde, hasta, estado=estado, **campos)
 
     return _ocupar
 
@@ -767,4 +769,88 @@ class TestRankingDeHorarios:
         assert self._ranking(cliente, complejo) == []
         assert self._ranking(cliente, complejo, criterio='fecha_creacion') == [
             {'hora_inicio': '18:00:00', 'reservas': 1},
+        ]
+
+
+@pytest.mark.django_db
+class TestCostoDelDashboard:
+    def _consultas(self, cliente, complejo, **cambios):
+        with CaptureQueriesContext(connection) as capturadas:
+            assert cliente.get(URL, _parametros(complejo, **cambios)).status_code == status.HTTP_200_OK
+        return len(capturadas)
+
+    @pytest.mark.parametrize('criterio', ['fecha_turno', 'fecha_creacion'])
+    def test_las_consultas_no_crecen_con_canchas_dias_reservas_ni_excepciones(
+        self, dueno, complejo, cancha, crear_cancha, abrir, ocupar, crear_excepcion_horaria, cliente_de, criterio,
+    ):
+        cliente = cliente_de(dueno)
+        abrir(cancha, time(18), time(23))
+        ocupar(cancha, LUNES_16, time(18), time(19))
+        pocas = self._consultas(cliente, complejo, **SOLO_LUNES, criterio=criterio)
+
+        for numero in range(2, 6):
+            otra = crear_cancha(complejo, f'Cancha {numero}', deporte='Pádel' if numero % 2 else 'Fútbol 5')
+            abrir(otra, time(8), time(12))
+            abrir(otra, time(17), time(23), dias=range(DiaSemana.LUNES, DiaSemana.DOMINGO + 1))
+            for dia in range(1, 29):
+                ocupar(otra, date(2026, 11, dia), time(18), time(19), estado=EstadoReserva.COMPLETADA)
+            crear_excepcion_horaria(complejo, date(2026, 11, numero), cancha=otra, inicio=time(9), fin=time(10))
+        crear_excepcion_horaria(complejo, MIERCOLES_18)
+
+        muchas = self._consultas(cliente, complejo, fecha_desde='2026-01-01', fecha_hasta='2026-12-31', criterio=criterio)
+
+        assert muchas == pocas
+
+    @pytest.mark.parametrize('criterio,consultas', [
+        # Acceso al complejo, resumen, ranking y las cuatro de la ocupación (canchas, horarios, reservas, excepciones).
+        ('fecha_turno', 7),
+        ('fecha_creacion', 3),
+    ])
+    def test_el_servicio_resuelve_el_dashboard_en_consultas_fijas(
+        self, dueno, complejo, cancha, abrir, ocupar, django_assert_num_queries, criterio, consultas,
+    ):
+        abrir(cancha, time(18), time(23))
+        ocupar(cancha, LUNES_16, time(18), time(19))
+        filtros = {
+            'complejo': complejo.id, 'fecha_desde': date(2026, 11, 1), 'fecha_hasta': date(2026, 11, 30),
+            'criterio': criterio,
+        }
+
+        with django_assert_num_queries(consultas):
+            ReporteService.dashboard(dueno, filtros)
+
+
+@pytest.mark.django_db
+class TestDashboardCompleto:
+    def test_un_mes_de_un_complejo_con_dos_canchas(
+        self, dueno, complejo, cancha, crear_cancha, abrir, ocupar, crear_excepcion_horaria, cliente_de,
+    ):
+        # Fútbol: lunes a viernes 18 a 23 (5 turnos de 60). Pádel: lunes de 18 a 21 con turnos de 90 (2 turnos).
+        padel = crear_cancha(complejo, 'Pádel 1', deporte='Pádel', duracion_turno_min=90)
+        abrir(cancha, time(18), time(23))
+        abrir(padel, time(18), time(21), dias=[DiaSemana.LUNES])
+        crear_excepcion_horaria(complejo, MIERCOLES_18)
+
+        ocupar(cancha, LUNES_16, time(18), time(19), estado=EstadoReserva.SENADA, precio_acordado=Decimal('40000.00'))
+        ocupar(cancha, LUNES_16, time(20), time(21), estado=EstadoReserva.COMPLETADA)
+        ocupar(cancha, date(2026, 11, 17), time(20), time(21), estado=EstadoReserva.CANCELADA_JUGADOR)
+        ocupar(padel, LUNES_16, time(19, 30), time(21), estado=EstadoReserva.CONFIRMADA)
+
+        cuerpo = cliente_de(dueno).get(URL, _parametros(complejo, **SEMANA)).json()
+
+        assert cuerpo['recaudacion'] == {'total': '116000.00', 'senada': '40000.00'}
+        assert cuerpo['conteos'] == {
+            **SIN_RESERVAS, 'confirmadas': 1, 'senadas': 1, 'completadas': 1,
+            'canceladas_jugador': 1, 'canceladas_total': 1,
+        }
+        assert cuerpo['ocupacion'] == [
+            {'cancha_id': cancha.id, 'cancha': 'Cancha Propia',
+             'minutos_ofertables': 1200, 'minutos_ocupados': 120, 'porcentaje': 10.0},
+            {'cancha_id': padel.id, 'cancha': 'Pádel 1',
+             'minutos_ofertables': 180, 'minutos_ocupados': 90, 'porcentaje': 50.0},
+        ]
+        assert cuerpo['ranking_horarios'] == [
+            {'hora_inicio': '18:00:00', 'reservas': 1},
+            {'hora_inicio': '19:30:00', 'reservas': 1},
+            {'hora_inicio': '20:00:00', 'reservas': 1},
         ]

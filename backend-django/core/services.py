@@ -2275,6 +2275,41 @@ class ReporteService:
         return _minutos_de_la_union(abiertos + ocupados)
 
     @staticmethod
+    def _fila_de_ocupacion(cancha, dias, horarios, excepciones, reservas):
+        fila = {'cancha_id': cancha['id'], 'cancha': cancha['nombre']}
+        ocupados = sum(
+            _minutos(fin) - _minutos(inicio) for dia in dias for inicio, fin in reservas[(cancha['id'], dia)]
+        )
+        if cancha['estado'] != EstadoCancha.ACTIVA or cancha['deporte__estado'] != EstadoRegistro.ACTIVO:
+            if not ocupados:
+                return None
+            return {**fila, 'minutos_ofertables': None, 'minutos_ocupados': ocupados, 'porcentaje': None}
+
+        bloques_por_dia_semana = {
+            dia_semana: [
+                bloque
+                for horario in horarios[(cancha['id'], dia_semana)]
+                for bloque in GrillaService.generar_bloques(
+                    horario['hora_apertura'], horario['hora_cierre'], cancha['duracion_turno_min'],
+                )
+            ]
+            for dia_semana in DiaSemana.values
+        }
+        excepciones = [excepcion for excepcion in excepciones if excepcion['cancha_id'] in (None, cancha['id'])]
+        ofertables = sum(
+            ReporteService._minutos_ofertables(
+                bloques_por_dia_semana[dia.weekday()],
+                [excepcion for excepcion in excepciones if excepcion['fecha_inicio'] <= dia <= excepcion['fecha_fin']],
+                reservas[(cancha['id'], dia)],
+            )
+            for dia in dias
+        )
+        return {
+            **fila, 'minutos_ofertables': ofertables, 'minutos_ocupados': ocupados,
+            'porcentaje': round(ocupados * 100 / ofertables, 2) if ofertables else None,
+        }
+
+    @staticmethod
     def ocupacion(filtros):
         """
         Minutos ocupados sobre minutos ofertables por cancha, día por día. Solo con el criterio de fecha de turno:
@@ -2299,45 +2334,10 @@ class ReporteService:
             for numero in range((filtros['fecha_hasta'] - filtros['fecha_desde']).days + 1)
         ]
 
-        filas = []
-        for cancha in canchas:
-            ocupados = sum(
-                _minutos(fin) - _minutos(inicio) for dia in dias for inicio, fin in reservas[(cancha['id'], dia)]
-            )
-            ofrece = cancha['estado'] == EstadoCancha.ACTIVA and cancha['deporte__estado'] == EstadoRegistro.ACTIVO
-            if not ofrece:
-                if ocupados:
-                    filas.append({
-                        'cancha_id': cancha['id'], 'cancha': cancha['nombre'],
-                        'minutos_ofertables': None, 'minutos_ocupados': ocupados, 'porcentaje': None,
-                    })
-                continue
-
-            excepciones_de_la_cancha = [
-                excepcion for excepcion in excepciones if excepcion['cancha_id'] in (None, cancha['id'])
-            ]
-            ofertables = 0
-            for dia in dias:
-                bloques = [
-                    bloque
-                    for horario in horarios[(cancha['id'], dia.weekday())]
-                    for bloque in GrillaService.generar_bloques(
-                        horario['hora_apertura'], horario['hora_cierre'], cancha['duracion_turno_min'],
-                    )
-                ]
-                excepciones_del_dia = [
-                    excepcion for excepcion in excepciones_de_la_cancha
-                    if excepcion['fecha_inicio'] <= dia <= excepcion['fecha_fin']
-                ]
-                ofertables += ReporteService._minutos_ofertables(
-                    bloques, excepciones_del_dia, reservas[(cancha['id'], dia)],
-                )
-            filas.append({
-                'cancha_id': cancha['id'], 'cancha': cancha['nombre'],
-                'minutos_ofertables': ofertables, 'minutos_ocupados': ocupados,
-                'porcentaje': round(ocupados * 100 / ofertables, 2) if ofertables else None,
-            })
-        return filas
+        filas = (
+            ReporteService._fila_de_ocupacion(cancha, dias, horarios, excepciones, reservas) for cancha in canchas
+        )
+        return [fila for fila in filas if fila is not None]
 
     @staticmethod
     def dashboard(usuario, filtros):
