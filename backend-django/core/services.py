@@ -2222,6 +2222,7 @@ def _minutos_de_la_union(intervalos):
 
 
 MAXIMO_DIAS_REPORTE = 366
+MAXIMO_HORARIOS_RANKING = 10
 CRITERIO_REPORTE_POR_DEFECTO = 'fecha_turno'
 CRITERIOS_REPORTE = ('fecha_turno', 'fecha_creacion', 'fecha_modificacion')
 MENSAJE_CANCHA_AJENA_REPORTE = 'La cancha no pertenece al complejo.'
@@ -2347,4 +2348,5 @@ class ReporteService:
             'recaudacion': {clave: f'{monto:.2f}' for clave, monto in resumen['recaudacion'].items()},
             'conteos': resumen['conteos'],
             'ocupacion': ReporteService.ocupacion(filtros),
+            'ranking_horarios': ReporteRepository.ranking_horarios(filtros, MAXIMO_HORARIOS_RANKING),
         }

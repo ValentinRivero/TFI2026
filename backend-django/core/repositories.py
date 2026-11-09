@@ -938,6 +938,16 @@ class ReporteRepository:
         )
 
     @staticmethod
+    def ranking_horarios(filtros, limite):
+        """Horarios de inicio con más reservas ocupantes, sumando todas las canchas; a igual cantidad, el más temprano."""
+        return list(
+            ReporteRepository.reservas(filtros).filter(estado__in=ESTADOS_RESERVA_OCUPANTES)
+            .values('hora_inicio')
+            .annotate(reservas=Count('id'))
+            .order_by('-reservas', 'hora_inicio')[:limite]
+        )
+
+    @staticmethod
     def resumen(filtros):
         """Recaudación y conteo por estado en un único `aggregate` sobre las reservas filtradas."""
         cero = Value(Decimal('0.00'), output_field=ReporteRepository._MONTO)

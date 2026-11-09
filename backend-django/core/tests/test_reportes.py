@@ -18,7 +18,7 @@ from core.models import (
     TipoEventoAuditoria,
     TipoOcupacion,
 )
-from core.services import MAXIMO_DIAS_REPORTE, ReporteService
+from core.services import MAXIMO_DIAS_REPORTE, MAXIMO_HORARIOS_RANKING, ReporteService
 
 URL = '/api/reportes/dashboard/'
 MENSAJE_CANCHA_AJENA = 'La cancha no pertenece al complejo.'
@@ -690,3 +690,81 @@ class TestOcupacionPorCancha:
         fila = _de(_ocupacion(cliente_de(dueno), complejo), cancha)
 
         assert (fila['minutos_ofertables'], fila['minutos_ocupados'], fila['porcentaje']) == (None, 60, None)
+
+
+@pytest.mark.django_db
+class TestRankingDeHorarios:
+    def _ranking(self, cliente, complejo, **cambios):
+        respuesta = cliente.get(URL, _parametros(complejo, **cambios))
+        assert respuesta.status_code == status.HTTP_200_OK
+        return respuesta.json()['ranking_horarios']
+
+    def _tomar(self, ocupar, cancha, hora, veces, estado=EstadoReserva.CONFIRMADA, minuto=0):
+        # Un día distinto por reserva: la misma hora no se repite en la misma cancha y fecha.
+        for dia in range(1, veces + 1):
+            ocupar(cancha, date(2026, 11, dia), time(hora, minuto), time(hora + 1, minuto), estado=estado)
+
+    def test_rango_sin_reservas_devuelve_lista_vacia(self, dueno, complejo, cancha, cliente_de):
+        assert self._ranking(cliente_de(dueno), complejo) == []
+
+    def test_ordena_por_cantidad_y_desempata_por_hora(self, dueno, complejo, cancha, ocupar, cliente_de):
+        self._tomar(ocupar, cancha, 18, 2)
+        self._tomar(ocupar, cancha, 20, 5)
+        self._tomar(ocupar, cancha, 21, 2)
+        self._tomar(ocupar, cancha, 19, 3, minuto=30)
+
+        assert self._ranking(cliente_de(dueno), complejo) == [
+            {'hora_inicio': '20:00:00', 'reservas': 5},
+            {'hora_inicio': '19:30:00', 'reservas': 3},
+            {'hora_inicio': '18:00:00', 'reservas': 2},
+            {'hora_inicio': '21:00:00', 'reservas': 2},
+        ]
+
+    @pytest.mark.parametrize('estado,cuenta', [
+        (EstadoReserva.PENDIENTE, True),
+        (EstadoReserva.CONFIRMADA, True),
+        (EstadoReserva.SENADA, True),
+        (EstadoReserva.COMPLETADA, True),
+        (EstadoReserva.CANCELADA_JUGADOR, False),
+        (EstadoReserva.CANCELADA_COMPLEJO, False),
+        (EstadoReserva.AUSENTE, False),
+        (EstadoReserva.BAJA, False),
+    ])
+    def test_solo_cuentan_los_estados_ocupantes(self, dueno, complejo, cancha, ocupar, cliente_de, estado, cuenta):
+        self._tomar(ocupar, cancha, 18, 1, estado=estado)
+
+        esperado = [{'hora_inicio': '18:00:00', 'reservas': 1}] if cuenta else []
+        assert self._ranking(cliente_de(dueno), complejo) == esperado
+
+    def test_suma_la_misma_hora_de_todas_las_canchas(
+        self, dueno, complejo, cancha, cancha_ajena, crear_cancha, ocupar, cliente_de,
+    ):
+        otra = crear_cancha(complejo, 'Cancha 2')
+        self._tomar(ocupar, cancha, 18, 2)
+        self._tomar(ocupar, otra, 18, 1)
+        self._tomar(ocupar, cancha_ajena, 18, 4)
+        cliente = cliente_de(dueno)
+
+        assert self._ranking(cliente, complejo) == [{'hora_inicio': '18:00:00', 'reservas': 3}]
+        assert self._ranking(cliente, complejo, cancha_id=otra.id) == [{'hora_inicio': '18:00:00', 'reservas': 1}]
+
+    def test_devuelve_como_maximo_los_diez_primeros(self, dueno, complejo, cancha, ocupar, cliente_de):
+        # De 8 a 19, doce horarios con una reserva cada uno salvo el de las 19, con dos: el corte deja afuera 18 y 17.
+        for hora in range(8, 20):
+            self._tomar(ocupar, cancha, hora, 2 if hora == 19 else 1)
+
+        ranking = self._ranking(cliente_de(dueno), complejo)
+
+        assert len(ranking) == MAXIMO_HORARIOS_RANKING
+        assert ranking[0] == {'hora_inicio': '19:00:00', 'reservas': 2}
+        assert [fila['hora_inicio'] for fila in ranking[1:]] == [f'{hora:02d}:00:00' for hora in range(8, 17)]
+
+    def test_respeta_el_criterio_temporal(self, dueno, complejo, cancha, ocupar, cliente_de):
+        reserva = ocupar(cancha, date(2026, 12, 20), time(18), time(19))
+        _fijar(reserva, fecha_creacion=datetime(2026, 11, 3, 10, 0))
+        cliente = cliente_de(dueno)
+
+        assert self._ranking(cliente, complejo) == []
+        assert self._ranking(cliente, complejo, criterio='fecha_creacion') == [
+            {'hora_inicio': '18:00:00', 'reservas': 1},
+        ]

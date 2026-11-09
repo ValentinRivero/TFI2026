@@ -295,6 +295,10 @@ Si el cambio deja reservas por jugar (pendientes, confirmadas o señadas) o turn
   },
   "ocupacion": [
     { "cancha_id": 7, "cancha": "Cancha 1", "minutos_ofertables": 1200, "minutos_ocupados": 600, "porcentaje": 50.0 }
+  ],
+  "ranking_horarios": [
+    { "hora_inicio": "20:00:00", "reservas": 18 },
+    { "hora_inicio": "21:00:00", "reservas": 15 }
   ]
 }
 ```
@@ -307,6 +311,7 @@ Si el cambio deja reservas por jugar (pendientes, confirmadas o señadas) o turn
   - **Porcentaje:** `porcentaje` es ocupado sobre ofertable, con dos decimales y nunca mayor que 100. Es `null` si la cancha no tiene oferta en el rango.
   - **Canchas sin oferta vigente:** una cancha en mantenimiento, dada de baja o de un deporte dado de baja figura solo si tuvo reservas en el rango, con `minutos_ofertables` y `porcentaje` en `null`.
   - **Criterio:** con `criterio` distinto de `fecha_turno`, `ocupacion` es `null`, porque el rango no describe días de juego.
+- `ranking_horarios` trae hasta 10 horarios de inicio, con la cantidad de reservas pendientes, confirmadas, señadas y completadas de cada uno, sumando todas las canchas filtradas. Ordena de mayor a menor y, a igual cantidad, por el horario más temprano. Respeta el `criterio` y un rango sin reservas devuelve `[]`.
 
 ## Sistema
 
