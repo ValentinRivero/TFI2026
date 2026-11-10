@@ -145,13 +145,20 @@ describe('Modelo Notificacion', () => {
 });
 
 describe('Notificacion.bandeja', () => {
-  test('filtra por destinatario y excluye las dadas de baja', () => {
-    const consulta = Notificacion.bandeja({ complejo_id: 4 });
+  const VIGENTES = { $in: [ESTADOS_NOTIFICACION.NO_LEIDA, ESTADOS_NOTIFICACION.LEIDA] };
 
-    expect(consulta.getFilter()).toEqual({
-      complejo_id: 4,
-      estado: { $in: [ESTADOS_NOTIFICACION.NO_LEIDA, ESTADOS_NOTIFICACION.LEIDA] },
+  test('la del complejo trae sus avisos generales, sin los dirigidos a un usuario puntual', () => {
+    expect(Notificacion.bandeja({ complejo_id: 4 }).getFilter()).toEqual({
+      complejo_id: 4, usuario_id: null, estado: VIGENTES,
     });
+  });
+
+  test('la de un usuario trae todas las suyas, de cualquier complejo', () => {
+    expect(Notificacion.bandeja({ usuario_id: 12 }).getFilter()).toEqual({ usuario_id: 12, estado: VIGENTES });
+  });
+
+  test('cuenta con el mismo filtro que lista', () => {
+    expect(Notificacion.filtroDeBandeja({ complejo_id: 4 })).toEqual(Notificacion.bandeja({ complejo_id: 4 }).getFilter());
   });
 
   test('ordena de la más reciente a la más antigua', () => {

@@ -380,6 +380,10 @@ Servicio de actividad y notificaciones, con su propia URL base. Sus errores sigu
 |---|---|---|
 | `GET /api/salud` | Público | Estado del servicio: `{ "estado": "ok" }` |
 | `POST /api/actividad` | Público, con sesión opcional | Registra una visita al complejo (`tipo_evento: 1`) o una consulta de su grilla (`2`): `{ "tipo_evento", "complejo_id", "metadata" }`. Responde `201` con `{ "id" }` |
+| `GET /api/actividad?complejo_id=` | Panel del complejo | Actividad registrada del complejo, de la más reciente a la más antigua: `id`, `tipo_evento`, `complejo_id`, `metadata`, `fecha_creacion` |
+| `GET /api/actividad/notificaciones?complejo_id=` | Panel del complejo | Avisos generales del complejo: `id`, `complejo_id`, `categoria`, `prioridad`, `mensaje`, `estado`, `evento` (`{ "id", "tipo_evento", "complejo_id", "fecha_creacion" }` o `null`), `fecha_creacion` |
+| `GET /api/actividad/notificaciones/mias` | Cualquier usuario autenticado | Notificaciones dirigidas a la cuenta del token, con la misma forma |
+| `PATCH /api/actividad/notificaciones/<id>` | Titular, o panel del complejo para sus avisos generales | `{ "estado" }`: `1` no leída, `2` leída. Responde la notificación actualizada |
 
 - Una ruta inexistente responde `404`, un JSON mal formado `400` y un cuerpo demasiado grande `413`.
 - Las rutas privadas usan el mismo access token que Django, en `Authorization: Bearer <access>`. Sin token responde `401` con "Debés iniciar sesión para acceder a este recurso."; con un token inválido, vencido o que no sea de acceso (por ejemplo, un refresh), `401` con "El token es inválido o expiró.", los mismos mensajes que la API principal.
@@ -389,6 +393,10 @@ Servicio de actividad y notificaciones, con su propia URL base. Sus errores sigu
   - **Tipos:** no acepta "reserva realizada" (`3`); ese evento lo emite la API principal al confirmar una reserva.
   - **`metadata`:** opcional, un objeto de hasta 2 KB, sin claves que empiecen con `$` ni contengan `.`.
   - **Errores:** `404` si el complejo no existe o no está habilitado. Tiene su propio límite de solicitudes por IP, más estricto que el general.
+- **Listas:** paginadas de a 20, con la misma forma que la API principal: `{ "count", "next", "previous", "results" }`, con `?page=` y `?limit=` (hasta 50). `next` y `previous` son rutas relativas a este servicio. Una página posterior a la última responde `404` con "Página inválida.".
+- **Panel del complejo:** roles de complejo o `SUPERADMIN`, con acceso al complejo confirmado por la API principal; un complejo ajeno responde `404`. Ninguna de estas respuestas incluye el usuario que generó un evento.
+- **Bandeja propia:** la cuenta sale siempre del token; `usuario_id` u otros parámetros no permiten leer las de otra cuenta. Funciona también con el rol desactivado.
+- **Cambio de estado:** una notificación de otra cuenta, el aviso de un complejo que no se administra, una inexistente o una dada de baja responden igual, `404` con "No se encontró la notificación.". La baja (`0`) no se hace por esta vía.
 - Si un servicio del que depende (la API principal o el proveedor del clima) no responde, falla o tarda demasiado, responde `502` con "Un servicio necesario no está disponible. Intentá nuevamente en unos minutos.". En las rutas del panel, un `401`, `403` o `404` de la API principal llega igual, con su mismo mensaje.
 - Un dato inválido responde `400` con `"mensaje": "Datos inválidos."` y `detalles`, una lista de `{ "campo", "mensaje" }` con un error por campo (los anidados con su ruta, por ejemplo `metadata.cancha_id`). La respuesta nunca repite el valor enviado.
 - Solo atiende pedidos de navegador desde los orígenes del frontend (CORS con lista blanca, sin cookies). Tiene un límite de solicitudes por IP: el cupo restante viaja en los encabezados `RateLimit` y `RateLimit-Policy`, y al superarlo responde `429` con `Retry-After`.

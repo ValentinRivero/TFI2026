@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import bajaLogica from './bajaLogica.plugin.js';
 import { enteroPositivo, opcionesDeEsquema } from './comunes.js';
 import { ESTADOS_EVENTO } from './Evento.js';
+import { TAMANO_DE_PAGINA } from '../utils/paginacion.js';
 
 export const CATEGORIAS_NOTIFICACION = Object.freeze({ RESERVAS: 1, CUENTAS: 2, OPERATORIA: 3, SISTEMA: 4 });
 export const PRIORIDADES_NOTIFICACION = Object.freeze({ NORMAL: 1, URGENTE: 2 });
@@ -58,23 +59,38 @@ const notificacionSchema = new mongoose.Schema(
   opcionesDeEsquema('notificaciones'),
 );
 
+const VIGENTES = [ESTADOS_NOTIFICACION.NO_LEIDA, ESTADOS_NOTIFICACION.LEIDA];
+
 /**
- * Bandeja de un destinatario: sus notificaciones vigentes, de la más reciente a la más antigua, con el evento
- * resuelto por `populate` solo si sigue activo. Sin destinatario se rechaza, para no listar las de todos.
+ * Filtro de la bandeja de un destinatario. La de un complejo trae solo sus avisos generales: los dirigidos a un
+ * usuario puntual los ve únicamente ese usuario. Sin destinatario se rechaza, para no listar las de todos.
  */
-notificacionSchema.statics.bandeja = function bandeja({ complejo_id: complejoId, usuario_id: usuarioId }) {
-  const destinatario = {
-    ...(complejoId ? { complejo_id: complejoId } : {}),
-    ...(usuarioId ? { usuario_id: usuarioId } : {}),
-  };
-  if (Object.keys(destinatario).length === 0) {
+notificacionSchema.statics.filtroDeBandeja = function filtroDeBandeja({ complejo_id: complejoId, usuario_id: usuarioId }) {
+  if (!complejoId && !usuarioId) {
     throw new Error('La bandeja necesita un destinatario: complejo_id o usuario_id.');
   }
-  return this.find({
-    ...destinatario,
-    estado: { $in: [ESTADOS_NOTIFICACION.NO_LEIDA, ESTADOS_NOTIFICACION.LEIDA] },
-  })
+  return {
+    ...(complejoId ? { complejo_id: complejoId } : {}),
+    usuario_id: usuarioId ?? null,
+    estado: { $in: VIGENTES },
+  };
+};
+
+/**
+ * Una página de la bandeja, de a 20 por defecto: de la más reciente a la más antigua, con el evento resuelto por
+ * `populate` solo si sigue activo.
+ */
+notificacionSchema.statics.bandeja = function bandeja(destinatario, { salto = 0, limite = TAMANO_DE_PAGINA } = {}) {
+  return this.find(this.filtroDeBandeja(destinatario))
     .sort({ fecha_creacion: -1 })
+    .skip(salto)
+    .limit(limite)
+    .populate({ path: 'evento', select: CAMPOS_DEL_EVENTO, match: { estado: ESTADOS_EVENTO.ACTIVO } });
+};
+
+/** Una notificación vigente por id, con el mismo `populate` que la bandeja. */
+notificacionSchema.statics.vigentePorId = function vigentePorId(id) {
+  return this.findOne({ _id: id, estado: { $in: VIGENTES } })
     .populate({ path: 'evento', select: CAMPOS_DEL_EVENTO, match: { estado: ESTADOS_EVENTO.ACTIVO } });
 };
 

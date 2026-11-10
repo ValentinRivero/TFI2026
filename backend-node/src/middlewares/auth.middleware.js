@@ -39,6 +39,7 @@ const identificar = (token, clave) => {
  * Valida el access token que emite Django (SimpleJWT) con la clave compartida y deja en `req.usuario` su id y rol.
  * El refresh se firma con la misma clave: se exige `token_type: access` para que un refresh, que dura más, no
  * sirva como credencial. El algoritmo queda fijo en HS256 para que el token no pueda elegir cómo se verifica.
+ * El token queda en `req.token` para reenviarlo a Django cuando haya que confirmar el acceso a un complejo.
  */
 export const autenticar = (req, res, next) => {
   const clave = process.env.JWT_SIGNING_KEY;
@@ -52,6 +53,7 @@ export const autenticar = (req, res, next) => {
   if (!usuario) return rechazar(res, MENSAJE_TOKEN_INVALIDO);
 
   req.usuario = usuario;
+  req.token = token;
   return next();
 };
 
