@@ -380,6 +380,7 @@ Servicio de actividad y notificaciones, con su propia URL base. Sus errores sigu
 | `GET /api/salud` | Público | Estado del servicio: `{ "estado": "ok" }` |
 
 - Una ruta inexistente responde `404`, un JSON mal formado `400` y un cuerpo demasiado grande `413`.
+- Solo atiende pedidos de navegador desde los orígenes del frontend (CORS con lista blanca, sin cookies). Tiene un límite de solicitudes por IP: el cupo restante viaja en los encabezados `RateLimit` y `RateLimit-Policy`, y al superarlo responde `429` con `Retry-After`.
 
 ## Sistema
 
