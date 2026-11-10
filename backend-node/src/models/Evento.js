@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 import bajaLogica from './bajaLogica.plugin.js';
 import { enteroPositivo, opcionesDeEsquema } from './comunes.js';
+import { inicioDelDia, sumarDias, ZONA_HORARIA } from '../utils/fechas.js';
 
 export const TIPOS_EVENTO = Object.freeze({ COMPLEJO_VISTO: 1, GRILLA_CONSULTADA: 2, RESERVA_REALIZADA: 3 });
 export const ESTADOS_EVENTO = Object.freeze({ BAJA: 0, ACTIVO: 1 });
@@ -52,6 +53,32 @@ const eventoSchema = new mongoose.Schema(
   },
   { ...opcionesDeEsquema('eventos'), minimize: false },
 );
+
+/**
+ * Cantidad de eventos activos de los tipos pedidos, por día de Argentina y por tipo, entre dos fechas `AAAA-MM-DD`
+ * incluidas. Solo devuelve totales: `usuario_id` no sale de la base. Usa el índice del complejo por fecha.
+ */
+eventoSchema.statics.contarPorDia = function contarPorDia({ complejoId, tipos, desde, hasta }) {
+  return this.aggregate([
+    {
+      $match: {
+        complejo_id: complejoId,
+        estado: ESTADOS_EVENTO.ACTIVO,
+        tipo_evento: { $in: tipos },
+        fecha_creacion: { $gte: inicioDelDia(desde), $lt: inicioDelDia(sumarDias(hasta, 1)) },
+      },
+    },
+    {
+      $group: {
+        _id: {
+          fecha: { $dateToString: { format: '%Y-%m-%d', date: '$fecha_creacion', timezone: ZONA_HORARIA } },
+          tipo: '$tipo_evento',
+        },
+        cantidad: { $sum: 1 },
+      },
+    },
+  ]);
+};
 
 eventoSchema.index({ complejo_id: 1, estado: 1, fecha_creacion: -1 });
 eventoSchema.plugin(bajaLogica);

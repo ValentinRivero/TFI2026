@@ -59,7 +59,7 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - [x] **5.5.2.** `djangoClient.service.js`: cliente HTTP hacia Django con tiempo máximo, reenvío del token y 502 ante fallas.
   - [x] **5.5.3.** `POST /api/actividad`: registro público de visitas y consultas de grilla (tipos 1 y 2) con sesión opcional, limitador estricto y verificación del complejo en Django; "reserva realizada" (tipo 3) queda reservado a Django (5.7).
   - [x] **5.5.4.** Rutas del panel: actividad y bandeja de notificaciones del complejo paginadas de a 20, y cambio de estado, con acceso verificado en Django; bandeja propia de cualquier usuario autenticado, filtrada siempre por el `usuario_id` del token.
-  - [ ] **5.5.5.** `GET /api/reportes-aux/visitas`: visitas por día del complejo para el dashboard.
+  - [x] **5.5.5.** `GET /api/reportes-aux/visitas`: visitas por día del complejo para el dashboard.
   - [ ] **5.5.6.** `GET /api/externa/clima/:complejoId`: pronóstico con Open-Meteo a partir de las coordenadas del complejo, con 404 y 502.
 - [ ] **5.6.** Pruebas de Node con Jest y Supertest (caminos felices y tristes, sin base real) y job de Node en CI.
 - [ ] **5.7.** Notificaciones con destinatario (usuario o complejo), categoría y prioridad (normal o urgente), emitidas también por Django mediante una ruta interna de Node autenticada entre servicios.

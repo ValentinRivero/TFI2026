@@ -116,6 +116,8 @@ describe('GET /api/actividad (panel del complejo)', () => {
     ['complejo inválido', 'complejo_id=abc'],
     ['página cero', 'complejo_id=4&page=0'],
     ['tamaño mayor al máximo', 'complejo_id=4&limit=51'],
+    ['complejo repetido', 'complejo_id=4&complejo_id=9'],
+    ['página repetida', 'complejo_id=4&page=1&page=2'],
   ])('%s responde 400 sin consultar a Django', async (_caso, parametros) => {
     const respuesta = await request(app).get(`/api/actividad?${parametros}`).set(como(ROLES.DUENO_COMPLEJO));
 

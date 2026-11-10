@@ -383,6 +383,7 @@ Servicio de actividad y notificaciones, con su propia URL base. Sus errores sigu
 | `GET /api/actividad?complejo_id=` | Panel del complejo | Actividad registrada del complejo, de la más reciente a la más antigua: `id`, `tipo_evento`, `complejo_id`, `metadata`, `fecha_creacion` |
 | `GET /api/actividad/notificaciones?complejo_id=` | Panel del complejo | Avisos generales del complejo: `id`, `complejo_id`, `categoria`, `prioridad`, `mensaje`, `estado`, `evento` (`{ "id", "tipo_evento", "complejo_id", "fecha_creacion" }` o `null`), `fecha_creacion` |
 | `GET /api/actividad/notificaciones/mias` | Cualquier usuario autenticado | Notificaciones dirigidas a la cuenta del token, con la misma forma |
+| `GET /api/reportes-aux/visitas?complejo_id=&fecha_desde=&fecha_hasta=` | Panel del complejo | Visitas al perfil y consultas de la grilla, en total y por día |
 | `PATCH /api/actividad/notificaciones/<id>` | Titular, o panel del complejo para sus avisos generales | `{ "estado" }`: `1` no leída, `2` leída. Responde la notificación actualizada |
 
 - Una ruta inexistente responde `404`, un JSON mal formado `400` y un cuerpo demasiado grande `413`.
@@ -397,6 +398,21 @@ Servicio de actividad y notificaciones, con su propia URL base. Sus errores sigu
 - **Panel del complejo:** roles de complejo o `SUPERADMIN`, con acceso al complejo confirmado por la API principal; un complejo ajeno responde `404`. Ninguna de estas respuestas incluye el usuario que generó un evento.
 - **Bandeja propia:** la cuenta sale siempre del token; `usuario_id` u otros parámetros no permiten leer las de otra cuenta. Funciona también con el rol desactivado.
 - **Cambio de estado:** una notificación de otra cuenta, el aviso de un complejo que no se administra, una inexistente o una dada de baja responden igual, `404` con "No se encontró la notificación.". La baja (`0`) no se hace por esta vía.
+- **Visitas:** `fecha_desde` y `fecha_hasta` son obligatorias, en formato `AAAA-MM-DD`, con ambos extremos incluidos y como máximo 366 días, con las mismas reglas y mensajes que el dashboard de la API principal. Los días se cuentan en hora de Argentina y los que no tuvieron actividad aparecen en cero. Solo informa cantidades, nunca quién visitó:
+
+```json
+{
+  "filtros": { "complejo_id": 4, "fecha_desde": "2026-11-01", "fecha_hasta": "2026-11-03" },
+  "totales": { "visitas": 7, "consultas_grilla": 3 },
+  "por_dia": [
+    { "fecha": "2026-11-01", "visitas": 5, "consultas_grilla": 3 },
+    { "fecha": "2026-11-02", "visitas": 0, "consultas_grilla": 0 },
+    { "fecha": "2026-11-03", "visitas": 2, "consultas_grilla": 0 }
+  ]
+}
+```
+
+- Un parámetro de consulta repetido (por ejemplo `?complejo_id=4&complejo_id=5`) responde `400` con "Enviá un solo valor.".
 - Si un servicio del que depende (la API principal o el proveedor del clima) no responde, falla o tarda demasiado, responde `502` con "Un servicio necesario no está disponible. Intentá nuevamente en unos minutos.". En las rutas del panel, un `401`, `403` o `404` de la API principal llega igual, con su mismo mensaje.
 - Un dato inválido responde `400` con `"mensaje": "Datos inválidos."` y `detalles`, una lista de `{ "campo", "mensaje" }` con un error por campo (los anidados con su ruta, por ejemplo `metadata.cancha_id`). La respuesta nunca repite el valor enviado.
 - Solo atiende pedidos de navegador desde los orígenes del frontend (CORS con lista blanca, sin cookies). Tiene un límite de solicitudes por IP: el cupo restante viaja en los encabezados `RateLimit` y `RateLimit-Policy`, y al superarlo responde `429` con `Retry-After`.

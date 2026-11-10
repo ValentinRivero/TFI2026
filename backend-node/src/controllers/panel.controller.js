@@ -1,23 +1,15 @@
 import { matchedData } from 'express-validator';
 
-import { ErrorHttp, ErrorServicioExterno } from '../middlewares/errores.middleware.js';
+import { ErrorHttp } from '../middlewares/errores.middleware.js';
 import { ROLES, ROLES_DE_COMPLEJO } from '../middlewares/rol.middleware.js';
 import Evento, { ESTADOS_EVENTO } from '../models/Evento.js';
 import Notificacion from '../models/Notificacion.js';
 import { verificarAccesoAComplejo } from '../services/djangoClient.service.js';
+import { enMongo } from '../utils/mongo.js';
 import { paginar } from '../utils/paginacion.js';
 
 const ROLES_DEL_PANEL = new Set([...ROLES_DE_COMPLEJO, ROLES.SUPERADMIN]);
 const NO_ENCONTRADA = 'No se encontró la notificación.';
-
-const enMongo = async (operacion) => {
-  try {
-    return await operacion();
-  } catch (error) {
-    console.error('MongoDB no respondió como se esperaba:', error.message);
-    throw new ErrorServicioExterno('MongoDB', error);
-  }
-};
 
 // El panel lo ve todo el personal del complejo: el usuario que generó el evento no se expone.
 const serializarEvento = (evento) => ({

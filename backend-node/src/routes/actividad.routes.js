@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { body, param, query } from 'express-validator';
+import { body, param } from 'express-validator';
 
 import { registrarEvento } from '../controllers/actividad.controller.js';
 import {
@@ -15,6 +15,7 @@ import { validarCampos } from '../middlewares/validarCampos.middleware.js';
 import { TIPOS_EVENTO } from '../models/Evento.js';
 import { ESTADOS_NOTIFICACION } from '../models/Notificacion.js';
 import { validarPaginacion } from '../utils/paginacion.js';
+import { complejoEnConsulta } from '../utils/validaciones.js';
 
 // "Reserva realizada" no se acepta acá: lo emite Django al confirmar una reserva real (punto 5.7). Una ruta pública
 // que lo aceptara permitiría inundar a un complejo con avisos de reservas inexistentes.
@@ -37,15 +38,14 @@ router.post(
 
 // El rol se controla antes de validar, para no confirmarle a un jugador qué parámetros espera el panel.
 const soloPanel = [autenticar, permitirRoles(...ROLES_DE_COMPLEJO, ROLES.SUPERADMIN)];
-const complejoPedido = query('complejo_id').isInt({ min: 1 }).withMessage('Debe ser un número entero positivo.').toInt();
 const ESTADOS_EDITABLES = [ESTADOS_NOTIFICACION.NO_LEIDA, ESTADOS_NOTIFICACION.LEIDA];
 
-router.get('/', ...soloPanel, complejoPedido, ...validarPaginacion, validarCampos, listarActividad);
+router.get('/', ...soloPanel, complejoEnConsulta(), ...validarPaginacion, validarCampos, listarActividad);
 
 router.get(
   '/notificaciones',
   ...soloPanel,
-  complejoPedido,
+  complejoEnConsulta(),
   ...validarPaginacion,
   validarCampos,
   listarNotificacionesDelComplejo,

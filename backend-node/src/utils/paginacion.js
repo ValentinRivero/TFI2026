@@ -1,13 +1,12 @@
-import { query } from 'express-validator';
-
 import { ErrorHttp } from '../middlewares/errores.middleware.js';
+import { parametroUnico } from './validaciones.js';
 
 export const TAMANO_DE_PAGINA = 20;
 export const MAXIMO_POR_PAGINA = 50;
 
 export const validarPaginacion = [
-  query('page').optional().isInt({ min: 1 }).withMessage('Debe ser un número entero positivo.').toInt(),
-  query('limit')
+  parametroUnico('page').optional().isInt({ min: 1 }).withMessage('Debe ser un número entero positivo.').toInt(),
+  parametroUnico('limit')
     .optional()
     .isInt({ min: 1, max: MAXIMO_POR_PAGINA })
     .withMessage(`Debe ser un número entero entre 1 y ${MAXIMO_POR_PAGINA}.`)
