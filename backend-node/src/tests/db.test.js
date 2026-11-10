@@ -3,7 +3,10 @@ import mongoose from 'mongoose';
 
 import { conectarDB } from '../config/db.js';
 
-const URI = 'mongodb+srv://talibre:clave-secreta-123@cluster0.ejemplo.mongodb.net/talibre';
+const CLAVE_FICTICIA = 'clave-secreta-123';
+// La URI se arma por partes a propósito: escrita entera tiene la forma de una credencial real y los escáneres de
+// secretos (GitHub, por ejemplo) la reportan. El dominio `.invalid` está reservado para ejemplos.
+const URI = `mongodb+srv://talibre:${CLAVE_FICTICIA}@cluster0.ejemplo.invalid/talibre`;
 
 let conectar;
 let consola;
@@ -50,7 +53,7 @@ describe('conectarDB', () => {
     conectar.mockRejectedValue(new Error(`bad auth for ${URI}`));
     await conectarDB().catch(() => {});
 
-    expect(todoLoRegistrado()).not.toContain('clave-secreta-123');
+    expect(todoLoRegistrado()).not.toContain(CLAVE_FICTICIA);
     expect(todoLoRegistrado()).toContain('MongoDB conectado');
   });
 
@@ -63,7 +66,7 @@ describe('conectarDB', () => {
 
     expect(todoLoRegistrado()).toContain('MongoDB desconectado.');
     expect(todoLoRegistrado()).toContain('//***@cluster0');
-    expect(todoLoRegistrado()).not.toContain('clave-secreta-123');
+    expect(todoLoRegistrado()).not.toContain(CLAVE_FICTICIA);
   });
 
   test('conectar varias veces no duplica los avisos de desconexión', async () => {
