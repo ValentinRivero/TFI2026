@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 
 import bajaLogica from './bajaLogica.plugin.js';
+import { enteroPositivo, opcionesDeEsquema } from './comunes.js';
 
 export const TIPOS_EVENTO = Object.freeze({ COMPLEJO_VISTO: 1, GRILLA_CONSULTADA: 2, RESERVA_REALIZADA: 3 });
 export const ESTADOS_EVENTO = Object.freeze({ BAJA: 0, ACTIVO: 1 });
@@ -17,11 +18,6 @@ const tieneClavesInseguras = (valor) => {
     ([clave, interno]) => clave.startsWith('$') || clave.includes('.') || tieneClavesInseguras(interno),
   );
 };
-
-const enteroPositivo = (campo) => ({
-  validator: (valor) => valor === null || (Number.isInteger(valor) && valor > 0),
-  message: `${campo} debe ser un número entero positivo.`,
-});
 
 const eventoSchema = new mongoose.Schema(
   {
@@ -54,19 +50,7 @@ const eventoSchema = new mongoose.Schema(
       default: ESTADOS_EVENTO.ACTIVO,
     },
   },
-  {
-    collection: 'eventos',
-    minimize: false,
-    timestamps: { createdAt: 'fecha_creacion', updatedAt: 'fecha_modificacion' },
-    toJSON: {
-      virtuals: true,
-      versionKey: false,
-      transform: (documento, json) => {
-        delete json._id;
-        return json;
-      },
-    },
-  },
+  { ...opcionesDeEsquema('eventos'), minimize: false },
 );
 
 eventoSchema.index({ complejo_id: 1, estado: 1, fecha_creacion: -1 });

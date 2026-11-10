@@ -51,9 +51,9 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - [x] **5.3.2.** Helmet, CORS con lista blanca, Morgan y limitador global (`rateLimit.middleware.js`).
   - [x] **5.3.3.** `auth.middleware.js`: validación del JWT emitido por Django con la clave compartida (401 sin token, vencido o con firma inválida).
   - [x] **5.3.4.** `rol.middleware.js` y `validarCampos.middleware.js` (403 por rol y 400 con el detalle de validación).
-- [ ] **5.4.** Persistencia en MongoDB Atlas con Mongoose: `conectarDB`, modelos `Evento` y `Notificacion`, baja lógica y `populate`.
+- [x] **5.4.** Persistencia en MongoDB Atlas con Mongoose: `conectarDB`, modelos `Evento` y `Notificacion`, baja lógica y `populate`.
   - [x] **5.4.1.** `conectarDB` (sin credenciales en los logs, filtros saneados contra inyección NoSQL), arranque condicionado a la conexión, plugin de baja lógica que bloquea todo borrado físico y modelo `Evento` con `metadata` validada.
-  - [ ] **5.4.2.** Modelo `Notificacion` con referencia a `Evento` resuelta por `populate`, categorías, prioridad y destinatario obligatorio.
+  - [x] **5.4.2.** Modelo `Notificacion` con referencia a `Evento` resuelta por `populate`, categorías, prioridad y destinatario obligatorio.
 - [ ] **5.5.** Integración Server-to-Server: `djangoClient.service.js` y clima del complejo con Open-Meteo, con manejo de errores 502.
 - [ ] **5.6.** Pruebas de Node con Jest y Supertest (caminos felices y tristes, sin base real) y job de Node en CI.
 - [ ] **5.7.** Notificaciones con destinatario (usuario o complejo), categoría y prioridad (normal o urgente), emitidas también por Django mediante una ruta interna de Node autenticada entre servicios.
