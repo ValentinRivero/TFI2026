@@ -39,6 +39,13 @@ describe('Autenticación con el JWT de Django', () => {
     expect(respuesta.body.usuario.id).toBe(42);
   });
 
+  test('con el rol desactivado (rol nulo) se autentica sin rol', async () => {
+    const respuesta = await pedir(`Bearer ${tokenDeDjango({ rol: null })}`);
+
+    expect(respuesta.status).toBe(200);
+    expect(respuesta.body).toEqual({ usuario: { id: 7, rol: null } });
+  });
+
   test('un access token válido identifica al usuario y su rol', async () => {
     const respuesta = await pedir(`Bearer ${tokenDeDjango()}`);
 
@@ -121,8 +128,9 @@ describe('Autenticación con el JWT de Django', () => {
     ['con usuario_id cero', { usuario_id: '0' }],
     ['con usuario_id negativo', { usuario_id: '-7' }],
     ['con usuario_id decimal', { usuario_id: '7.5' }],
-    ['sin rol', { rol: undefined }],
+    ['sin el dato rol', { rol: undefined }],
     ['con rol vacío', { rol: '' }],
+    ['con rol que no es texto', { rol: 1 }],
   ])('un token %s responde 401', async (_caso, datos) => {
     expect((await pedir(`Bearer ${tokenDeDjango(datos)}`)).status).toBe(401);
   });

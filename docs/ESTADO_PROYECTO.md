@@ -46,11 +46,11 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - [x] **5.2.2.** Query `misReservas` con los permisos y filtros del listado de reservas del jugador.
   - [x] **5.2.3.** Mutation `crearReserva` con las mismas validaciones, bloqueos y errores que el alta por REST.
   - [x] **5.2.4.** Profundidad máxima de consulta, límite de campos de primer nivel, introspección apagada fuera de desarrollo y limitador propio del endpoint.
-- [ ] **5.3.** Base y seguridad de `backend-node`: ES Modules, `app.js`, `server.js`, un router por módulo, Morgan, Helmet, CORS con lista blanca y middlewares `auth`, `rol`, `rateLimit` y `validarCampos`, validando el JWT de Django.
+- [x] **5.3.** Base y seguridad de `backend-node`: ES Modules, `app.js`, `server.js`, un router por módulo, Morgan, Helmet, CORS con lista blanca y middlewares `auth`, `rol`, `rateLimit` y `validarCampos`, validando el JWT de Django.
   - [x] **5.3.1.** Proyecto en ES Modules sobre Node 24, `app.js` separado de `server.js`, ruta pública `GET /api/salud`, formato de errores del servicio y pruebas con Jest y Supertest.
   - [x] **5.3.2.** Helmet, CORS con lista blanca, Morgan y limitador global (`rateLimit.middleware.js`).
   - [x] **5.3.3.** `auth.middleware.js`: validación del JWT emitido por Django con la clave compartida (401 sin token, vencido o con firma inválida).
-  - [ ] **5.3.4.** `rol.middleware.js` y `validarCampos.middleware.js` (403 por rol y 400 con el detalle de validación).
+  - [x] **5.3.4.** `rol.middleware.js` y `validarCampos.middleware.js` (403 por rol y 400 con el detalle de validación).
 - [ ] **5.4.** Persistencia en MongoDB Atlas con Mongoose: `conectarDB`, modelos `Evento` y `Notificacion`, baja lógica y `populate`.
 - [ ] **5.5.** Integración Server-to-Server: `djangoClient.service.js` y clima del complejo con Open-Meteo, con manejo de errores 502.
 - [ ] **5.6.** Pruebas de Node con Jest y Supertest (caminos felices y tristes, sin base real) y job de Node en CI.

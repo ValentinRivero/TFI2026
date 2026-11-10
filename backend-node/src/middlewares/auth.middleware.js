@@ -19,9 +19,12 @@ const leerToken = (encabezado) => {
 // SimpleJWT guarda el id como texto ("7"); se acepta solo un entero positivo, sin signos ni decimales.
 const ID_VALIDO = /^[1-9]\d*$/;
 
+// Django firma `rol: null` si el rol de la cuenta está desactivado: es una identidad válida sin permisos (403).
+const esRolValido = (rol) => rol === null || (typeof rol === 'string' && rol.length > 0);
+
 const esIdentidadValida = (datos) => datos.token_type === 'access'
   && ID_VALIDO.test(String(datos.usuario_id))
-  && typeof datos.rol === 'string' && datos.rol.length > 0;
+  && esRolValido(datos.rol);
 
 /**
  * Valida el access token que emite Django (SimpleJWT) con la clave compartida y deja en `req.usuario` su id y rol.
