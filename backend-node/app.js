@@ -6,6 +6,7 @@ import morgan from 'morgan';
 import { crearOpcionesCors } from './src/config/cors.js';
 import { manejarErrores, rutaNoEncontrada } from './src/middlewares/errores.middleware.js';
 import { crearLimitadorGlobal } from './src/middlewares/rateLimit.middleware.js';
+import actividadRoutes from './src/routes/actividad.routes.js';
 import saludRoutes from './src/routes/salud.routes.js';
 
 const app = express();
@@ -23,6 +24,7 @@ app.use(crearLimitadorGlobal());
 app.use(express.json({ limit: '10kb' }));
 
 app.use('/api/salud', saludRoutes);
+app.use('/api/actividad', actividadRoutes);
 
 app.use(rutaNoEncontrada);
 app.use(manejarErrores);

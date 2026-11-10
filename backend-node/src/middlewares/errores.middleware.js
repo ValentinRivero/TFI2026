@@ -1,3 +1,5 @@
+import mongoose from 'mongoose';
+
 const MENSAJES_POR_TIPO = {
   'entity.parse.failed': [400, 'El cuerpo de la solicitud no es un JSON válido.'],
   'entity.too.large': [413, 'El cuerpo de la solicitud supera el tamaño permitido.'],
@@ -30,6 +32,16 @@ export const rutaNoEncontrada = (req, res) => {
 export const manejarErrores = (error, req, res, next) => {
   if (error instanceof ErrorHttp) {
     return res.status(error.status).json({ error: true, mensaje: error.message });
+  }
+  if (error instanceof mongoose.Error.ValidationError) {
+    // Mismo formato que validarCampos: un detalle por campo, sin repetir el valor recibido.
+    const detalles = Object.values(error.errors).map((detalle) => ({
+      campo: detalle.path,
+      mensaje: detalle.kind === 'user defined' || detalle.kind === 'required' || detalle.kind === 'enum'
+        ? detalle.message
+        : 'Valor inválido.',
+    }));
+    return res.status(400).json({ error: true, mensaje: 'Datos inválidos.', detalles });
   }
   const conocido = MENSAJES_POR_TIPO[error.type];
   if (conocido) {

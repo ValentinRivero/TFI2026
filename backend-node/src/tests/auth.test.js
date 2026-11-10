@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken';
 import request from 'supertest';
 
 import { manejarErrores } from '../middlewares/errores.middleware.js';
-import { autenticar } from '../middlewares/auth.middleware.js';
+import { autenticar, autenticarOpcional } from '../middlewares/auth.middleware.js';
 
 const CLAVE = 'clave-compartida-de-prueba-con-largo-suficiente-0123456789';
 const SIN_SESION = { error: true, mensaje: 'Debés iniciar sesión para acceder a este recurso.' };
@@ -14,6 +14,7 @@ const TOKEN_INVALIDO = { error: true, mensaje: 'El token es inválido o expiró.
 
 const app = express();
 app.get('/privado', autenticar, (req, res) => res.json({ usuario: req.usuario }));
+app.get('/publico', autenticarOpcional, (req, res) => res.json({ usuario: req.usuario ?? null }));
 app.use(manejarErrores);
 
 // Mismos datos y firma que el access token de Django (SimpleJWT con `TokenConRolSerializer`).
@@ -144,6 +145,47 @@ describe('Autenticación con el JWT de Django', () => {
 
     expect(respuesta.status).toBe(500);
     expect(respuesta.body).toEqual({ error: true, mensaje: 'Error interno del servidor.' });
+    consola.mockRestore();
+  });
+});
+
+describe('Autenticación opcional para rutas públicas', () => {
+  const pedirPublico = (encabezado) => {
+    const pedido = request(app).get('/publico');
+    return encabezado === undefined ? pedido : pedido.set('Authorization', encabezado);
+  };
+
+  test('sin token sigue como anónimo', async () => {
+    expect((await pedirPublico()).body).toEqual({ usuario: null });
+  });
+
+  test('con un token válido identifica al usuario', async () => {
+    expect((await pedirPublico(`Bearer ${tokenDeDjango()}`)).body).toEqual({ usuario: { id: 7, rol: 'JUGADOR' } });
+  });
+
+  test.each([
+    ['inválido', () => 'Bearer no-es-un-jwt'],
+    ['vencido', () => `Bearer ${tokenDeDjango({ vence: -10 })}`],
+    ['refresh', () => `Bearer ${tokenDeDjango({ token_type: 'refresh' })}`],
+  ])('con un token %s sigue como anónimo, sin 401', async (_caso, armar) => {
+    const respuesta = await pedirPublico(armar());
+
+    expect(respuesta.status).toBe(200);
+    expect(respuesta.body).toEqual({ usuario: null });
+  });
+
+  test('sin clave configurada, un pedido anónimo pasa igual', async () => {
+    delete process.env.JWT_SIGNING_KEY;
+
+    expect((await pedirPublico()).status).toBe(200);
+  });
+
+  test('sin clave configurada, un pedido con token falla como error del servidor', async () => {
+    const token = tokenDeDjango();
+    delete process.env.JWT_SIGNING_KEY;
+    const consola = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect((await pedirPublico(`Bearer ${token}`)).status).toBe(500);
     consola.mockRestore();
   });
 });

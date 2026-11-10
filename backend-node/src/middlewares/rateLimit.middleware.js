@@ -16,3 +16,9 @@ export const crearLimitadorGlobal = () => crearLimitador({
   ventanaMs: Number(process.env.RATE_LIMIT_VENTANA_MS) || 60_000,
   maximo: Number(process.env.RATE_LIMIT_MAXIMO) || 120,
 });
+
+// Las rutas que escriben en la base sin exigir sesión tienen un cupo propio, menor que el global.
+export const crearLimitadorActividad = () => crearLimitador({
+  ventanaMs: Number(process.env.RATE_LIMIT_ACTIVIDAD_VENTANA_MS) || 60_000,
+  maximo: Number(process.env.RATE_LIMIT_ACTIVIDAD_MAXIMO) || 30,
+});

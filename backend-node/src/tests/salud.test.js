@@ -47,6 +47,25 @@ describe('Formato de errores', () => {
     expect(respuesta.body).toEqual({ error: true, mensaje: 'El cuerpo de la solicitud supera el tamaño permitido.' });
   });
 
+  test('un error de validación del modelo responde 400 con un detalle por campo, sin el valor recibido', async () => {
+    const { manejarErrores } = await import('../middlewares/errores.middleware.js');
+    const { default: Evento } = await import('../models/Evento.js');
+    const error = new Evento({ tipo_evento: '<script>', complejo_id: undefined, metadata: ['x'] }).validateSync();
+    const respuesta = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+
+    manejarErrores(error, {}, respuesta, () => {});
+
+    expect(respuesta.status).toHaveBeenCalledWith(400);
+    const [cuerpo] = respuesta.json.mock.calls[0];
+    expect(cuerpo.mensaje).toBe('Datos inválidos.');
+    expect(cuerpo.detalles).toEqual(expect.arrayContaining([
+      { campo: 'tipo_evento', mensaje: 'Valor inválido.' },
+      { campo: 'complejo_id', mensaje: 'El complejo es obligatorio.' },
+      { campo: 'metadata', mensaje: 'metadata debe ser un objeto.' },
+    ]));
+    expect(JSON.stringify(cuerpo)).not.toContain('<script>');
+  });
+
   test('un error no previsto responde 500 genérico y no filtra el detalle', async () => {
     const { manejarErrores } = await import('../middlewares/errores.middleware.js');
     const respuesta = { status: jest.fn().mockReturnThis(), json: jest.fn() };

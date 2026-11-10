@@ -379,10 +379,16 @@ Servicio de actividad y notificaciones, con su propia URL base. Sus errores sigu
 | Método y ruta | Acceso | Uso |
 |---|---|---|
 | `GET /api/salud` | Público | Estado del servicio: `{ "estado": "ok" }` |
+| `POST /api/actividad` | Público, con sesión opcional | Registra una visita al complejo (`tipo_evento: 1`) o una consulta de su grilla (`2`): `{ "tipo_evento", "complejo_id", "metadata" }`. Responde `201` con `{ "id" }` |
 
 - Una ruta inexistente responde `404`, un JSON mal formado `400` y un cuerpo demasiado grande `413`.
 - Las rutas privadas usan el mismo access token que Django, en `Authorization: Bearer <access>`. Sin token responde `401` con "Debés iniciar sesión para acceder a este recurso."; con un token inválido, vencido o que no sea de acceso (por ejemplo, un refresh), `401` con "El token es inválido o expiró.", los mismos mensajes que la API principal.
 - Las rutas del panel admiten solo roles de complejo (`DUENO_COMPLEJO`, `OPERADOR_COMPLEJO`) o `SUPERADMIN`; otro rol, o una cuenta con el rol desactivado, recibe `403` con "No tenés permiso para realizar esta acción.".
+- `POST /api/actividad`:
+  - **Usuario:** si el pedido trae un access token válido, el evento se asocia a esa cuenta; sin token, o con uno inválido o vencido, se registra como anónimo. El usuario sale siempre del token: un `usuario_id` en el cuerpo se ignora.
+  - **Tipos:** no acepta "reserva realizada" (`3`); ese evento lo emite la API principal al confirmar una reserva.
+  - **`metadata`:** opcional, un objeto de hasta 2 KB, sin claves que empiecen con `$` ni contengan `.`.
+  - **Errores:** `404` si el complejo no existe o no está habilitado. Tiene su propio límite de solicitudes por IP, más estricto que el general.
 - Si un servicio del que depende (la API principal o el proveedor del clima) no responde, falla o tarda demasiado, responde `502` con "Un servicio necesario no está disponible. Intentá nuevamente en unos minutos.". En las rutas del panel, un `401`, `403` o `404` de la API principal llega igual, con su mismo mensaje.
 - Un dato inválido responde `400` con `"mensaje": "Datos inválidos."` y `detalles`, una lista de `{ "campo", "mensaje" }` con un error por campo (los anidados con su ruta, por ejemplo `metadata.cancha_id`). La respuesta nunca repite el valor enviado.
 - Solo atiende pedidos de navegador desde los orígenes del frontend (CORS con lista blanca, sin cookies). Tiene un límite de solicitudes por IP: el cupo restante viaja en los encabezados `RateLimit` y `RateLimit-Policy`, y al superarlo responde `429` con `Retry-After`.

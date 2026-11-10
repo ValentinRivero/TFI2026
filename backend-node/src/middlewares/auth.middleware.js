@@ -26,6 +26,15 @@ const esIdentidadValida = (datos) => datos.token_type === 'access'
   && ID_VALIDO.test(String(datos.usuario_id))
   && esRolValido(datos.rol);
 
+const identificar = (token, clave) => {
+  try {
+    const datos = jwt.verify(token, clave, { algorithms: ['HS256'] });
+    return esIdentidadValida(datos) ? { id: Number(datos.usuario_id), rol: datos.rol } : null;
+  } catch {
+    return null;
+  }
+};
+
 /**
  * Valida el access token que emite Django (SimpleJWT) con la clave compartida y deja en `req.usuario` su id y rol.
  * El refresh se firma con la misma clave: se exige `token_type: access` para que un refresh, que dura más, no
@@ -39,14 +48,23 @@ export const autenticar = (req, res, next) => {
   if (sinSesion) return rechazar(res, MENSAJE_SIN_SESION);
   if (!token) return rechazar(res, MENSAJE_TOKEN_INVALIDO);
 
-  let datos;
-  try {
-    datos = jwt.verify(token, clave, { algorithms: ['HS256'] });
-  } catch {
-    return rechazar(res, MENSAJE_TOKEN_INVALIDO);
-  }
-  if (!esIdentidadValida(datos)) return rechazar(res, MENSAJE_TOKEN_INVALIDO);
+  const usuario = identificar(token, clave);
+  if (!usuario) return rechazar(res, MENSAJE_TOKEN_INVALIDO);
 
-  req.usuario = { id: Number(datos.usuario_id), rol: datos.rol };
+  req.usuario = usuario;
+  return next();
+};
+
+/**
+ * Para rutas públicas: con un token válido deja el usuario en `req.usuario`; sin token, o con uno inválido o
+ * vencido, sigue como anónimo, igual que las rutas públicas de Django, para que un access vencido no corte la visita.
+ */
+export const autenticarOpcional = (req, res, next) => {
+  const { token } = leerToken(req.get('Authorization'));
+  if (!token) return next();
+  const clave = process.env.JWT_SIGNING_KEY;
+  if (!clave) return next(new Error('JWT_SIGNING_KEY no está configurada en backend-node.'));
+  const usuario = identificar(token, clave);
+  if (usuario) req.usuario = usuario;
   return next();
 };
