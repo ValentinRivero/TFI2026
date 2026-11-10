@@ -148,6 +148,7 @@ Filtros de `GET /api/complejos/`: `deporte` (id), `cobertura` (`1` descubierta, 
 | Método y ruta | Acceso | Uso |
 |---|---|---|
 | `GET /api/complejos/administrados/` | Operador | Complejos que el usuario puede administrar |
+| `GET /api/complejos/<id>/acceso/` | Operador | Confirma que el usuario administra el complejo: `{ "complejo": id }`. Un complejo ajeno, inexistente o dado de baja responde `404`. Lo usa el servicio complementario para autorizar las rutas de los paneles |
 | `PATCH /api/complejos/<id>/` | Dueño | `nombre`, `direccion`, `latitud`, `longitud`, `telefono_contacto`, `horas_limite_cancelacion`, `info_sena` |
 | `PUT /api/complejos/<id>/servicios/` | Dueño | `{ "servicios": [ids] }`: deja activos exactamente esos servicios |
 | `GET /api/complejos/<id>/operadores/` | Dueño | Operadores del complejo |
