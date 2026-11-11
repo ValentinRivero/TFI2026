@@ -8,6 +8,7 @@ import { manejarErrores, rutaNoEncontrada } from './src/middlewares/errores.midd
 import { crearLimitadorGlobal } from './src/middlewares/rateLimit.middleware.js';
 import actividadRoutes from './src/routes/actividad.routes.js';
 import externoRoutes from './src/routes/externo.routes.js';
+import internoRoutes from './src/routes/interno.routes.js';
 import reporteAuxRoutes from './src/routes/reporteAux.routes.js';
 import saludRoutes from './src/routes/salud.routes.js';
 
@@ -29,6 +30,7 @@ app.use('/api/salud', saludRoutes);
 app.use('/api/actividad', actividadRoutes);
 app.use('/api/reportes-aux', reporteAuxRoutes);
 app.use('/api/externa', externoRoutes);
+app.use('/api/interno', internoRoutes);
 
 app.use(rutaNoEncontrada);
 app.use(manejarErrores);
