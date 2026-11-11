@@ -209,6 +209,11 @@ CSRF_TRUSTED_ORIGINS = _env_lista('CSRF_TRUSTED_ORIGINS', ','.join(CORS_ALLOWED_
 # La cookie HttpOnly del refresh solo viaja en peticiones cross-origin con credenciales habilitadas.
 CORS_ALLOW_CREDENTIALS = True
 
+# backend-node recibe los avisos de servidor por su ruta interna, autenticada con una clave compartida. Sin estas
+# variables (o con una clave de menos de 32 caracteres) los avisos quedan en el log y nada falla.
+NODE_API_URL = os.environ.get('NODE_API_URL', '').strip()
+INTERNAL_API_KEY = os.environ.get('INTERNAL_API_KEY', '').strip()
+
 REDIS_URL = os.environ.get('REDIS_URL', '').strip()
 
 if REDIS_URL:

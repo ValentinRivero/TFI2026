@@ -64,7 +64,7 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - [x] **5.6.** Pruebas de Node con Jest y Supertest (caminos felices y tristes, sin base real) y job de Node en CI.
 - [ ] **5.7.** Notificaciones con destinatario (usuario o complejo), categoría y prioridad (normal o urgente), emitidas también por Django mediante una ruta interna de Node autenticada entre servicios.
   - [x] **5.7.1.** Ruta interna de Node para avisos de Django, con clave compartida entre servicios, limitador propio y registro opcional del evento "reserva realizada".
-  - [ ] **5.7.2.** Entrega real de `AvisoComplejoService` desde Django, con destinatario complejo o usuario, tiempo máximo y registro en el log ante una falla.
+  - [x] **5.7.2.** Entrega real de `AvisoComplejoService` desde Django, con destinatario complejo o usuario, tiempo máximo y registro en el log ante una falla.
   - [ ] **5.7.3.** Eventos y avisos de servidor: reserva realizada (evento tipo 3 y aviso al complejo) y cancelación por el complejo (aviso al jugador).
 
 ## Fase 6: Frontend React, PWA y Mapa Interactivo
@@ -216,7 +216,7 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - Los turnos fijos vigentes y pausados del titular pasan a baja lógica.
   - El historial y las reservas de otros no se tocan.
   - Cada cancelación y el resumen de la baja se auditan sin datos personales.
-- **Avisos al complejo** (`AvisoComplejoService`): uno urgente por las señadas conservadas y uno normal por los turnos fijos dados de baja, con ids y sin datos personales. Se entregan en `on_commit` con `robust=True`, así una falla no revierte la baja. Hasta que el punto 5.7 conecte la ruta interna de `backend-node`, quedan en el log del servidor (`core.avisos`).
+- **Avisos al complejo** (`AvisoComplejoService`): uno urgente por las señadas conservadas y uno normal por los turnos fijos dados de baja, con ids y sin datos personales. Se entregan en `on_commit` con `robust=True`, así una falla no revierte la baja. Desde el punto 5.7.2 se entregan a la ruta interna de `backend-node`; si no se pueden entregar, quedan en el log del servidor (`core.avisos`).
 - **Contacto conservado de la seña:**
   - **Agenda:** muestra la copia y nunca la cuenta anonimizada. Sin copia, el cliente figura como "Titular dado de baja".
   - **Borrado al resolver:** la copia se borra cuando la reserva se resuelve (completada, ausente o cancelada por el complejo).

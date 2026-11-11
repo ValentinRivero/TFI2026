@@ -20,6 +20,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from . import node_client
 from .exceptions import ConflictoConConfirmacion, ConflictoNegocio, ServicioNoDisponible
 from .models import (
     AlcanceExcepcion,
@@ -1782,7 +1783,7 @@ class TurnoFijoService:
             AvisoComplejoService.programar(
                 excepcion.complejo_id, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_URGENTE,
                 f'La excepción id {excepcion.pk} deja {_plural(cantidad, "fecha", "fechas")} de turnos fijos en espera '
-                f'(turnos fijos {afectados}). Indicá desde la agenda si cada fecha se mantiene o se cancela.',
+                f'(turnos fijos {_lista_de_ids(afectados)}). Indicá desde la agenda si cada fecha se mantiene o se cancela.',
                 {'excepcion': excepcion.pk, 'turnos_fijos': afectados},
             )
 
@@ -2080,18 +2081,42 @@ PRIORIDAD_AVISO_URGENTE = 2
 logger_avisos = logging.getLogger('core.avisos')
 
 
+MAXIMO_MENSAJE_AVISO = 280
+MAXIMO_IDS_EN_AVISO = 10
+CAMPOS_DEL_AVISO_PARA_NODE = ('complejo_id', 'usuario_id', 'categoria', 'prioridad', 'mensaje', 'evento')
+
+
+def _lista_de_ids(ids):
+    """Ids para el texto de un aviso: los primeros diez y la cantidad restante, para no superar el largo de Node."""
+    if len(ids) <= MAXIMO_IDS_EN_AVISO:
+        return str(list(ids))
+    visibles = ', '.join(str(identificador) for identificador in ids[:MAXIMO_IDS_EN_AVISO])
+    return f'[{visibles}, …] y {len(ids) - MAXIMO_IDS_EN_AVISO} más'
+
+
+def _destino(aviso):
+    if aviso.get('complejo_id') is not None:
+        return f'el complejo {aviso["complejo_id"]}'
+    return f'el usuario {aviso["usuario_id"]}'
+
+
 class AvisoComplejoService:
     """
-    Avisos para el panel de un complejo, con la categoría y la prioridad de la colección `notificaciones` de
-    backend-node. Se entregan después del commit y nunca revierten la operación que los originó. El mensaje no
-    lleva datos personales: solo cantidades e ids de reservas o turnos.
+    Avisos de servidor con la categoría y la prioridad de la colección `notificaciones` de backend-node: para el
+    panel de un complejo o, con `usuario_id`, para la bandeja propia de un usuario. Pueden llevar el evento que los
+    originó (una reserva realizada). Se entregan después del commit y nunca revierten la operación que los originó.
+    El mensaje no lleva datos personales: solo cantidades e ids de reservas o turnos.
     """
 
     @staticmethod
-    def programar(complejo_id, categoria, prioridad, mensaje, referencias=None):
+    def programar(complejo_id, categoria, prioridad, mensaje, referencias=None, *, usuario_id=None, evento=None):
+        if complejo_id is None and usuario_id is None:
+            raise ValueError('Un aviso necesita un complejo o un usuario destinatario.')
+        if len(mensaje) > MAXIMO_MENSAJE_AVISO:
+            mensaje = f'{mensaje[:MAXIMO_MENSAJE_AVISO - 1]}…'
         aviso = {
-            'complejo_id': complejo_id, 'categoria': categoria, 'prioridad': prioridad, 'mensaje': mensaje,
-            'referencias': referencias or {},
+            'complejo_id': complejo_id, 'usuario_id': usuario_id, 'categoria': categoria, 'prioridad': prioridad,
+            'mensaje': mensaje, 'referencias': referencias or {}, 'evento': evento,
         }
         # robust: una falla al entregar se registra y no convierte en error una operación ya confirmada.
         transaction.on_commit(lambda: AvisoComplejoService.entregar(aviso), robust=True)
@@ -2099,14 +2124,22 @@ class AvisoComplejoService:
     @staticmethod
     def entregar(aviso):
         """
-        Punto único de entrega. La ruta interna de backend-node se conecta en el punto 5.7; hasta entonces el aviso
-        queda registrado en el log del servidor.
+        Un único intento por la ruta interna de backend-node, con tiempo máximo. Si no se entrega, el aviso completo
+        queda en el log (`core.avisos`) para reenviarlo a mano: no tiene datos personales y la clave no se registra.
         """
-        logger_avisos.warning(
-            'Aviso para el complejo %s sin entregar (la mensajería de backend-node aún no está conectada): '
-            'categoría %s, prioridad %s. %s',
-            aviso['complejo_id'], aviso['categoria'], aviso['prioridad'], aviso['mensaje'],
-        )
+        datos = {campo: aviso[campo] for campo in CAMPOS_DEL_AVISO_PARA_NODE if aviso.get(campo) is not None}
+        try:
+            node_client.enviar_notificacion(datos)
+        except node_client.NodeNoConfigurado:
+            logger_avisos.warning(
+                'Aviso para %s sin entregar (backend-node no está configurado): categoría %s, prioridad %s. %s',
+                _destino(aviso), aviso['categoria'], aviso['prioridad'], aviso['mensaje'],
+            )
+        except node_client.NodeNoDisponible as error:
+            logger_avisos.error(
+                'Aviso para %s sin entregar: backend-node %s. Categoría %s, prioridad %s. %s',
+                _destino(aviso), error, aviso['categoria'], aviso['prioridad'], aviso['mensaje'],
+            )
 
 
 DIAS_DE_CONSERVACION_DE_CONTACTO = 30
@@ -2181,13 +2214,13 @@ class BajaDeCuentaService:
             AvisoComplejoService.programar(
                 complejo_id, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_URGENTE,
                 f'Un titular dio de baja su cuenta y conserva {_plural(len(ids), "reserva señada", "reservas señadas")} '
-                f'(ids {ids}). Resolvé la seña desde la agenda: mantenerla, reprogramarla o cancelarla y devolverla.',
+                f'(ids {_lista_de_ids(ids)}). Resolvé la seña desde la agenda: mantenerla, reprogramarla o cancelarla y devolverla.',
                 {'reservas': ids},
             )
         for complejo_id, ids in turnos_por_complejo.items():
             AvisoComplejoService.programar(
                 complejo_id, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_NORMAL,
-                f'Se dieron de baja {_plural(len(ids), "turno fijo", "turnos fijos")} (ids {ids}) porque su titular '
+                f'Se dieron de baja {_plural(len(ids), "turno fijo", "turnos fijos")} (ids {_lista_de_ids(ids)}) porque su titular '
                 'cerró la cuenta. El horario quedó libre en la grilla.',
                 {'turnos_fijos': ids},
             )
