@@ -62,10 +62,10 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - [x] **5.5.5.** `GET /api/reportes-aux/visitas`: visitas por día del complejo para el dashboard.
   - [x] **5.5.6.** `GET /api/externa/clima/:complejoId`: pronóstico con Open-Meteo a partir de las coordenadas del complejo, con 404 y 502.
 - [x] **5.6.** Pruebas de Node con Jest y Supertest (caminos felices y tristes, sin base real) y job de Node en CI.
-- [ ] **5.7.** Notificaciones con destinatario (usuario o complejo), categoría y prioridad (normal o urgente), emitidas también por Django mediante una ruta interna de Node autenticada entre servicios.
+- [x] **5.7.** Notificaciones con destinatario (usuario o complejo), categoría y prioridad (normal o urgente), emitidas también por Django mediante una ruta interna de Node autenticada entre servicios.
   - [x] **5.7.1.** Ruta interna de Node para avisos de Django, con clave compartida entre servicios, limitador propio y registro opcional del evento "reserva realizada".
   - [x] **5.7.2.** Entrega real de `AvisoComplejoService` desde Django, con destinatario complejo o usuario, tiempo máximo y registro en el log ante una falla.
-  - [ ] **5.7.3.** Eventos y avisos de servidor: reserva realizada (evento tipo 3 y aviso al complejo) y cancelación por el complejo (aviso al jugador).
+  - [x] **5.7.3.** Eventos y avisos de servidor: reserva realizada (evento tipo 3 y aviso al complejo) y cancelación por el complejo (aviso al jugador).
 
 ## Fase 6: Frontend React, PWA y Mapa Interactivo
 - [ ] **6.1.** Base React con Vite: capas `services/`, `components/` y `pages/`, `App.jsx` con React Router y `ProtectedRoute`, instancias de Axios con interceptores para ambos backends, `Login`, `Registro` y job de frontend en CI.

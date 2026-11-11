@@ -1406,6 +1406,50 @@ class ReservaService:
         )
 
     @staticmethod
+    def _turno(reserva):
+        return (
+            f'{reserva.cancha.nombre}, el {reserva.fecha_turno:%d/%m/%Y} '
+            f'de {reserva.hora_inicio:%H:%M} a {reserva.hora_fin:%H:%M}'
+        )
+
+    @staticmethod
+    def _avisar_reserva_realizada(reserva):
+        """
+        Una reserva web registra el evento "reserva realizada" en backend-node y avisa al panel del complejo. El
+        mensaje identifica el turno, no al jugador: su id viaja solo en el evento, que el panel no expone.
+        """
+        AvisoComplejoService.programar(
+            reserva.cancha.complejo_id, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_NORMAL,
+            f'Nueva reserva web id {reserva.pk}: {ReservaService._turno(reserva)}. Pendiente de seña.',
+            {'reserva': reserva.pk},
+            evento={
+                'tipo_evento': TIPO_EVENTO_RESERVA_REALIZADA,
+                'usuario_id': reserva.usuario_id,
+                'metadata': {
+                    'reserva_id': reserva.pk, 'cancha_id': reserva.cancha_id,
+                    'fecha_turno': reserva.fecha_turno.isoformat(), 'hora_inicio': f'{reserva.hora_inicio:%H:%M}',
+                },
+            },
+        )
+
+    @staticmethod
+    def _avisar_cancelacion_al_titular(reserva):
+        """
+        El titular de una reserva cancelada por el complejo recibe un aviso urgente en su bandeja propia. Una reserva
+        manual no tiene cuenta a la que avisar, y una cuenta dada de baja ya no tiene bandeja.
+        """
+        usuario = reserva.usuario
+        if usuario is None or usuario.estado == EstadoUsuario.BAJA:
+            return
+        AvisoComplejoService.programar(
+            None, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_URGENTE,
+            f'{reserva.cancha.complejo.nombre} canceló tu reserva id {reserva.pk} ({ReservaService._turno(reserva)}). '
+            'Si habías pagado una seña, comunicate con el complejo.',
+            {'reserva': reserva.pk},
+            usuario_id=usuario.pk,
+        )
+
+    @staticmethod
     def _guardar(operacion):
         try:
             with transaction.atomic():
@@ -1465,6 +1509,9 @@ class ReservaService:
                 precio_acordado=precio, estado=EstadoReserva.PENDIENTE, **cliente,
             ))
             ReservaService._difundir(reserva)
+            # El personal no se avisa a sí mismo de una reserva que acaba de cargar.
+            if not manual:
+                ReservaService._avisar_reserva_realizada(reserva)
 
         ReservaService._auditar(TipoEventoAuditoria.RESERVA_CREADA, 'Alta de reserva', reserva, actor, ip_origen)
         return reserva
@@ -1527,6 +1574,7 @@ class ReservaService:
                 raise NotFound()
             ReservaService._validar_cancelable(reserva)
             cambio = ReservaService._cancelar(reserva, EstadoReserva.CANCELADA_COMPLEJO)
+            ReservaService._avisar_cancelacion_al_titular(reserva)
 
         ReservaService._auditar(
             TipoEventoAuditoria.RESERVA_CANCELADA, 'Cancelación de reserva por el complejo',
@@ -2075,6 +2123,8 @@ class ConflictoOperatoriaService:
 
 
 CATEGORIA_AVISO_RESERVAS = 1
+# Tipo de la colección `eventos` de backend-node que solo emite Django: las visitas y consultas llegan del frontend.
+TIPO_EVENTO_RESERVA_REALIZADA = 3
 PRIORIDAD_AVISO_NORMAL = 1
 PRIORIDAD_AVISO_URGENTE = 2
 
