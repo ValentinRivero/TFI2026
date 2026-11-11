@@ -384,6 +384,7 @@ Servicio de actividad y notificaciones, con su propia URL base. Sus errores sigu
 | `GET /api/actividad/notificaciones?complejo_id=` | Panel del complejo | Avisos generales del complejo: `id`, `complejo_id`, `categoria`, `prioridad`, `mensaje`, `estado`, `evento` (`{ "id", "tipo_evento", "complejo_id", "fecha_creacion" }` o `null`), `fecha_creacion` |
 | `GET /api/actividad/notificaciones/mias` | Cualquier usuario autenticado | Notificaciones dirigidas a la cuenta del token, con la misma forma |
 | `GET /api/reportes-aux/visitas?complejo_id=&fecha_desde=&fecha_hasta=` | Panel del complejo | Visitas al perfil y consultas de la grilla, en total y por día |
+| `GET /api/externa/clima/<complejo_id>` | Público | Clima actual y pronóstico de tres días en la ubicación del complejo |
 | `PATCH /api/actividad/notificaciones/<id>` | Titular, o panel del complejo para sus avisos generales | `{ "estado" }`: `1` no leída, `2` leída. Responde la notificación actualizada |
 
 - Una ruta inexistente responde `404`, un JSON mal formado `400` y un cuerpo demasiado grande `413`.
@@ -409,6 +410,23 @@ Servicio de actividad y notificaciones, con su propia URL base. Sus errores sigu
     { "fecha": "2026-11-02", "visitas": 0, "consultas_grilla": 0 },
     { "fecha": "2026-11-03", "visitas": 2, "consultas_grilla": 0 }
   ]
+}
+```
+
+- **Clima:** solo para complejos publicados; otro id responde `404` con "No se encontró el complejo.". Las fechas están en hora de Argentina, la temperatura en °C, el viento en km/h y la lluvia en mm; `probabilidad_lluvia` (%) puede ser `null` si el proveedor no la tiene. Se guarda 15 minutos por complejo, el intervalo en que el proveedor actualiza el clima actual. Los datos son de Open-Meteo, con licencia CC BY 4.0: la vista que los muestra debe citar la fuente que viaja en `fuente`.
+
+```json
+{
+  "complejo": { "id": 1, "nombre": "Complejo El Yacaré" },
+  "actual": {
+    "fecha_hora": "2026-11-10T15:00", "temperatura": 27.4, "codigo_clima": 2,
+    "descripcion": "Parcialmente nublado", "viento_kmh": 12.6, "precipitacion_mm": 0, "es_de_dia": true
+  },
+  "pronostico": [
+    { "fecha": "2026-11-10", "codigo_clima": 2, "descripcion": "Parcialmente nublado",
+      "temperatura_max": 29.1, "temperatura_min": 18.2, "probabilidad_lluvia": 10 }
+  ],
+  "fuente": "Open-Meteo.com"
 }
 ```
 

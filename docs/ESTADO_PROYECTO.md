@@ -54,13 +54,13 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - [x] **5.4.** Persistencia en MongoDB Atlas con Mongoose: `conectarDB`, modelos `Evento` y `Notificacion`, baja lógica y `populate`.
   - [x] **5.4.1.** `conectarDB` (sin credenciales en los logs, filtros saneados contra inyección NoSQL), arranque condicionado a la conexión, plugin de baja lógica que bloquea todo borrado físico y modelo `Evento` con `metadata` validada.
   - [x] **5.4.2.** Modelo `Notificacion` con referencia a `Evento` resuelta por `populate`, categorías, prioridad y destinatario obligatorio.
-- [ ] **5.5.** Integración Server-to-Server: `djangoClient.service.js` y clima del complejo con Open-Meteo, con manejo de errores 502.
+- [x] **5.5.** Integración Server-to-Server: `djangoClient.service.js` y clima del complejo con Open-Meteo, con manejo de errores 502.
   - [x] **5.5.1.** Django: `GET /api/complejos/<id>/acceso/` para que `backend-node` verifique, reenviando el token del usuario, que administra el complejo (404 si es ajeno).
   - [x] **5.5.2.** `djangoClient.service.js`: cliente HTTP hacia Django con tiempo máximo, reenvío del token y 502 ante fallas.
   - [x] **5.5.3.** `POST /api/actividad`: registro público de visitas y consultas de grilla (tipos 1 y 2) con sesión opcional, limitador estricto y verificación del complejo en Django; "reserva realizada" (tipo 3) queda reservado a Django (5.7).
   - [x] **5.5.4.** Rutas del panel: actividad y bandeja de notificaciones del complejo paginadas de a 20, y cambio de estado, con acceso verificado en Django; bandeja propia de cualquier usuario autenticado, filtrada siempre por el `usuario_id` del token.
   - [x] **5.5.5.** `GET /api/reportes-aux/visitas`: visitas por día del complejo para el dashboard.
-  - [ ] **5.5.6.** `GET /api/externa/clima/:complejoId`: pronóstico con Open-Meteo a partir de las coordenadas del complejo, con 404 y 502.
+  - [x] **5.5.6.** `GET /api/externa/clima/:complejoId`: pronóstico con Open-Meteo a partir de las coordenadas del complejo, con 404 y 502.
 - [ ] **5.6.** Pruebas de Node con Jest y Supertest (caminos felices y tristes, sin base real) y job de Node en CI.
 - [ ] **5.7.** Notificaciones con destinatario (usuario o complejo), categoría y prioridad (normal o urgente), emitidas también por Django mediante una ruta interna de Node autenticada entre servicios.
 
