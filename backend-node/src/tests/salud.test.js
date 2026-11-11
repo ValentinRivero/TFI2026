@@ -50,7 +50,7 @@ describe('Formato de errores', () => {
   test('un error de validación del modelo responde 400 con un detalle por campo, sin el valor recibido', async () => {
     const { manejarErrores } = await import('../middlewares/errores.middleware.js');
     const { default: Evento } = await import('../models/Evento.js');
-    const error = new Evento({ tipo_evento: '<script>', complejo_id: undefined, metadata: ['x'] }).validateSync();
+    const error = await new Evento({ tipo_evento: '<script>', complejo_id: undefined, metadata: ['x'] }).validate().catch((e) => e);
     const respuesta = { status: jest.fn().mockReturnThis(), json: jest.fn() };
 
     manejarErrores(error, {}, respuesta, () => {});

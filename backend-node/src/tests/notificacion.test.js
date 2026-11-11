@@ -15,13 +15,14 @@ const valida = (cambios = {}) => new Notificacion({
   ...cambios,
 });
 
-const erroresDe = (documento) => Object.keys(documento.validateSync()?.errors ?? {});
+// `validate()` y no `validateSync()`, que Mongoose 9 marca como obsoleto y quita en la versión 10.
+const erroresDe = (documento) => documento.validate().then(() => [], (error) => Object.keys(error.errors ?? {}));
 
 describe('Modelo Notificacion', () => {
-  test('una notificación mínima es válida, normal y nace sin leer', () => {
+  test('una notificación mínima es válida, normal y nace sin leer', async () => {
     const notificacion = valida();
 
-    expect(notificacion.validateSync()).toBeUndefined();
+    await expect(notificacion.validate()).resolves.toBeUndefined();
     expect(notificacion.prioridad).toBe(PRIORIDADES_NOTIFICACION.NORMAL);
     expect(notificacion.estado).toBe(ESTADOS_NOTIFICACION.NO_LEIDA);
     expect(notificacion.evento).toBeNull();
@@ -35,71 +36,66 @@ describe('Modelo Notificacion', () => {
   });
 
   describe('destinatario', () => {
-    test('sin complejo ni usuario es inválida', () => {
-      const errores = erroresDe(valida({ complejo_id: null }));
-
-      expect(errores).toContain('complejo_id');
-    });
-
-    test('la regla también se aplica en la validación que usa save()', async () => {
+    test('sin complejo ni usuario es inválida', async () => {
+      expect(await erroresDe(valida({ complejo_id: null }))).toContain('complejo_id');
       await expect(valida({ complejo_id: null }).validate()).rejects.toThrow('destinatario');
     });
 
-    test('puede ir solo a un usuario', () => {
-      expect(valida({ complejo_id: null, usuario_id: 12 }).validateSync()).toBeUndefined();
+    test('puede ir solo a un usuario', async () => {
+      await expect(valida({ complejo_id: null, usuario_id: 12 }).validate()).resolves.toBeUndefined();
     });
 
-    test('puede ir a un usuario dentro de un complejo', () => {
-      expect(valida({ usuario_id: 12 }).validateSync()).toBeUndefined();
+    test('puede ir a un usuario dentro de un complejo', async () => {
+      await expect(valida({ usuario_id: 12 }).validate()).resolves.toBeUndefined();
     });
 
-    test.each([0, -2, 1.5])('rechaza el destinatario %p', (id) => {
-      expect(erroresDe(valida({ complejo_id: id }))).toContain('complejo_id');
-      expect(erroresDe(valida({ usuario_id: id }))).toContain('usuario_id');
+    test.each([0, -2, 1.5])('rechaza el destinatario %p', async (id) => {
+      expect(await erroresDe(valida({ complejo_id: id }))).toContain('complejo_id');
+      expect(await erroresDe(valida({ usuario_id: id }))).toContain('usuario_id');
     });
   });
 
-  test.each([undefined, 0, 5, 'RESERVAS'])('rechaza la categoría %p', (categoria) => {
-    expect(erroresDe(valida({ categoria }))).toContain('categoria');
+  test.each([undefined, 0, 5, 'RESERVAS'])('rechaza la categoría %p', async (categoria) => {
+    expect(await erroresDe(valida({ categoria }))).toContain('categoria');
   });
 
-  test.each([0, 3])('rechaza la prioridad %p', (prioridad) => {
-    expect(erroresDe(valida({ prioridad }))).toContain('prioridad');
+  test.each([0, 3])('rechaza la prioridad %p', async (prioridad) => {
+    expect(await erroresDe(valida({ prioridad }))).toContain('prioridad');
   });
 
-  test.each([-1, 3])('rechaza el estado %p', (estado) => {
-    expect(erroresDe(valida({ estado }))).toContain('estado');
+  test.each([-1, 3])('rechaza el estado %p', async (estado) => {
+    expect(await erroresDe(valida({ estado }))).toContain('estado');
   });
 
   describe('mensaje', () => {
-    test('es obligatorio y no puede quedar vacío', () => {
-      expect(erroresDe(valida({ mensaje: undefined }))).toContain('mensaje');
-      expect(erroresDe(valida({ mensaje: '   ' }))).toContain('mensaje');
+    test('es obligatorio y no puede quedar vacío', async () => {
+      expect(await erroresDe(valida({ mensaje: undefined }))).toContain('mensaje');
+      expect(await erroresDe(valida({ mensaje: '   ' }))).toContain('mensaje');
     });
 
     test('se guarda sin espacios sobrantes', () => {
       expect(valida({ mensaje: '  Turno cancelado.  ' }).mensaje).toBe('Turno cancelado.');
     });
 
-    test('tiene un largo máximo de 280 caracteres', () => {
-      expect(valida({ mensaje: 'a'.repeat(280) }).validateSync()).toBeUndefined();
-      expect(erroresDe(valida({ mensaje: 'a'.repeat(281) }))).toContain('mensaje');
+    test('tiene un largo máximo de 280 caracteres', async () => {
+      await expect(valida({ mensaje: 'a'.repeat(280) }).validate()).resolves.toBeUndefined();
+      expect(await erroresDe(valida({ mensaje: 'a'.repeat(281) }))).toContain('mensaje');
     });
 
     test.each([
       'Reserva de juan.perez@gmail.com confirmada.',
       'Escribir a CONTACTO@COMPLEJO.COM.AR para dudas.',
-    ])('rechaza un mensaje con un email (dato personal): %s', (mensaje) => {
-      expect(erroresDe(valida({ mensaje }))).toContain('mensaje');
+    ])('rechaza un mensaje con un email (dato personal): %s', async (mensaje) => {
+      expect(await erroresDe(valida({ mensaje }))).toContain('mensaje');
     });
 
-    test('admite fechas, horas y números de cancha, que no son datos personales', () => {
-      expect(valida({ mensaje: 'Turno del 2026-11-24 a las 20:00 en Cancha 3 cancelado.' }).validateSync()).toBeUndefined();
+    test('admite fechas, horas y números de cancha, que no son datos personales', async () => {
+      await expect(valida({ mensaje: 'Turno del 2026-11-24 a las 20:00 en Cancha 3 cancelado.' }).validate()).resolves.toBeUndefined();
     });
   });
 
-  test('rechaza una referencia a evento que no es un ObjectId', () => {
-    expect(erroresDe(valida({ evento: 'no-es-un-id' }))).toContain('evento');
+  test('rechaza una referencia a evento que no es un ObjectId', async () => {
+    expect(await erroresDe(valida({ evento: 'no-es-un-id' }))).toContain('evento');
   });
 
   test('la referencia apunta al modelo Evento', () => {

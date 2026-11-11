@@ -4,13 +4,14 @@ import Evento, { ESTADOS_EVENTO, TIPOS_EVENTO } from '../models/Evento.js';
 
 const valido = (cambios = {}) => new Evento({ tipo_evento: TIPOS_EVENTO.COMPLEJO_VISTO, complejo_id: 4, ...cambios });
 
-const erroresDe = (documento) => Object.keys(documento.validateSync()?.errors ?? {});
+// `validate()` y no `validateSync()`, que Mongoose 9 marca como obsoleto y quita en la versión 10.
+const erroresDe = (documento) => documento.validate().then(() => [], (error) => Object.keys(error.errors ?? {}));
 
 describe('Modelo Evento', () => {
-  test('un evento mínimo es válido y nace activo, sin usuario y con metadata vacía', () => {
+  test('un evento mínimo es válido y nace activo, sin usuario y con metadata vacía', async () => {
     const evento = valido();
 
-    expect(evento.validateSync()).toBeUndefined();
+    await expect(evento.validate()).resolves.toBeUndefined();
     expect(evento.estado).toBe(ESTADOS_EVENTO.ACTIVO);
     expect(evento.usuario_id).toBeNull();
     expect(evento.metadata).toEqual({});
@@ -21,30 +22,30 @@ describe('Modelo Evento', () => {
     expect(ESTADOS_EVENTO).toEqual({ BAJA: 0, ACTIVO: 1 });
   });
 
-  test.each([0, 4, 'VISITA', null])('rechaza el tipo de evento %p', (tipo) => {
-    expect(erroresDe(valido({ tipo_evento: tipo }))).toContain('tipo_evento');
+  test.each([0, 4, 'VISITA', null])('rechaza el tipo de evento %p', async (tipo) => {
+    expect(await erroresDe(valido({ tipo_evento: tipo }))).toContain('tipo_evento');
   });
 
-  test.each([undefined, 0, -3, 2.5, 'abc'])('rechaza complejo_id %p', (complejo) => {
-    expect(erroresDe(valido({ complejo_id: complejo }))).toContain('complejo_id');
+  test.each([undefined, 0, -3, 2.5, 'abc'])('rechaza complejo_id %p', async (complejo) => {
+    expect(await erroresDe(valido({ complejo_id: complejo }))).toContain('complejo_id');
   });
 
-  test.each([0, -1, 1.5])('rechaza usuario_id %p', (usuario) => {
-    expect(erroresDe(valido({ usuario_id: usuario }))).toContain('usuario_id');
+  test.each([0, -1, 1.5])('rechaza usuario_id %p', async (usuario) => {
+    expect(await erroresDe(valido({ usuario_id: usuario }))).toContain('usuario_id');
   });
 
-  test('acepta el usuario cuando el evento viene de una sesión', () => {
-    expect(valido({ usuario_id: 12 }).validateSync()).toBeUndefined();
+  test('acepta el usuario cuando el evento viene de una sesión', async () => {
+    await expect(valido({ usuario_id: 12 }).validate()).resolves.toBeUndefined();
   });
 
-  test.each([2, -1])('rechaza el estado %p', (estado) => {
-    expect(erroresDe(valido({ estado }))).toContain('estado');
+  test.each([2, -1])('rechaza el estado %p', async (estado) => {
+    expect(await erroresDe(valido({ estado }))).toContain('estado');
   });
 
-  test('acepta metadata con datos simples, anidados y listas', () => {
+  test('acepta metadata con datos simples, anidados y listas', async () => {
     const metadata = { cancha_id: 3, origen: { pagina: 'mapa' }, filtros: ['padel', { techada: true }] };
 
-    expect(valido({ metadata }).validateSync()).toBeUndefined();
+    await expect(valido({ metadata }).validate()).resolves.toBeUndefined();
   });
 
   test.each([
@@ -55,8 +56,8 @@ describe('Modelo Evento', () => {
     ['operadores dentro de una lista', { canchas: [{ id: 1 }, { $ne: null }] }],
     ['claves con punto', { 'a.b': 1 }],
     ['más de 2 KB', { relleno: 'x'.repeat(2100) }],
-  ])('rechaza metadata con %s', (_caso, metadata) => {
-    expect(erroresDe(valido({ metadata }))).toContain('metadata');
+  ])('rechaza metadata con %s', async (_caso, metadata) => {
+    expect(await erroresDe(valido({ metadata }))).toContain('metadata');
   });
 
   test('descarta campos que no están en el esquema', () => {

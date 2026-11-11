@@ -24,7 +24,7 @@ const notificacionSchema = new mongoose.Schema(
       validate: [
         enteroPositivo('complejo_id'),
         {
-          // Validador de campo y no hook: los hooks `pre('validate')` no corren en `validateSync`.
+          // Validador de campo y no hook `pre('validate')`: el error llega con su ruta, junto a los demás del documento.
           validator(valor) {
             return valor !== null || this.usuario_id !== null;
           },

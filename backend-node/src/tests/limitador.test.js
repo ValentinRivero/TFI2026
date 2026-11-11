@@ -14,11 +14,17 @@ beforeAll(async () => {
 
 const pedirDesde = (ip) => request(app).get('/api/salud').set('Origin', FRONTEND).set('X-Forwarded-For', ip);
 
+const agotarCupo = async (ip) => {
+  for (let intento = 0; intento < 5; intento += 1) {
+    expect((await pedirDesde(ip)).status).toBe(200);
+  }
+};
+
+// Cada test usa sus propias IP: el contador del limitador vive en memoria y no se reinicia entre tests.
+
 describe('Limitador global', () => {
   test('responde 429 con el formato del servicio al superar el máximo por IP', async () => {
-    for (let intento = 0; intento < 5; intento += 1) {
-      expect((await pedirDesde('203.0.113.10')).status).toBe(200);
-    }
+    await agotarCupo('203.0.113.10');
 
     const respuesta = await pedirDesde('203.0.113.10');
 
@@ -32,7 +38,9 @@ describe('Limitador global', () => {
   });
 
   test('detrás del proxy cuenta por la IP real de cada cliente', async () => {
-    expect((await pedirDesde('203.0.113.10')).status).toBe(429);
+    await agotarCupo('203.0.113.20');
+
+    expect((await pedirDesde('203.0.113.20')).status).toBe(429);
     expect((await pedirDesde('198.51.100.20')).status).toBe(200);
   });
 

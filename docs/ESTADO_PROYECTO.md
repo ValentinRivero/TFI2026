@@ -61,7 +61,7 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - [x] **5.5.4.** Rutas del panel: actividad y bandeja de notificaciones del complejo paginadas de a 20, y cambio de estado, con acceso verificado en Django; bandeja propia de cualquier usuario autenticado, filtrada siempre por el `usuario_id` del token.
   - [x] **5.5.5.** `GET /api/reportes-aux/visitas`: visitas por día del complejo para el dashboard.
   - [x] **5.5.6.** `GET /api/externa/clima/:complejoId`: pronóstico con Open-Meteo a partir de las coordenadas del complejo, con 404 y 502.
-- [ ] **5.6.** Pruebas de Node con Jest y Supertest (caminos felices y tristes, sin base real) y job de Node en CI.
+- [x] **5.6.** Pruebas de Node con Jest y Supertest (caminos felices y tristes, sin base real) y job de Node en CI.
 - [ ] **5.7.** Notificaciones con destinatario (usuario o complejo), categoría y prioridad (normal o urgente), emitidas también por Django mediante una ruta interna de Node autenticada entre servicios.
 
 ## Fase 6: Frontend React, PWA y Mapa Interactivo
@@ -95,7 +95,7 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - El admin registra las 14 tablas sin borrado físico: solo ofrece la baja lógica, y `logs_auditoria` es de solo lectura.
 - El operador ya no tiene `configurar_complejo`: los parámetros comerciales (`info_sena`, `horas_limite_cancelacion`) los editan solo el dueño y el superadmin. Al re-ejecutarse, `seed_inicial` sincroniza `roles_permisos`: las asignaciones que ya no corresponden quedan con `estado = 0` y las vigentes se reactivan. Las consultas de permisos de la Fase 2 deben filtrar asignaciones activas.
 - CORS y CSRF apuntan por defecto a Vite (`localhost:5173`). Los `.env` locales se actualizan por fuera del repositorio.
-- `.github/workflows/ci.yml` corre `makemigrations --check` y `pytest --cov=core` en cada push y pull request a `main`.
+- `.github/workflows/ci.yml` corre `makemigrations --check` y `pytest --cov=core` en cada push y pull request a `main`. Desde la Fase 5 suma el job `node`: `npm ci`, auditoría de dependencias de producción, verificación de sintaxis de `server.js` y `npm run test:cobertura`, que falla por debajo del 95% de cobertura.
 
 ## Notas de la Fase 2
 - Todos los errores de la API responden `{"error": true, "detail": ...}`; `detail` es un texto o un objeto por campo.
