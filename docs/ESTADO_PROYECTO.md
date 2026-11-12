@@ -74,9 +74,9 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - [x] **6.0.3.** Django: comando idempotente `anonimizar_ips_auditoria` con retención de 12 meses.
   - [x] **6.0.4.** Node: `src/config/parametros.js` con validación estricta al arrancar y módulos que leen de ahí.
 - [ ] **6.1.** Base React con Vite: capas `services/`, `components/` y `pages/`, `App.jsx` con React Router y `ProtectedRoute`, instancias de Axios con interceptores para ambos backends, `Login`, `Registro` y job de frontend en CI.
-  - [ ] **6.1.1.** Esqueleto con Vite, dependencias, estructura de carpetas y job de frontend en CI.
-  - [ ] **6.1.2.** Tema (`styles/tema.css`), `config/parametros.js`, `config/catalogos.js`, `i18n/` y guía visual de desarrollo.
-  - [ ] **6.1.3.** Componentes transversales: `Cargando`, `BotonAccion`, `Paginador`, `Alerta`, `ModalConfirmar`, `Layout` y `hooks/useConsulta`.
+  - [x] **6.1.1.** Esqueleto con Vite, dependencias, estructura de carpetas y job de frontend en CI.
+  - [x] **6.1.2.** Tema (`styles/tema.css`), `config/parametros.js`, `config/catalogos.js`, `i18n/`, formatos, íconos y logo provisorio.
+  - [x] **6.1.3.** Componentes transversales (`Cargando`, `BotonAccion`, `Paginador`, `Alerta`, `ModalConfirmar`, `Layout`, `hooks/useConsulta`) y guía visual de desarrollo en `/guia`.
   - [ ] **6.1.4.** Capa de red y sesión: `services/api.js`, `services/authService.js` y `hooks/useSesion`.
   - [ ] **6.1.5.** `Login` y `Registro`.
   - [ ] **6.1.6.** `Privacidad`, aceptación de la política vigente y rutas protegidas por rol.
@@ -318,6 +318,18 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - **Índices:** no se agregaron. El filtro se aplica sobre el rango que ya recorre el índice de bandeja.
 - **Licencias del frontend:** el mapa usa Leaflet directamente, con un envoltorio propio de React. `react-leaflet` se publica con una licencia que no es permisiva (Hippocratic-2.1), por lo que queda fuera de las dependencias admitidas.
 - Pruebas del bloque 6.0 y de los puntos 6.4.1 y 6.5.1: 148 tests nuevos en Django (1618 en total, de los cuales 5 de concurrencia se saltean sobre SQLite) y 97 en Node (457 en total).
+
+## Notas de los puntos 6.1.1 a 6.1.3
+- **Base:** Vite 8 y React 19, con `react-router-dom`, `axios`, `bootstrap`, `react-bootstrap` y `leaflet` (sin `react-leaflet`). Vitest se usa solo para funciones puras. Todas las dependencias directas tienen licencia permisiva y `npm audit` de producción no reporta vulnerabilidades.
+- **CI:** el job `frontend` corre `npm ci`, auditoría de producción, `npm run lint`, `npm test` y `npm run build`.
+- **Bloques del build:** React y Leaflet tienen bloques propios; el mapa, cuando exista, no se descarga hasta abrirlo.
+- **Tema:** `styles/tema.css` es la única fuente de colores, tipografía y estados de la grilla. Redefine las variables de los componentes de Bootstrap con color de marca, sin Sass, y define los cinco estados de casillero (`libre`, `ocupado`, `excepcion`, `seleccionado` y `no-disponible`) por fondo, tipo de borde y tipografía.
+- **Tipografía:** Barlow Semi Condensed (SIL OFL 1.1) en pesos 500, 600 y 700, autoalojada en `public/fonts/` con su `OFL.txt`. No se carga nada desde servidores de terceros. El cuerpo usa la pila sans-serif del sistema.
+- **Logo provisorio:** `scripts/generar-iconos.mjs` (`npm run iconos`) dibuja una "T" geométrica sobre el verde de marca y escribe `logo.svg`, `favicon.svg` y los PNG de la PWA en `public/icons/`, sin librerías ni imágenes de terceros. Para usar el logo definitivo alcanza con sobrescribir esos archivos con los mismos nombres y tamaños.
+- **Carga:** `Cargando.jsx` es el único componente que conoce el indicador visual. `BotonAccion` bloquea el doble envío y `useConsulta` cancela la petición anterior con `AbortController`.
+- **Paginador:** la ventana de 5 páginas es una función pura (`utils/paginacion.js`) y el componente oculta "Anterior" en la primera página y "Siguiente" en la última.
+- **Guía visual:** la ruta `/guia` existe solo en desarrollo; en el build de producción no se incluye.
+- **Pruebas del frontend:** 64 tests de Vitest (`t()`, formatos y ventana del paginador).
 
 ## Decisiones de arquitectura
 - **Frontend:** React con Vite y PWA manual, en capas `services/`, `components/` y `pages/`: solo la capa de servicios conoce las URLs de la API, lo que separa el acceso a datos de la presentación. El access token vive en memoria y el refresh en una cookie HttpOnly, `Secure` y `SameSite=Strict`: un script inyectado por XSS no puede leer el refresh, y `SameSite=Strict` mitiga CSRF. Nada de la sesión se guarda en `localStorage`.
