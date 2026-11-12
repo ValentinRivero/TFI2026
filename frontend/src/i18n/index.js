@@ -24,3 +24,9 @@ export const t = (clave, params = {}, idioma = PARAMETROS.idioma) => {
     Object.hasOwn(params, nombre) ? String(params[nombre]) : marcador
   ));
 };
+
+/** Lista o tabla de textos (por ejemplo, las filas de una tabla informativa). Una clave inexistente devuelve `[]`. */
+export const tLista = (clave, idioma = PARAMETROS.idioma) => {
+  const valor = buscar(DICCIONARIOS[idioma] ?? DICCIONARIOS.es, clave);
+  return Array.isArray(valor) ? valor : [];
+};

@@ -162,6 +162,21 @@ export const ROL = Object.freeze({
   JUGADOR: 'JUGADOR',
 });
 
+export const ETIQUETA_ROL = Object.freeze({
+  SUPERADMIN: 'Superadministrador',
+  DUENO_COMPLEJO: 'Dueño de complejo',
+  OPERADOR_COMPLEJO: 'Operador de complejo',
+  JUGADOR: 'Jugador',
+});
+
+/** Pantalla a la que lleva el inicio de sesión cuando no venía redirigido desde otra ruta. */
+export const RUTA_INICIAL_POR_ROL = Object.freeze({
+  SUPERADMIN: '/sistema',
+  DUENO_COMPLEJO: '/panel',
+  OPERADOR_COMPLEJO: '/panel',
+  JUGADOR: '/',
+});
+
 /** Secciones de la navegación por rol. El control real lo hacen los backends: acá solo se decide qué se muestra. */
 export const ROLES_POR_SECCION = Object.freeze({
   misReservas: [ROL.JUGADOR, ROL.SUPERADMIN],

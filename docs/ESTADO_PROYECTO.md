@@ -73,13 +73,13 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - [x] **6.0.2.** Django: largos, márgenes y coordenadas declarados una sola vez en `core/models.py` y reutilizados por los serializers, sin migraciones nuevas, y `core/tests/test_parametros.py`.
   - [x] **6.0.3.** Django: comando idempotente `anonimizar_ips_auditoria` con retención de 12 meses.
   - [x] **6.0.4.** Node: `src/config/parametros.js` con validación estricta al arrancar y módulos que leen de ahí.
-- [ ] **6.1.** Base React con Vite: capas `services/`, `components/` y `pages/`, `App.jsx` con React Router y `ProtectedRoute`, instancias de Axios con interceptores para ambos backends, `Login`, `Registro` y job de frontend en CI.
+- [x] **6.1.** Base React con Vite: capas `services/`, `components/` y `pages/`, `App.jsx` con React Router y `ProtectedRoute`, instancias de Axios con interceptores para ambos backends, `Login`, `Registro` y job de frontend en CI.
   - [x] **6.1.1.** Esqueleto con Vite, dependencias, estructura de carpetas y job de frontend en CI.
   - [x] **6.1.2.** Tema (`styles/tema.css`), `config/parametros.js`, `config/catalogos.js`, `i18n/`, formatos, íconos y logo provisorio.
   - [x] **6.1.3.** Componentes transversales (`Cargando`, `BotonAccion`, `Paginador`, `Alerta`, `ModalConfirmar`, `Layout`, `hooks/useConsulta`) y guía visual de desarrollo en `/guia`.
-  - [ ] **6.1.4.** Capa de red y sesión: `services/api.js`, `services/authService.js` y `hooks/useSesion`.
-  - [ ] **6.1.5.** `Login` y `Registro`.
-  - [ ] **6.1.6.** `Privacidad`, aceptación de la política vigente y rutas protegidas por rol.
+  - [x] **6.1.4.** Capa de red y sesión: `services/api.js`, `services/authService.js` y `hooks/useSesion`.
+  - [x] **6.1.5.** `Login` y `Registro`, con el estado de la sesión en la barra superior.
+  - [x] **6.1.6.** `Privacidad`, aceptación de la política vigente y rutas protegidas por rol.
 - [ ] **6.2.** Vistas del Jugador: `Catalogo`, `ComplejoDetalle` con grilla en vivo (`wsService.js`), clima y reserva, `MisReservas` y `Perfil`.
   - [ ] **6.2.1.** `Catalogo` público en `/` y `ComplejoCard`.
   - [ ] **6.2.2.** Filtros del catálogo sincronizados con la URL.
@@ -330,6 +330,18 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - **Paginador:** la ventana de 5 páginas es una función pura (`utils/paginacion.js`) y el componente oculta "Anterior" en la primera página y "Siguiente" en la última.
 - **Guía visual:** la ruta `/guia` existe solo en desarrollo; en el build de producción no se incluye.
 - **Pruebas del frontend:** 64 tests de Vitest (`t()`, formatos y ventana del paginador).
+
+## Notas de los puntos 6.1.4 a 6.1.6
+- **Capa de red (`services/api.js`, archivo protegido):**
+  - **Instancias:** `apiDjango` y `apiNode` leen URLs y tiempos máximos de `config/parametros.js`.
+  - **Credenciales:** solo las rutas `/api/token/` de Django llevan `withCredentials`, y esas rutas viajan sin `Authorization` (un access vencido haría fallar el login). `apiNode` no envía credenciales.
+  - **Refresh:** ante un 401 con sesión, una única promesa compartida pide el access nuevo y la petición se reintenta una vez. Si el refresh falla, la sesión en memoria se limpia y se informa el 401 original. Las peticiones canceladas pasan sin tocarse.
+  - **Errores:** todo error llega como `ErrorApi` con `status` (0 si no hubo respuesta), `mensaje` en español, `campos` por campo y `extra` con el resto del cuerpo (`conflictos`, `requiere_confirmacion`). Los 429 y los 5xx usan un mensaje general; el resto muestra el texto del backend.
+- **Sesión (`services/authService.js`, `hooks/useSesion.js`):** el access vive solo en memoria; el rol y el id se leen del payload del JWT sin verificar la firma, solo para navegar. Al abrir la app se pide un access con la cookie y luego el perfil. `useSesion` usa `useSyncExternalStore`, sin Context.
+- **Login y registro:** el registro inicia la sesión al terminar; si eso falla, lleva a `/login` con un aviso. La casilla de la política nunca viene marcada. Tras iniciar sesión se vuelve a la ruta de origen o a la pantalla inicial del rol (jugador `/`, dueño y operador `/panel`, superadmin `/sistema`).
+- **Política de privacidad:** `Privacidad.jsx` incluye responsable, finalidades, destinatarios, proveedores (también OpenStreetMap, que recibe la IP de quien abre el mapa), plazos, derechos con sus plazos y la leyenda de la AAIP. `AceptarPolitica.jsx` bloquea las pantallas hasta aceptar la versión vigente y no aparece en `/privacidad` ni en `/perfil`.
+- **Rutas privadas:** `ProtectedRoute` espera la sesión inicial, lleva a `/login` guardando el origen y valida el rol contra `catalogos.js`. Las pantallas privadas que aún no existen muestran una vista provisoria.
+- **Pruebas del frontend:** 120 tests de Vitest en total (56 nuevos: decodificación del JWT y normalización de errores de Django y de Node).
 
 ## Decisiones de arquitectura
 - **Frontend:** React con Vite y PWA manual, en capas `services/`, `components/` y `pages/`: solo la capa de servicios conoce las URLs de la API, lo que separa el acceso a datos de la presentación. El access token vive en memoria y el refresh en una cookie HttpOnly, `Secure` y `SameSite=Strict`: un script inyectado por XSS no puede leer el refresh, y `SameSite=Strict` mitiga CSRF. Nada de la sesión se guarda en `localStorage`.

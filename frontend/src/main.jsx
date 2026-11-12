@@ -4,6 +4,10 @@ import { BrowserRouter } from 'react-router-dom';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './styles/tema.css';
 import App from './App.jsx';
+import { iniciarSesionPrevia } from './services/authService.js';
+
+// Recupera la sesión (refresh con la cookie y perfil) mientras se dibuja la app.
+iniciarSesionPrevia();
 
 createRoot(document.getElementById('raiz')).render(
   <StrictMode>

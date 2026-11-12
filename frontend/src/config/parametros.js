@@ -35,6 +35,16 @@ export const PARAMETROS = Object.freeze({
   }),
   notificaciones: Object.freeze({ sondeoMs: 60_000 }),
   // Espejo de POLITICA_PRIVACIDAD_VERSION de Django.
-  politica: Object.freeze({ version: '1.0', contacto: 'contactotalibre@irracional.net' }),
+  politica: Object.freeze({
+    version: '1.0',
+    vigenteDesde: '2026-11-12',
+    contacto: 'contactotalibre@irracional.net',
+    // Espejos de AUDITORIA_RETENCION_MESES y CONTACTOS_BAJA_DIAS de Django.
+    retencionIpMeses: 12,
+    retencionContactoDias: 30,
+  }),
+  // Espejo de los largos máximos de los campos de Django (core/models.py).
+  limitesCampos: Object.freeze({ nombre: 120, email: 120, telefono: 30, password: 128 }),
+  password: Object.freeze({ largoMinimo: 8 }),
   pwa: Object.freeze({ claveBannerCerrado: 'talibre.bannerPwaCerrado' }),
 });
