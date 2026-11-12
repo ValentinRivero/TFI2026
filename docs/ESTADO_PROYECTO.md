@@ -81,11 +81,11 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - [x] **6.1.5.** `Login` y `Registro`, con el estado de la sesión en la barra superior.
   - [x] **6.1.6.** `Privacidad`, aceptación de la política vigente y rutas protegidas por rol.
 - [ ] **6.2.** Vistas del Jugador: `Catalogo`, `ComplejoDetalle` con grilla en vivo (`wsService.js`), clima y reserva, `MisReservas` y `Perfil`.
-  - [ ] **6.2.1.** `Catalogo` público en `/` y `ComplejoCard`.
-  - [ ] **6.2.2.** Filtros del catálogo sincronizados con la URL.
-  - [ ] **6.2.3.** `ComplejoDetalle`: ficha, clima con su atribución y registro de la visita.
-  - [ ] **6.2.4.** Grilla del día por REST con los cinco estados de casillero.
-  - [ ] **6.2.5.** Tiempo real con `wsService.js`.
+  - [x] **6.2.1.** `Catalogo` público en `/` y `ComplejoCard`.
+  - [x] **6.2.2.** Filtros del catálogo sincronizados con la URL.
+  - [x] **6.2.3.** `ComplejoDetalle`: ficha, clima con su atribución y registro de la visita.
+  - [x] **6.2.4.** Grilla del día por REST con los cinco estados de casillero.
+  - [x] **6.2.5.** Tiempo real con `wsService.js`.
   - [ ] **6.2.6.** Reserva de un turno.
   - [ ] **6.2.7.** `MisReservas`.
   - [ ] **6.2.8.** `Perfil` y baja de la cuenta con vista previa.
@@ -342,6 +342,17 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - **Política de privacidad:** `Privacidad.jsx` incluye responsable, finalidades, destinatarios, proveedores (también OpenStreetMap, que recibe la IP de quien abre el mapa), plazos, derechos con sus plazos y la leyenda de la AAIP. `AceptarPolitica.jsx` bloquea las pantallas hasta aceptar la versión vigente y no aparece en `/privacidad` ni en `/perfil`.
 - **Rutas privadas:** `ProtectedRoute` espera la sesión inicial, lleva a `/login` guardando el origen y valida el rol contra `catalogos.js`. Las pantallas privadas que aún no existen muestran una vista provisoria.
 - **Pruebas del frontend:** 120 tests de Vitest en total (56 nuevos: decodificación del JWT y normalización de errores de Django y de Node).
+
+## Notas de los puntos 6.2.1 a 6.2.5
+- **Catálogo (`Catalogo.jsx`, `ComplejoCard.jsx`):** portada pública en `/`. La lista crece con "Mostrar más" de a 20 (`hooks/useListaIncremental`), sin descargar la colección completa; una página siguiente que falla conserva lo ya cargado y ofrece reintentar. Estados de carga, vacío (con o sin filtros) y error con reintento.
+- **Filtros (`FiltrosCatalogo.jsx`, `utils/filtrosCatalogo.js`):** deporte, cobertura, servicios (selección múltiple, un parámetro `servicio` por cada uno), búsqueda por texto con pausa al escribir y orden. Viven en la URL: el enlace filtrado se comparte, y un valor inválido escrito a mano se descarta antes de consultar. En móvil se pliegan en un panel con controles de 44 px y "Limpiar filtros". Si los catálogos de deportes o servicios fallan, el catálogo sigue funcionando sin esos controles.
+- **Detalle (`ComplejoDetalle.jsx`, `CanchaCard.jsx`, `ClimaCard.jsx`):** datos comerciales, condiciones de seña, margen de cancelación, servicios y canchas activas. Un complejo sin contrato activo (404) o un id inválido muestra un estado claro de no encontrado. La visita se informa a Node en segundo plano, una vez por pantalla, y nunca muestra errores. El clima se ve en la portada, en la ficha, junto al selector de fecha y en el resumen del turno (`ClimaCard.jsx`, con las variantes `compacto`, `detalle` y `dia`): mientras carga muestra el indicador y, si Node o el proveedor fallan, un aviso discreto con "Reintentar" en el mismo lugar. Lleva siempre la atribución a Open-Meteo.com (CC BY 4.0).
+- **Grilla del día (`GrillaDia.jsx`, `CasilleroGrilla.jsx`, `ResumenTurno.jsx`):** selector de fecha con mínimo hoy y botones de día anterior y siguiente, sin desfasajes por UTC. Los cinco estados del casillero salen de `tema.css`. La consulta anterior se cancela al cambiar de día. Se informa un evento de grilla consultada por cada fecha que llega, no por las recargas en vivo. La elección de un turno libre muestra su resumen; si una actualización lo ocupa, la elección se limpia con un aviso. El botón de confirmar queda deshabilitado hasta conectarlo con el flujo de reserva (6.2.6).
+- **Tiempo real (`wsService.js`, `hooks/useDisponibilidadEnVivo.js`, `utils/tiempoReal.js`):** el token viaja solo si hay sesión. Reconexión con espera exponencial y jitter; los eventos que no afectan la fecha ni las canchas visibles se descartan; los cercanos se agrupan en una sola recarga REST (ventana de 1 s) y se recarga también al reconectar tras un corte. Si la recarga responde 404 (complejo suspendido o dado de baja) se cierra el canal y no se reintenta. Al salir de la pantalla o cambiar de complejo la conexión se cierra.
+- **Estructura de la interfaz:** las páginas son contenedores de orquestación (hooks, servicios y estado) y toda pieza de interfaz es un componente reutilizable: `CampoFormulario`, `FormularioLogin`, `FormularioRegistro`, `EstadoVacio`, `AlertaReintento`, `EncabezadoCatalogo`, `ListaComplejos`, `EncabezadoComplejo`, `FichaComplejo`, `SeccionCanchas`, `SeccionTurnos`, `SelectorFechaGrilla`, `GrillaCancha`, `ClimaCard`, `BotonVolver` y `PoliticaPrivacidad`. `Login`, `Registro`, `Catalogo`, `ComplejoDetalle` y `Privacidad` se redujeron a su orquestación.
+- **Navegación:** los filtros y la búsqueda reemplazan la entrada del historial, así "Atrás" vuelve a la pantalla anterior y no filtro por filtro. `BotonVolver` retrocede en el historial si la persona llegó navegando por la aplicación (el catálogo conserva sus filtros) y, si abrió el enlace directo, va al catálogo. La barra superior muestra sus secciones como bloques separados, con resalte al pasar y en la sección activa, y suma el acceso a Inicio.
+- **Textos y parámetros:** nuevas secciones de `i18n/es.js` (`catalogo`, `filtros`, `tarjeta`, `complejo`, `cancha`, `clima`, `grilla`); demora de la búsqueda, servicios por tarjeta y atribución del clima en `config/parametros.js`; órdenes y tipos de evento en `config/catalogos.js`.
+- **Pruebas del frontend:** 157 tests de Vitest en total (37 nuevos: filtros y su ida y vuelta con la URL, espera con backoff y jitter, dirección del canal, filtro de eventos por fecha y cancha, pronóstico de una fecha, suma de días, temperatura y día corto).
 
 ## Decisiones de arquitectura
 - **Frontend:** React con Vite y PWA manual, en capas `services/`, `components/` y `pages/`: solo la capa de servicios conoce las URLs de la API, lo que separa el acceso a datos de la presentación. El access token vive en memoria y el refresh en una cookie HttpOnly, `Secure` y `SameSite=Strict`: un script inyectado por XSS no puede leer el refresh, y `SameSite=Strict` mitiga CSRF. Nada de la sesión se guarda en `localStorage`.

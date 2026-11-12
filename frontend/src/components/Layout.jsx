@@ -50,7 +50,8 @@ export default function Layout({ enlaces = [], ancho = 'normal', children }) {
               <Offcanvas.Title as="span" className="titulo text-white fs-4">{t('marca.nombre')}</Offcanvas.Title>
             </Offcanvas.Header>
             <Offcanvas.Body className="d-lg-flex align-items-lg-center">
-              <Nav className="ms-lg-auto align-items-lg-center">
+              <Nav className="ms-lg-auto align-items-lg-stretch barra-secciones">
+                <Nav.Link as={NavLink} to="/" end>{t('navegacion.inicio')}</Nav.Link>
                 {enlaces.map(({ a, texto }) => (
                   <Nav.Link key={a} as={NavLink} to={a} end>{texto}</Nav.Link>
                 ))}
@@ -59,7 +60,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', children }) {
                 ))}
               </Nav>
               {autenticado ? (
-                <div className="d-flex flex-column flex-lg-row align-items-lg-center gap-2 ms-lg-3 mt-3 mt-lg-0">
+                <div className="barra-sesion d-flex flex-column flex-lg-row align-items-lg-center gap-2 mt-3 mt-lg-0">
                   <span className="text-white small" aria-label={t('navegacion.sesionDe', { nombre: usuario.nombre_completo })}>
                     {t('sesion.comoRol', { nombre: usuario.nombre_completo, rol: ETIQUETA_ROL[rol] ?? rol ?? '' })}
                   </span>
@@ -68,7 +69,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', children }) {
                   </BotonAccion>
                 </div>
               ) : (
-                <div className="d-flex flex-column flex-lg-row gap-2 ms-lg-3 mt-3 mt-lg-0">
+                <div className="barra-sesion d-flex flex-column flex-lg-row gap-2 mt-3 mt-lg-0">
                   <Button as={Link} to="/login" variant="outline-light" size="sm">{t('navegacion.ingresar')}</Button>
                   <Button as={Link} to="/registro" variant="primary" size="sm">{t('navegacion.registrarse')}</Button>
                 </div>

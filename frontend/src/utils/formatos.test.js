@@ -2,10 +2,13 @@ import { describe, expect, test } from 'vitest';
 import {
   aFechaIso,
   formatearFechaCorta,
+  formatearDiaCorto,
   formatearFechaLarga,
   formatearHora,
   formatearPrecio,
+  formatearTemperatura,
   parsearFecha,
+  sumarDias,
 } from './formatos.js';
 
 // Los espacios de Intl pueden ser no separables según la versión de ICU: se normalizan para comparar.
@@ -98,5 +101,41 @@ describe('fechas legibles', () => {
   test('una fecha inválida devuelve texto vacío', () => {
     expect(formatearFechaLarga('2026-02-30')).toBe('');
     expect(formatearFechaCorta('mañana')).toBe('');
+  });
+});
+
+describe('sumarDias', () => {
+  test('suma y resta días cruzando mes y año', () => {
+    expect(sumarDias('2026-11-30', 1)).toBe('2026-12-01');
+    expect(sumarDias('2026-12-31', 1)).toBe('2027-01-01');
+    expect(sumarDias('2026-03-01', -1)).toBe('2026-02-28');
+  });
+
+  test('una fecha inválida devuelve null', () => {
+    expect(sumarDias('2026-13-01', 1)).toBeNull();
+    expect(sumarDias('', 1)).toBeNull();
+  });
+});
+
+describe('formatearTemperatura', () => {
+  test('redondea y agrega el grado', () => {
+    expect(formatearTemperatura(18.6)).toBe('19°');
+    expect(formatearTemperatura(-0.4)).toBe('0°');
+  });
+
+  test('un valor que no es número da texto vacío', () => {
+    expect(formatearTemperatura(null)).toBe('');
+    expect(formatearTemperatura(Number.NaN)).toBe('');
+  });
+});
+
+describe('formatearDiaCorto', () => {
+  test('arma día de la semana y número sin correr el día', () => {
+    expect(normalizar(formatearDiaCorto('2026-11-18'))).toMatch(/18/);
+    expect(normalizar(formatearDiaCorto('2026-11-18')).toLowerCase()).toContain('mié');
+  });
+
+  test('una fecha inválida da texto vacío', () => {
+    expect(formatearDiaCorto('2026-13-40')).toBe('');
   });
 });

@@ -33,6 +33,11 @@ export const PARAMETROS = Object.freeze({
     teselas: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     atribucion: '© OpenStreetMap contributors',
   }),
+  catalogo: Object.freeze({ busquedaDemoraMs: 400, serviciosEnTarjeta: 4 }),
+  // Fuente del pronóstico: su licencia (CC BY 4.0) exige mostrarla junto al clima.
+  atribuciones: Object.freeze({
+    clima: Object.freeze({ nombre: 'Open-Meteo.com', url: 'https://open-meteo.com/', licencia: 'CC BY 4.0' }),
+  }),
   notificaciones: Object.freeze({ sondeoMs: 60_000 }),
   // Espejo de POLITICA_PRIVACIDAD_VERSION de Django.
   politica: Object.freeze({
@@ -44,7 +49,7 @@ export const PARAMETROS = Object.freeze({
     retencionContactoDias: 30,
   }),
   // Espejo de los largos máximos de los campos de Django (core/models.py).
-  limitesCampos: Object.freeze({ nombre: 120, email: 120, telefono: 30, password: 128 }),
+  limitesCampos: Object.freeze({ nombre: 120, email: 120, telefono: 30, password: 128, busqueda: 100 }),
   password: Object.freeze({ largoMinimo: 8 }),
   pwa: Object.freeze({ claveBannerCerrado: 'talibre.bannerPwaCerrado' }),
 });

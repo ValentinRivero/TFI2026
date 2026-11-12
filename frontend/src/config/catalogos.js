@@ -147,6 +147,19 @@ export const TIPO_EVENTO_ACTIVIDAD = Object.freeze({
   3: entrada('Reserva realizada', ok),
 });
 
+/** Tipos de evento que el cliente informa a `backend-node`; el 3 lo emite Django. */
+export const EVENTO_ACTIVIDAD = Object.freeze({ COMPLEJO_VISTO: 1, GRILLA_CONSULTADA: 2, RESERVA_REALIZADA: 3 });
+
+/** Órdenes que admite el catálogo (`ordering`), con la clave de texto que los rotula. */
+export const ORDENES_CATALOGO = Object.freeze([
+  Object.freeze({ valor: 'nombre', clave: 'filtros.ordenNombre' }),
+  Object.freeze({ valor: '-nombre', clave: 'filtros.ordenNombreDesc' }),
+  Object.freeze({ valor: 'precio_desde', clave: 'filtros.ordenPrecio' }),
+  Object.freeze({ valor: '-precio_desde', clave: 'filtros.ordenPrecioDesc' }),
+]);
+
+export const BLOQUE_LIBRE = 'LIBRE';
+
 /** Estados de un bloque de la grilla, con el nombre del casillero que los dibuja en `tema.css`. */
 export const ESTADO_BLOQUE = Object.freeze({
   LIBRE: Object.freeze({ etiqueta: 'Libre', casillero: 'libre' }),

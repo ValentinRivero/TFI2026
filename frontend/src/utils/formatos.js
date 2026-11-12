@@ -24,6 +24,19 @@ export const aFechaIso = (fecha) => (
   `${fecha.getFullYear()}-${dosDigitos(fecha.getMonth() + 1)}-${dosDigitos(fecha.getDate())}`
 );
 
+/** `AAAA-MM-DD` desplazada una cantidad de días (negativa hacia atrás), por partes y sin pasar por UTC. */
+export const sumarDias = (texto, dias) => {
+  const fecha = parsearFecha(texto);
+  if (!fecha) return null;
+  fecha.setDate(fecha.getDate() + dias);
+  return aFechaIso(fecha);
+};
+
+/** Temperatura en grados, redondeada: `18.6` como `"19°"`. */
+export const formatearTemperatura = (valor) => (
+  typeof valor === 'number' && Number.isFinite(valor) ? `${Math.round(valor)}°` : ''
+);
+
 const formateadorEntero = new Intl.NumberFormat(locale, {
   style: 'currency', currency: moneda, minimumFractionDigits: 0, maximumFractionDigits: 0,
 });
@@ -50,6 +63,14 @@ const formateadorFechaCorta = new Intl.DateTimeFormat(locale, { day: '2-digit', 
 export const formatearFechaLarga = (texto) => {
   const fecha = parsearFecha(texto);
   return fecha ? formateadorFechaLarga.format(fecha) : '';
+};
+
+const formateadorDiaCorto = new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric' });
+
+/** `AAAA-MM-DD` como "mié 18". */
+export const formatearDiaCorto = (texto) => {
+  const fecha = parsearFecha(texto);
+  return fecha ? formateadorDiaCorto.format(fecha) : '';
 };
 
 /** `AAAA-MM-DD` como "18/11/2026". */

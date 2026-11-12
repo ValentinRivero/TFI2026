@@ -5,10 +5,12 @@ import Cargando from './components/Cargando.jsx';
 import Layout from './components/Layout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import { t } from './i18n/index.js';
+import Catalogo from './pages/Catalogo.jsx';
 import Login from './pages/Login.jsx';
 import Privacidad from './pages/Privacidad.jsx';
 import Registro from './pages/Registro.jsx';
 
+const ComplejoDetalle = lazy(() => import('./pages/ComplejoDetalle.jsx'));
 const Provisoria = lazy(() => import('./pages/Provisoria.jsx'));
 
 // La guía visual es una herramienta de desarrollo: en el build de producción esta constante es `null` y el
@@ -16,15 +18,6 @@ const Provisoria = lazy(() => import('./pages/Provisoria.jsx'));
 const GuiaVisual = import.meta.env.DEV ? lazy(() => import('./pages/GuiaVisual.jsx')) : null;
 
 const ENLACES = GuiaVisual ? [{ a: '/guia', texto: t('navegacion.guia') }] : [];
-
-function Portada() {
-  return (
-    <section>
-      <h1 className="display-5">{t('marca.nombre')}</h1>
-      <p className="lead text-secondary">{t('marca.eslogan')}</p>
-    </section>
-  );
-}
 
 function NoEncontrada() {
   return (
@@ -62,7 +55,8 @@ export default function App() {
       <AceptarPolitica />
       <Routes>
         <Route element={<PlantillaPublica />}>
-          <Route path="/" element={<Portada />} />
+          <Route path="/" element={<Catalogo />} />
+          <Route path="/complejos/:id" element={<ComplejoDetalle />} />
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<Registro />} />
           <Route path="/privacidad" element={<Privacidad />} />

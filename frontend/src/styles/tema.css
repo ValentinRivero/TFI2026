@@ -460,6 +460,12 @@ a {
   border-color: var(--estado-neutro-borde);
 }
 
+/* Texto libre del complejo (por ejemplo, las condiciones de seña): respeta los saltos de línea */
+.texto-multilinea {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
 /* Casilleros de la grilla */
 .casillero {
   --casillero-borde-ancho: 1px;
@@ -638,15 +644,49 @@ a {
   height: 2rem;
 }
 
+/* Secciones de la barra: bloques separados por líneas finas, con resalte al pasar y en la sección activa */
+.barra-superior {
+  --barra-separador: rgba(255, 255, 255, 0.14);
+}
+
 .barra-superior .nav-link {
   color: #cbd5e1;
   font-weight: 500;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--barra-separador);
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .barra-superior .nav-link:hover,
-.barra-superior .nav-link:focus,
+.barra-superior .nav-link:focus {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .barra-superior .nav-link.active {
   color: #ffffff;
+  background: var(--tema-primario);
+}
+
+.barra-superior .nav-link.active:hover {
+  background: var(--tema-primario-hover);
+}
+
+@media (min-width: 992px) {
+  .barra-superior .barra-secciones {
+    border-left: 1px solid var(--barra-separador);
+  }
+
+  .barra-superior .barra-secciones .nav-link {
+    padding: 0 1rem;
+    min-height: 3.25rem;
+    border-bottom: 0;
+    border-right: 1px solid var(--barra-separador);
+  }
+
+  .barra-superior .barra-sesion {
+    margin-left: 1rem;
+  }
 }
 
 .barra-superior .navbar-toggler {
@@ -707,4 +747,69 @@ a {
   .panel-admin .casillero {
     min-height: 2.25rem;
   }
+}
+
+/* Botón para volver a la pantalla anterior */
+.boton-volver {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--toque-min);
+  padding: 0.35rem 1rem 0.35rem 0.7rem;
+  border: 1px solid #94a3b8;
+  border-radius: var(--radio);
+  background: var(--tema-superficie);
+  color: var(--tema-texto);
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.boton-volver:hover,
+.boton-volver:focus-visible {
+  background: var(--tema-primario-suave);
+  border-color: var(--tema-primario);
+  color: var(--tema-primario-profundo);
+}
+
+.boton-volver:active {
+  box-shadow: none;
+}
+
+/* Clima: estado de carga o de error en el lugar de la tarjeta, y variantes compacta y del día */
+.clima-estado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.clima-estado-chico {
+  padding: 0.25rem 0;
+}
+
+.clima-dia {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--tema-borde);
+  border-left: 3px solid var(--estado-info-borde);
+  border-radius: var(--radio);
+  background: var(--tema-superficie);
+}
+
+.clima-dia-compacto {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 6.5rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--tema-borde);
+  border-radius: var(--radio);
+  background: var(--tema-fondo);
+  line-height: 1.25;
 }
