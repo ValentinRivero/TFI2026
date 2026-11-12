@@ -1,6 +1,6 @@
+import { obtenerParametros } from '../config/parametros.js';
 import { ErrorHttp, ErrorServicioExterno } from '../middlewares/errores.middleware.js';
 
-const TIEMPO_MAXIMO_MS = 5_000;
 const ID_VALIDO = /^[1-9]\d*$/;
 const MENSAJES_DE_ACCESO = {
   401: 'Debés iniciar sesión para acceder a este recurso.',
@@ -36,7 +36,7 @@ const pedir = async (ruta, token) => {
   try {
     return await fetch(url, {
       headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      signal: AbortSignal.timeout(TIEMPO_MAXIMO_MS),
+      signal: AbortSignal.timeout(obtenerParametros().http.timeoutDjangoMs),
       // Una redirección podría reenviar el token a otra dirección: se trata como falla.
       redirect: 'error',
     });

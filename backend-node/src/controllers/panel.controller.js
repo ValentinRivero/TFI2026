@@ -42,6 +42,15 @@ const serializarNotificacion = (notificacion) => {
 
 const rutaDe = (req) => req.originalUrl.split('?')[0];
 
+const CRITERIOS_DE_BANDEJA = ['categoria', 'prioridad', 'estado'];
+
+// Solo los filtros que el cliente envió y pasaron la validación.
+const criteriosDe = (req) => {
+  const datos = matchedData(req, { locations: ['query'] });
+  const enviados = CRITERIOS_DE_BANDEJA.filter((campo) => datos[campo] !== undefined);
+  return Object.fromEntries(enviados.map((campo) => [campo, datos[campo]]));
+};
+
 const listarPaginado = async (req, res, { modelo, filtro, filtrosDeEnlace, listar, serializar }) => {
   const { page: pagina, limit: limite } = matchedData(req, { locations: ['query'] });
   const total = await enMongo(() => modelo.countDocuments(filtro));
@@ -71,11 +80,12 @@ export const listarNotificacionesDelComplejo = async (req, res) => {
   const { complejo_id: complejoId } = matchedData(req, { locations: ['query'] });
   await verificarAccesoAComplejo(complejoId, req.token);
   const destinatario = { complejo_id: complejoId };
+  const criterios = criteriosDe(req);
   await listarPaginado(req, res, {
     modelo: Notificacion,
-    filtro: Notificacion.filtroDeBandeja(destinatario),
-    filtrosDeEnlace: destinatario,
-    listar: (pagina) => Notificacion.bandeja(destinatario, pagina),
+    filtro: Notificacion.filtroDeBandeja(destinatario, criterios),
+    filtrosDeEnlace: { ...destinatario, ...criterios },
+    listar: (pagina) => Notificacion.bandeja(destinatario, { ...pagina, criterios }),
     serializar: serializarNotificacion,
   });
 };
@@ -83,11 +93,12 @@ export const listarNotificacionesDelComplejo = async (req, res) => {
 /** Bandeja propia de cualquier usuario autenticado: el destinatario sale siempre del token. */
 export const listarMisNotificaciones = async (req, res) => {
   const destinatario = { usuario_id: req.usuario.id };
+  const criterios = criteriosDe(req);
   await listarPaginado(req, res, {
     modelo: Notificacion,
-    filtro: Notificacion.filtroDeBandeja(destinatario),
-    filtrosDeEnlace: {},
-    listar: (pagina) => Notificacion.bandeja(destinatario, pagina),
+    filtro: Notificacion.filtroDeBandeja(destinatario, criterios),
+    filtrosDeEnlace: criterios,
+    listar: (pagina) => Notificacion.bandeja(destinatario, { ...pagina, criterios }),
     serializar: serializarNotificacion,
   });
 };

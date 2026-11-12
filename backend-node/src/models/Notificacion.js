@@ -3,13 +3,14 @@ import mongoose from 'mongoose';
 import bajaLogica from './bajaLogica.plugin.js';
 import { enteroPositivo, opcionesDeEsquema } from './comunes.js';
 import { ESTADOS_EVENTO } from './Evento.js';
+import { LIMITES } from '../config/parametros.js';
 import { TAMANO_DE_PAGINA } from '../utils/paginacion.js';
 
 export const CATEGORIAS_NOTIFICACION = Object.freeze({ RESERVAS: 1, CUENTAS: 2, OPERATORIA: 3, SISTEMA: 4 });
 export const PRIORIDADES_NOTIFICACION = Object.freeze({ NORMAL: 1, URGENTE: 2 });
 export const ESTADOS_NOTIFICACION = Object.freeze({ BAJA: 0, NO_LEIDA: 1, LEIDA: 2 });
 
-const MAXIMO_MENSAJE = 280;
+const MAXIMO_MENSAJE = LIMITES.maximoMensaje;
 // El mensaje se muestra en paneles compartidos por el personal del complejo: no lleva datos personales (Ley 25.326).
 const EMAIL = /[^\s@]+@[^\s@]+\.[^\s@]+/;
 // Del evento solo viaja lo que la bandeja muestra: `metadata` y `usuario_id` no llegan al panel.
@@ -64,15 +65,25 @@ const VIGENTES = [ESTADOS_NOTIFICACION.NO_LEIDA, ESTADOS_NOTIFICACION.LEIDA];
 /**
  * Filtro de la bandeja de un destinatario. La de un complejo trae solo sus avisos generales: los dirigidos a un
  * usuario puntual los ve únicamente ese usuario. Sin destinatario se rechaza, para no listar las de todos.
+ * Los criterios opcionales (`categoria`, `prioridad`, `estado`) acotan la bandeja; `estado` admite solo los
+ * vigentes, así que una baja lógica nunca sale por esta vía.
  */
-notificacionSchema.statics.filtroDeBandeja = function filtroDeBandeja({ complejo_id: complejoId, usuario_id: usuarioId }) {
+notificacionSchema.statics.filtroDeBandeja = function filtroDeBandeja(
+  { complejo_id: complejoId, usuario_id: usuarioId },
+  { categoria, prioridad, estado } = {},
+) {
   if (!complejoId && !usuarioId) {
     throw new Error('La bandeja necesita un destinatario: complejo_id o usuario_id.');
+  }
+  if (estado !== undefined && !VIGENTES.includes(estado)) {
+    throw new Error('La bandeja solo se filtra por estados vigentes.');
   }
   return {
     ...(complejoId ? { complejo_id: complejoId } : {}),
     usuario_id: usuarioId ?? null,
-    estado: { $in: VIGENTES },
+    estado: estado ?? { $in: VIGENTES },
+    ...(categoria === undefined ? {} : { categoria }),
+    ...(prioridad === undefined ? {} : { prioridad }),
   };
 };
 
@@ -80,8 +91,11 @@ notificacionSchema.statics.filtroDeBandeja = function filtroDeBandeja({ complejo
  * Una página de la bandeja, de a 20 por defecto: de la más reciente a la más antigua, con el evento resuelto por
  * `populate` solo si sigue activo.
  */
-notificacionSchema.statics.bandeja = function bandeja(destinatario, { salto = 0, limite = TAMANO_DE_PAGINA } = {}) {
-  return this.find(this.filtroDeBandeja(destinatario))
+notificacionSchema.statics.bandeja = function bandeja(
+  destinatario,
+  { salto = 0, limite = TAMANO_DE_PAGINA, criterios = {} } = {},
+) {
+  return this.find(this.filtroDeBandeja(destinatario, criterios))
     .sort({ fecha_creacion: -1 })
     .skip(salto)
     .limit(limite)

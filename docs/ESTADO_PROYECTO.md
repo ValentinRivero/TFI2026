@@ -68,11 +68,47 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - [x] **5.7.3.** Eventos y avisos de servidor: reserva realizada (evento tipo 3 y aviso al complejo) y cancelación por el complejo (aviso al jugador).
 
 ## Fase 6: Frontend React, PWA y Mapa Interactivo
+- [x] **6.0.** Parámetros operativos del backend en un solo lugar, retención de la auditoría y ajustes de los endpoints previos al frontend.
+  - [x] **6.0.1.** Django: parámetros operativos en `config/settings.py` con lectura estricta del entorno (tasas de login, reservas y grilla, proxies de confianza, anticipación de reservas, rango máximo de días, caché de la grilla, tiempo máximo hacia Node, conservación de contactos, límites de cuerpo, caché y capa de canales).
+  - [x] **6.0.2.** Django: largos, márgenes y coordenadas declarados una sola vez en `core/models.py` y reutilizados por los serializers, sin migraciones nuevas, y `core/tests/test_parametros.py`.
+  - [x] **6.0.3.** Django: comando idempotente `anonimizar_ips_auditoria` con retención de 12 meses.
+  - [x] **6.0.4.** Node: `src/config/parametros.js` con validación estricta al arrancar y módulos que leen de ahí.
 - [ ] **6.1.** Base React con Vite: capas `services/`, `components/` y `pages/`, `App.jsx` con React Router y `ProtectedRoute`, instancias de Axios con interceptores para ambos backends, `Login`, `Registro` y job de frontend en CI.
-- [ ] **6.2.** Vistas del Jugador: `Catalogo`, `ComplejoDetalle` con grilla en vivo (`wsService.js`), clima y reserva, y `MisReservas`.
+  - [ ] **6.1.1.** Esqueleto con Vite, dependencias, estructura de carpetas y job de frontend en CI.
+  - [ ] **6.1.2.** Tema (`styles/tema.css`), `config/parametros.js`, `config/catalogos.js`, `i18n/` y guía visual de desarrollo.
+  - [ ] **6.1.3.** Componentes transversales: `Cargando`, `BotonAccion`, `Paginador`, `Alerta`, `ModalConfirmar`, `Layout` y `hooks/useConsulta`.
+  - [ ] **6.1.4.** Capa de red y sesión: `services/api.js`, `services/authService.js` y `hooks/useSesion`.
+  - [ ] **6.1.5.** `Login` y `Registro`.
+  - [ ] **6.1.6.** `Privacidad`, aceptación de la política vigente y rutas protegidas por rol.
+- [ ] **6.2.** Vistas del Jugador: `Catalogo`, `ComplejoDetalle` con grilla en vivo (`wsService.js`), clima y reserva, `MisReservas` y `Perfil`.
+  - [ ] **6.2.1.** `Catalogo` público en `/` y `ComplejoCard`.
+  - [ ] **6.2.2.** Filtros del catálogo sincronizados con la URL.
+  - [ ] **6.2.3.** `ComplejoDetalle`: ficha, clima con su atribución y registro de la visita.
+  - [ ] **6.2.4.** Grilla del día por REST con los cinco estados de casillero.
+  - [ ] **6.2.5.** Tiempo real con `wsService.js`.
+  - [ ] **6.2.6.** Reserva de un turno.
+  - [ ] **6.2.7.** `MisReservas`.
+  - [ ] **6.2.8.** `Perfil` y baja de la cuenta con vista previa.
 - [ ] **6.3.** Vistas de Administración: `PanelComplejo`, `GestionCanchas`, `GestionExcepciones`, `Agenda` y `Reportes`; `PanelSistema`, `Contratos` y `Auditoria`.
-- [ ] **6.4.** PWA manual (`public/manifest.json`, `public/sw.js`, sin cachear respuestas autenticadas) y mapa interactivo con `react-leaflet` en `MapaComplejos`.
+  - [ ] **6.3.1.** Estructura del panel, selector de complejo y `PanelComplejo`.
+  - [ ] **6.3.2.** Operadores del complejo.
+  - [ ] **6.3.3.** `GestionCanchas` y horarios, con confirmación de conflictos.
+  - [ ] **6.3.4.** `GestionExcepciones`.
+  - [ ] **6.3.5.** `Agenda` del día.
+  - [ ] **6.3.6.** Turnos fijos.
+  - [ ] **6.3.7.** `Reportes`.
+  - [ ] **6.3.8.** `PanelSistema` y `Contratos`.
+  - [ ] **6.3.9.** Usuarios y `Auditoria`.
+- [ ] **6.4.** PWA manual (`public/manifest.json`, `public/sw.js`, sin cachear respuestas autenticadas) y mapa interactivo con Leaflet en `MapaComplejos`.
+  - [x] **6.4.1.** Django: `GET /api/complejos/marcadores/`, público y sin paginar, con los filtros del catálogo.
+  - [ ] **6.4.2.** `MapaComplejos`.
+  - [ ] **6.4.3.** Manifiesto y service worker.
+  - [ ] **6.4.4.** `BannerInstalarPWA` y requisitos de compatibilidad.
 - [ ] **6.5.** Sección de notificaciones para todos los roles; en los paneles de complejo, separada por categoría y con una bandeja de urgentes.
+  - [x] **6.5.1.** Node: filtros `categoria`, `prioridad` y `estado` en las bandejas de notificaciones.
+  - [ ] **6.5.2.** Campana y bandeja personal.
+  - [ ] **6.5.3.** Bandeja del complejo por categoría y bandeja de urgentes.
+  - [ ] **6.5.4.** Cierre de la Fase 6.
 
 ## Fase 7: Despliegue, Pruebas Integrales y Entrega
 - [ ] **7.1.** Imágenes Docker (`Dockerfile` y `.dockerignore` por servicio) y `docker-compose.yml` con `web`, `node`, `frontend` y `redis`.
@@ -255,6 +291,33 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - **Validación de cambios de operatoria:** lee una sola vez las reservas, los turnos fijos y los horarios (antes, dos veces), y evalúa las dos configuraciones en memoria con los bloques válidos precalculados por día.
 - **Sin cambios, porque ya estaban acotados:** motor de reservas, cancelaciones, baja de cuenta, depuración diaria y WebSocket. Los índices existentes cubren las consultas nuevas y no hizo falta migración.
 - Pruebas de la optimización: 15 tests (1226 en total). Las suites de negocio (668 tests) pasaron también sobre PostgreSQL.
+
+## Notas del bloque 6.0 y de los puntos 6.4.1 y 6.5.1
+- **Parámetros de Django (`config/settings.py`):**
+  - **Lectura estricta:** los helpers `_env_entero` y `_env_tasa` cortan el arranque con el nombre de la variable cuando el valor no es un entero, está fuera de rango o no tiene el formato `cantidad/período`. Los valores por defecto son los que regían antes.
+  - **Cuándo se leen:** los módulos consultan `settings.X` en el momento de uso, no al importar, así las pruebas ajustan un parámetro con `override_settings`. `config/settings_test.py` fija los valores por defecto para que las pruebas no dependan del `.env` local.
+  - **Qué se centralizó:** tasas de login, reservas y grilla, proxies de confianza, anticipación máxima de reserva, rango máximo de días (una sola regla para excepciones y reportes), caché de la grilla, tiempo máximo hacia `backend-node`, conservación de contactos de bajas, límites de cuerpo, tiempo de la caché y capacidad y vencimientos de la capa de canales.
+- **Proxies de confianza:** `NUM_PROXIES` tiene `0` por defecto. Antes no estaba definido y DRF tomaba entero el encabezado `X-Forwarded-For` enviado por el cliente, que podía rotarlo para esquivar los límites por IP. Con `0` se usa la IP de la conexión, igual que la auditoría y `backend-node`. Detrás de nginx se define en `1`.
+- **Límite de cuerpo:** `DATA_UPLOAD_MAX_MEMORY_SIZE` solo rige cuando Django lee el cuerpo completo; los JSON de DRF llegan como flujo. El tope efectivo en producción es el del proxy (7.2).
+- **Largos y límites compartidos:** `core/models.py` declara una vez los largos de nombre, email, teléfono, dirección, aviso de seña, nombre de cancha, texto libre, acción de auditoría y contraseña, las coordenadas máximas y el margen de cancelación (`HORAS_CANCELACION_DEFECTO` y `HORAS_CANCELACION_MAXIMAS`). Modelos y serializers los importan; no hubo migraciones.
+- **Retención de IPs (`anonimizar_ips_auditoria`):**
+  - **Qué hace:** anonimiza `ip_origen` de los registros con más de `AUDITORIA_RETENCION_MESES` meses (12 por defecto) y conserva el evento, la fecha y el `usuario_id`. Es una modificación y no un borrado.
+  - **Frecuencia:** idempotente; una segunda corrida no cambia nada. Está pensado para correr una vez por mes.
+  - **Limitación:** `security.log` conserva las IPs hasta que la rotación de archivos las descarta; no se purga por fecha.
+- **Marcadores del mapa (`GET /api/complejos/marcadores/`):**
+  - **Reglas:** es público, ignora el encabezado `Authorization` y no pagina. Reutiliza `CatalogoComplejoFilter`, la búsqueda y el orden del listado y el mismo criterio de visibilidad (contrato activo y sin baja lógica).
+  - **Rendimiento y límite:** una sola consulta, con `precio_desde` como subconsulta y sin cargar servicios ni canchas. El tope `CATALOGO_MARCADORES_MAXIMO` (500) acota la respuesta.
+  - **Datos expuestos:** devuelve `id`, `nombre`, `latitud`, `longitud` y `precio_desde`, sin propietario ni contacto.
+- **Parámetros de Node (`src/config/parametros.js`):**
+  - **Validación:** `leerParametros(entorno)` valida cada variable con rango y valor por defecto. Un valor inválido corta el arranque con el nombre de la variable en lugar de caer al valor por defecto. Importar el módulo no lee el entorno: `obtenerParametros()` lo lee al usarlo.
+  - **Reglas fijas:** `LIMITES` agrupa tamaño de página y máximo, días de pronóstico, largo máximo del mensaje, bytes de `metadata` y largo mínimo de la clave interna. Los tamaños de página no se ajustan por entorno porque el frontend los replica.
+  - **Lectura por uso:** los secretos y direcciones (`JWT_SIGNING_KEY`, `INTERNAL_API_KEY`, `DJANGO_API_URL`, `MONGO_URI` y `CORS_ALLOWED_ORIGINS`) siguen leyéndose al usarlos.
+- **Filtros de notificaciones:**
+  - **Alcance:** `categoria`, `prioridad` y `estado` en `GET /api/actividad/notificaciones` y en `/mias`. Se combinan con la paginación y sus enlaces `next` y `previous` los conservan.
+  - **Estados:** `estado` admite solo `1` y `2`; la baja lógica no se lista por ninguna vía.
+  - **Índices:** no se agregaron. El filtro se aplica sobre el rango que ya recorre el índice de bandeja.
+- **Licencias del frontend:** el mapa usa Leaflet directamente, con un envoltorio propio de React. `react-leaflet` se publica con una licencia que no es permisiva (Hippocratic-2.1), por lo que queda fuera de las dependencias admitidas.
+- Pruebas del bloque 6.0 y de los puntos 6.4.1 y 6.5.1: 148 tests nuevos en Django (1618 en total, de los cuales 5 de concurrencia se saltean sobre SQLite) y 97 en Node (457 en total).
 
 ## Decisiones de arquitectura
 - **Frontend:** React con Vite y PWA manual, en capas `services/`, `components/` y `pages/`: solo la capa de servicios conoce las URLs de la API, lo que separa el acceso a datos de la presentación. El access token vive en memoria y el refresh en una cookie HttpOnly, `Secure` y `SameSite=Strict`: un script inyectado por XSS no puede leer el refresh, y `SameSite=Strict` mitiga CSRF. Nada de la sesión se guarda en `localStorage`.

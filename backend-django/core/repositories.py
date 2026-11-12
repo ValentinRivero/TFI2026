@@ -223,15 +223,8 @@ class ComplejoRepository:
         ).order_by('nombre', 'id')
 
     @staticmethod
-    def catalogo_publico():
-        """
-        Solo complejos con contrato activo y sin baja lógica. Servicios y canchas activas se resuelven con
-        un prefetch cada uno y el precio mínimo con una subconsulta: la cantidad de consultas no crece
-        con la cantidad de complejos listados.
-        """
-        canchas = Cancha.objects.filter(
-            estado=EstadoCancha.ACTIVA, deporte__estado=EstadoRegistro.ACTIVO,
-        ).select_related('deporte').order_by('nombre', 'id')
+    def _catalogo_base():
+        """Complejos con contrato activo y sin baja lógica, con el precio mínimo de sus canchas activas."""
         precio_minimo = (
             Cancha.objects.filter(complejo=OuterRef('pk'), estado=EstadoCancha.ACTIVA)
             .order_by()
@@ -242,10 +235,33 @@ class ComplejoRepository:
         return (
             Complejo.objects.filter(estado=EstadoRegistro.ACTIVO, estado_contrato=EstadoContrato.ACTIVO)
             .annotate(precio_desde=Subquery(precio_minimo))
+        )
+
+    @staticmethod
+    def catalogo_publico():
+        """
+        Solo complejos con contrato activo y sin baja lógica. Servicios y canchas activas se resuelven con
+        un prefetch cada uno y el precio mínimo con una subconsulta: la cantidad de consultas no crece
+        con la cantidad de complejos listados.
+        """
+        canchas = Cancha.objects.filter(
+            estado=EstadoCancha.ACTIVA, deporte__estado=EstadoRegistro.ACTIVO,
+        ).select_related('deporte').order_by('nombre', 'id')
+        return (
+            ComplejoRepository._catalogo_base()
             .prefetch_related(
                 ComplejoRepository._prefetch_servicios_activos(),
                 Prefetch('canchas', queryset=canchas, to_attr='canchas_activas'),
             )
+            .order_by('nombre', 'id')
+        )
+
+    @staticmethod
+    def marcadores_publicos():
+        """Mismo criterio que el catálogo, sin servicios ni canchas: solo lo que dibuja un marcador del mapa."""
+        return (
+            ComplejoRepository._catalogo_base()
+            .only('id', 'nombre', 'latitud', 'longitud')
             .order_by('nombre', 'id')
         )
 
@@ -881,6 +897,16 @@ class AuditoriaRepository:
             LogAuditoria.objects.select_related('usuario', 'complejo')
             .filter(filtros)
             .order_by('-fecha_creacion', '-id')
+        )
+
+    @staticmethod
+    def anonimizar_ips_anteriores_a(limite):
+        """
+        Quita la IP de los registros anteriores al límite y conserva el evento, la fecha y el usuario. Es una
+        modificación y no un borrado; `update` no dispara `auto_now`, por eso la fecha se fija a mano.
+        """
+        return LogAuditoria.objects.filter(fecha_creacion__lt=limite, ip_origen__isnull=False).update(
+            ip_origen=None, fecha_modificacion=timezone.now(),
         )
 
 

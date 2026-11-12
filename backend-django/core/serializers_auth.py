@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from .models import LARGO_EMAIL, LARGO_MAXIMO_PASSWORD, LARGO_NOMBRE, LARGO_TELEFONO
 from .repositories import UsuarioRepository
 from .serializers import TextoLimpioField, validar_telefono
 from .services import RbacService
@@ -32,10 +33,10 @@ class TokenConRolSerializer(TokenObtainPairSerializer):
 
 
 class RegistroSerializer(serializers.Serializer):
-    nombre_completo = TextoLimpioField(max_length=120)
-    email = serializers.EmailField(max_length=120)
-    password = serializers.CharField(write_only=True, trim_whitespace=False, max_length=128)
-    telefono = TextoLimpioField(max_length=30, required=False, allow_blank=True, default='')
+    nombre_completo = TextoLimpioField(max_length=LARGO_NOMBRE)
+    email = serializers.EmailField(max_length=LARGO_EMAIL)
+    password = serializers.CharField(write_only=True, trim_whitespace=False, max_length=LARGO_MAXIMO_PASSWORD)
+    telefono = TextoLimpioField(max_length=LARGO_TELEFONO, required=False, allow_blank=True, default='')
     acepta_politica_privacidad = serializers.BooleanField(
         write_only=True, error_messages={'required': MENSAJE_POLITICA},
     )
@@ -62,8 +63,8 @@ class RegistroSerializer(serializers.Serializer):
 
 
 class LoginSerializer(serializers.Serializer):
-    email = serializers.EmailField(max_length=120)
-    password = serializers.CharField(write_only=True, trim_whitespace=False, max_length=128)
+    email = serializers.EmailField(max_length=LARGO_EMAIL)
+    password = serializers.CharField(write_only=True, trim_whitespace=False, max_length=LARGO_MAXIMO_PASSWORD)
 
     def validate_email(self, valor):
         return valor.strip().lower()
@@ -100,8 +101,8 @@ class PerfilSerializer(serializers.ModelSerializer):
 
 
 class PerfilEdicionSerializer(serializers.Serializer):
-    nombre_completo = TextoLimpioField(max_length=120, required=False)
-    telefono = TextoLimpioField(max_length=30, required=False, allow_blank=True)
+    nombre_completo = TextoLimpioField(max_length=LARGO_NOMBRE, required=False)
+    telefono = TextoLimpioField(max_length=LARGO_TELEFONO, required=False, allow_blank=True)
     # Solo registra la aceptación de la versión vigente; retirar el consentimiento equivale a dar de baja la cuenta.
     acepta_politica_privacidad = serializers.BooleanField(required=False)
 

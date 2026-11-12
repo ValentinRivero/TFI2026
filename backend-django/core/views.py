@@ -41,6 +41,7 @@ from .serializers import (
     GrillaSerializer,
     HorarioAperturaSerializer,
     LogAuditoriaSerializer,
+    MarcadorComplejoSerializer,
     OperadorSerializer,
     ReaperturaSerializer,
     ReservaAgendaEdicionSerializer,
@@ -333,7 +334,7 @@ class ComplejoViewSet(AccionesPublicasMixin, mixins.ListModelMixin, mixins.Retri
     contratos activos; lo administrativo, los complejos que el usuario administra (lo ajeno responde 404).
     """
 
-    acciones_publicas = frozenset({'list', 'retrieve', 'grilla'})
+    acciones_publicas = frozenset({'list', 'retrieve', 'grilla', 'marcadores'})
     permission_classes = [TienePermisoRBAC, AdministraComplejo]
     permisos_requeridos = {
         'administrados': ('ver_panel_complejo',),
@@ -353,7 +354,7 @@ class ComplejoViewSet(AccionesPublicasMixin, mixins.ListModelMixin, mixins.Retri
 
     @property
     def filter_backends(self):
-        return BACKENDS_DE_LISTADO if self.action == 'list' else ()
+        return BACKENDS_DE_LISTADO if self.action in ('list', 'marcadores') else ()
 
     def get_throttles(self):
         if self.action == 'grilla':
@@ -361,11 +362,15 @@ class ComplejoViewSet(AccionesPublicasMixin, mixins.ListModelMixin, mixins.Retri
         return super().get_throttles()
 
     def get_queryset(self):
+        if self.action == 'marcadores':
+            return CatalogoService.marcadores_publicos()
         if self.action in self.acciones_publicas:
             return CatalogoService.complejos_publicos()
         return ComplejoService.listar_administrables(self.request.user)
 
     def get_serializer_class(self):
+        if self.action == 'marcadores':
+            return MarcadorComplejoSerializer
         if self.action == 'list':
             return ComplejoCatalogoSerializer
         if self.action == 'retrieve':
@@ -392,6 +397,13 @@ class ComplejoViewSet(AccionesPublicasMixin, mixins.ListModelMixin, mixins.Retri
         entrada.is_valid(raise_exception=True)
         grilla = GrillaService.calcular(int(pk), entrada.validated_data['fecha'])
         return Response(GrillaSerializer(grilla).data)
+
+    # El mapa necesita todos los puntos que cumplen los filtros del catálogo. La colección está acotada por los
+    # complejos habilitados de una ciudad y por CATALOGO_MARCADORES_MAXIMO, así que va completa y sin paginar.
+    @action(detail=False, methods=['get'], pagination_class=None)
+    def marcadores(self, request):
+        marcadores = self.filter_queryset(self.get_queryset())[:settings.CATALOGO_MARCADORES_MAXIMO]
+        return Response(MarcadorComplejoSerializer(marcadores, many=True).data)
 
     @action(detail=False, methods=['get'])
     def administrados(self, request):

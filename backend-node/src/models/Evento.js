@@ -2,12 +2,13 @@ import mongoose from 'mongoose';
 
 import bajaLogica from './bajaLogica.plugin.js';
 import { enteroPositivo, opcionesDeEsquema } from './comunes.js';
+import { LIMITES } from '../config/parametros.js';
 import { inicioDelDia, sumarDias, ZONA_HORARIA } from '../utils/fechas.js';
 
 export const TIPOS_EVENTO = Object.freeze({ COMPLEJO_VISTO: 1, GRILLA_CONSULTADA: 2, RESERVA_REALIZADA: 3 });
 export const ESTADOS_EVENTO = Object.freeze({ BAJA: 0, ACTIVO: 1 });
 
-const MAXIMO_BYTES_METADATA = 2048;
+const MAXIMO_BYTES_METADATA = LIMITES.maximoBytesMetadata;
 
 const esObjetoPlano = (valor) => valor !== null && typeof valor === 'object' && !Array.isArray(valor);
 
