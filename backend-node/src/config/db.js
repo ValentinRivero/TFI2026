@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 
+import { obtenerParametros } from './parametros.js';
+
 // Un filtro armado con datos del cliente ({ "$ne": "" }) se trata como valor literal y no como operador.
 mongoose.set('sanitizeFilter', true);
 
@@ -18,7 +20,8 @@ export const conectarDB = async () => {
   try {
     const uri = process.env.MONGO_URI;
     if (!uri) throw new Error('MONGO_URI no está configurada.');
-    await mongoose.connect(uri, { serverSelectionTimeoutMS: 10_000 });
+    const { timeoutSeleccionMs, maxPoolSize } = obtenerParametros().mongo;
+    await mongoose.connect(uri, { serverSelectionTimeoutMS: timeoutSeleccionMs, maxPoolSize });
   } catch (error) {
     console.error('No se pudo conectar a MongoDB:', ocultarCredenciales(error.message));
     throw error;

@@ -171,4 +171,34 @@ describe('Notificacion.bandeja', () => {
   test('sin destinatario no arma una consulta que traería las notificaciones de todos', () => {
     expect(() => Notificacion.bandeja({})).toThrow('destinatario');
   });
+
+  describe('con criterios', () => {
+    test('acota por categoría, prioridad y estado sin perder el destinatario', () => {
+      const criterios = { categoria: CATEGORIAS_NOTIFICACION.RESERVAS, prioridad: PRIORIDADES_NOTIFICACION.URGENTE, estado: 1 };
+
+      expect(Notificacion.bandeja({ complejo_id: 4 }, { criterios }).getFilter()).toEqual({
+        complejo_id: 4, usuario_id: null, estado: 1, categoria: 1, prioridad: 2,
+      });
+    });
+
+    test('un criterio ausente no agrega nada al filtro', () => {
+      expect(Notificacion.filtroDeBandeja({ usuario_id: 12 }, { categoria: 3 })).toEqual({
+        usuario_id: 12, estado: VIGENTES, categoria: 3,
+      });
+      expect(Notificacion.filtroDeBandeja({ usuario_id: 12 }, {})).toEqual({ usuario_id: 12, estado: VIGENTES });
+    });
+
+    test('la baja lógica nunca se lista, ni siquiera pidiéndola', () => {
+      expect(() => Notificacion.filtroDeBandeja({ usuario_id: 12 }, { estado: ESTADOS_NOTIFICACION.BAJA }))
+        .toThrow('vigentes');
+      expect(() => Notificacion.filtroDeBandeja({ usuario_id: 12 }, { estado: 7 })).toThrow('vigentes');
+    });
+
+    test('cuenta con el mismo filtro que lista', () => {
+      const criterios = { prioridad: PRIORIDADES_NOTIFICACION.URGENTE };
+
+      expect(Notificacion.filtroDeBandeja({ complejo_id: 4 }, criterios))
+        .toEqual(Notificacion.bandeja({ complejo_id: 4 }, { criterios }).getFilter());
+    });
+  });
 });

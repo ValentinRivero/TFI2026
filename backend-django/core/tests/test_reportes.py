@@ -20,7 +20,7 @@ from core.models import (
     TipoEventoAuditoria,
     TipoOcupacion,
 )
-from core.services import MAXIMO_DIAS_REPORTE, MAXIMO_HORARIOS_RANKING, ReporteService
+from core.services import MAXIMO_HORARIOS_RANKING, ReporteService
 
 URL = '/api/reportes/dashboard/'
 MENSAJE_CANCHA_AJENA = 'La cancha no pertenece al complejo.'
@@ -171,12 +171,12 @@ class TestValidacionDeFiltros:
         ('2028-01-01', '2029-01-01'),
         ('2000-01-01', '2099-12-31'),
     ])
-    def test_rechaza_rangos_de_mas_de_366_dias(self, dueno, complejo, cliente_de, desde, hasta):
+    def test_rechaza_rangos_de_mas_de_366_dias(self, dueno, complejo, cliente_de, desde, hasta, settings):
         parametros = _parametros(complejo, fecha_desde=desde, fecha_hasta=hasta)
 
         detalle = self._detalle(cliente_de(dueno).get(URL, parametros))
 
-        assert str(MAXIMO_DIAS_REPORTE) in detalle['fecha_hasta']
+        assert str(settings.RANGO_MAXIMO_DIAS) in detalle['fecha_hasta']
 
     def test_admite_rangos_futuros(self, dueno, complejo, cliente_de):
         parametros = _parametros(complejo, fecha_desde='2027-03-01', fecha_hasta='2027-03-31')

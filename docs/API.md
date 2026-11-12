@@ -66,10 +66,21 @@ El registro y el inicio de sesión tienen un límite de intentos por origen y re
 | `GET /api/deportes/` | Público | Deportes disponibles (lista completa, sin paginar) |
 | `GET /api/servicios/` | Público | Servicios disponibles (lista completa, sin paginar) |
 | `GET /api/complejos/` | Público | Complejos habilitados, con coordenadas, servicios, deportes y `precio_desde` |
+| `GET /api/complejos/marcadores/` | Público | Puntos del mapa de los complejos habilitados, con los mismos filtros del listado. Lista completa, sin paginar |
 | `GET /api/complejos/<id>/` | Público | Detalle con sus canchas activas; `404` si el complejo no está habilitado |
 | `GET /api/complejos/<id>/grilla/?fecha=AAAA-MM-DD` | Público | Turnos del día por cancha, con precio y estado (respuesta completa, sin paginar) |
 
-Filtros de `GET /api/complejos/`: `deporte` (id), `cobertura` (`1` descubierta, `2` techada, `3` semicubierta), `servicio` (id, repetible: se exigen todos), `search` (nombre o dirección) y `ordering` (`nombre`, `precio_desde`, con `-` para invertir). `deporte` y `cobertura` se cumplen sobre una misma cancha.
+Filtros de `GET /api/complejos/` y de `GET /api/complejos/marcadores/`: `deporte` (id), `cobertura` (`1` descubierta, `2` techada, `3` semicubierta), `servicio` (id, repetible: se exigen todos), `search` (nombre o dirección) y `ordering` (`nombre`, `precio_desde`, con `-` para invertir). `deporte` y `cobertura` se cumplen sobre una misma cancha.
+
+`GET /api/complejos/marcadores/` responde una lista simple, ordenada por nombre y sin el sobre de paginación, con lo mínimo que necesita un marcador del mapa. Un valor de filtro inválido responde `400`.
+
+```json
+[
+  { "id": 1, "nombre": "Complejo El Yacaré", "latitud": "-29.140000", "longitud": "-59.260000", "precio_desde": "38000.00" }
+]
+```
+
+`precio_desde` es `null` si el complejo no tiene canchas activas. Los decimales llegan como texto, igual que en el listado.
 
 ### Grilla del día
 
@@ -148,7 +159,7 @@ Filtros de `GET /api/complejos/`: `deporte` (id), `cobertura` (`1` descubierta, 
 | Método y ruta | Acceso | Uso |
 |---|---|---|
 | `GET /api/complejos/administrados/` | Operador | Complejos que el usuario puede administrar |
-| `GET /api/complejos/<id>/acceso/` | Operador | Confirma que el usuario administra el complejo: `{ "complejo": id }`. Un complejo ajeno, inexistente o dado de baja responde `404`. Lo usa el servicio complementario para autorizar las rutas de los paneles |
+| `GET /api/complejos/<id>/acceso/` | Operador | Confirma que el usuario administra el complejo: `{ "complejo": id }`. Un complejo ajeno, inexistente o dado de baja responde `404` |
 | `PATCH /api/complejos/<id>/` | Dueño | `nombre`, `direccion`, `latitud`, `longitud`, `telefono_contacto`, `horas_limite_cancelacion`, `info_sena` |
 | `PUT /api/complejos/<id>/servicios/` | Dueño | `{ "servicios": [ids] }`: deja activos exactamente esos servicios |
 | `GET /api/complejos/<id>/operadores/` | Dueño | Operadores del complejo |
@@ -381,8 +392,8 @@ Servicio de actividad y notificaciones, con su propia URL base. Sus errores sigu
 | `GET /api/salud` | Público | Estado del servicio: `{ "estado": "ok" }` |
 | `POST /api/actividad` | Público, con sesión opcional | Registra una visita al complejo (`tipo_evento: 1`) o una consulta de su grilla (`2`): `{ "tipo_evento", "complejo_id", "metadata" }`. Responde `201` con `{ "id" }` |
 | `GET /api/actividad?complejo_id=` | Panel del complejo | Actividad registrada del complejo, de la más reciente a la más antigua: `id`, `tipo_evento`, `complejo_id`, `metadata`, `fecha_creacion` |
-| `GET /api/actividad/notificaciones?complejo_id=` | Panel del complejo | Avisos generales del complejo: `id`, `complejo_id`, `categoria`, `prioridad`, `mensaje`, `estado`, `evento` (`{ "id", "tipo_evento", "complejo_id", "fecha_creacion" }` o `null`), `fecha_creacion` |
-| `GET /api/actividad/notificaciones/mias` | Cualquier usuario autenticado | Notificaciones dirigidas a la cuenta del token, con la misma forma |
+| `GET /api/actividad/notificaciones?complejo_id=&categoria=&prioridad=&estado=` | Panel del complejo | Avisos generales del complejo: `id`, `complejo_id`, `categoria`, `prioridad`, `mensaje`, `estado`, `evento` (`{ "id", "tipo_evento", "complejo_id", "fecha_creacion" }` o `null`), `fecha_creacion`. Los filtros son opcionales |
+| `GET /api/actividad/notificaciones/mias?categoria=&prioridad=&estado=` | Cualquier usuario autenticado | Notificaciones dirigidas a la cuenta del token, con la misma forma y los mismos filtros opcionales |
 | `GET /api/reportes-aux/visitas?complejo_id=&fecha_desde=&fecha_hasta=` | Panel del complejo | Visitas al perfil y consultas de la grilla, en total y por día |
 | `GET /api/externa/clima/<complejo_id>` | Público | Clima actual y pronóstico de tres días en la ubicación del complejo |
 | `PATCH /api/actividad/notificaciones/<id>` | Titular, o panel del complejo para sus avisos generales | `{ "estado" }`: `1` no leída, `2` leída. Responde la notificación actualizada |
@@ -397,6 +408,19 @@ Servicio de actividad y notificaciones, con su propia URL base. Sus errores sigu
   - **Errores:** `404` si el complejo no existe o no está habilitado. Tiene su propio límite de solicitudes por IP, más estricto que el general.
 - **Listas:** paginadas de a 20, con la misma forma que la API principal: `{ "count", "next", "previous", "results" }`, con `?page=` y `?limit=` (hasta 50). `next` y `previous` son rutas relativas a este servicio. Una página posterior a la última responde `404` con "Página inválida.".
 - **Panel del complejo:** roles de complejo o `SUPERADMIN`, con acceso al complejo confirmado por la API principal; un complejo ajeno responde `404`. Ninguna de estas respuestas incluye el usuario que generó un evento.
+- **Filtros de las bandejas:** `categoria`, `prioridad` y `estado` se pueden combinar entre sí y con `page` y `limit`; los enlaces `next` y `previous` los conservan. Un valor fuera de la lista, no numérico o repetido responde `400` con el detalle del campo. El listado de actividad no admite estos filtros.
+
+| Campo | Código | Significado |
+|---|---|---|
+| `categoria` | `1` | Reservas |
+| | `2` | Cuentas |
+| | `3` | Operatoria |
+| | `4` | Sistema |
+| `prioridad` | `1` | Normal |
+| | `2` | Urgente |
+| `estado` | `1` | No leída |
+| | `2` | Leída |
+
 - **Bandeja propia:** la cuenta sale siempre del token; `usuario_id` u otros parámetros no permiten leer las de otra cuenta. Funciona también con el rol desactivado. Ahí llegan, por ejemplo, los avisos urgentes de una reserva cancelada por el complejo.
 - **Avisos del sistema:** la API principal genera avisos sin que el cliente intervenga: una reserva web nueva avisa al panel de su complejo, con el evento `tipo_evento: 3` resuelto, y una cancelación hecha por el complejo avisa al titular de la reserva.
 - **Cambio de estado:** una notificación de otra cuenta, el aviso de un complejo que no se administra, una inexistente o una dada de baja responden igual, `404` con "No se encontró la notificación.". La baja (`0`) no se hace por esta vía.

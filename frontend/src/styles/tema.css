@@ -1,0 +1,1938 @@
+/*
+ * Tema de TaLibre: única fuente de colores, tipografía, bordes y estados de la grilla.
+ * Se importa después del CSS de Bootstrap. Bootstrap compila sus colores dentro de cada componente (por ejemplo,
+ * `.btn-primary` no lee `--bs-primary`), así que más abajo se redefinen las variables de los componentes que llevan
+ * color de marca. Para cambiar la paleta alcanza con editar los tokens de `:root`.
+ */
+
+/* Barlow Semi Condensed (SIL OFL 1.1), autoalojada: ver public/fonts/OFL.txt. Sin servidores de terceros. */
+@font-face {
+  font-family: 'Barlow Semi Condensed';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/barlow-semi-condensed-latin-500-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Barlow Semi Condensed';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/barlow-semi-condensed-latin-600-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Barlow Semi Condensed';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/barlow-semi-condensed-latin-700-normal.woff2') format('woff2');
+}
+
+:root,
+[data-bs-theme='light'] {
+  /* Marca */
+  --tema-primario: #15803d;
+  --tema-primario-hover: #166534;
+  --tema-primario-profundo: #14532d;
+  --tema-primario-suave: #f0fdf4;
+  --tema-primario-rgb: 21, 128, 61;
+
+  /* Superficies y texto */
+  --tema-fondo: #f4f6f5;
+  --tema-superficie: #ffffff;
+  --tema-borde: #e2e8e5;
+  --tema-pizarra: #0f172a;
+  --tema-pizarra-suave: #1e293b;
+  --tema-texto: #1e293b;
+  --tema-texto-suave: #475569;
+
+  /* Estados (badges y avisos): fondo, texto y borde */
+  --estado-ok-fondo: #dcfce7;
+  --estado-ok-texto: #14532d;
+  --estado-ok-borde: #86efac;
+  --estado-aviso-fondo: #fef3c7;
+  --estado-aviso-texto: #78350f;
+  --estado-aviso-borde: #fcd34d;
+  --estado-peligro-fondo: #fee2e2;
+  --estado-peligro-texto: #7f1d1d;
+  --estado-peligro-borde: #fca5a5;
+  --estado-info-fondo: #ccfbf1;
+  --estado-info-texto: #115e59;
+  --estado-info-borde: #5eead4;
+  --estado-neutro-fondo: #e8ecea;
+  --estado-neutro-texto: #334155;
+  --estado-neutro-borde: #cbd5d1;
+
+  /* Barras proporcionales del dashboard (CSS puro) */
+  --barra-fondo: #e8ecea;
+  --barra-ok: #15803d;
+  --barra-aviso: #b45309;
+  --barra-peligro: #b91c1c;
+  --barra-info: #0f766e;
+  --barra-neutro: #64748b;
+
+  /* Casilleros de la grilla: se distinguen por fondo, tipo de borde y tipografía, no solo por color */
+  --casillero-libre-fondo: #ffffff;
+  --casillero-libre-fondo-hover: #f0fdf4;
+  --casillero-libre-borde: #15803d;
+  --casillero-libre-texto: #166534;
+  --casillero-ocupado-fondo: #e7e5e4;
+  --casillero-ocupado-borde: #a8a29e;
+  --casillero-ocupado-texto: #57534e;
+  --casillero-excepcion-fondo: #fef3c7;
+  --casillero-excepcion-borde: #b45309;
+  --casillero-excepcion-texto: #78350f;
+  --casillero-seleccionado-fondo: #15803d;
+  --casillero-seleccionado-borde: #14532d;
+  --casillero-seleccionado-texto: #ffffff;
+  --casillero-nodisponible-fondo: transparent;
+  --casillero-nodisponible-borde: #94a3b8;
+  --casillero-nodisponible-texto: #5b6b7f;
+
+  /* Tipografía y medidas */
+  --fuente-titulos: 'Barlow Semi Condensed', 'Arial Narrow', system-ui, sans-serif;
+  --fuente-cuerpo: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --toque-min: 44px;
+  --radio: 6px;
+
+  /* Variables de Bootstrap */
+  --bs-body-font-family: var(--fuente-cuerpo);
+  --bs-body-bg: var(--tema-fondo);
+  --bs-body-bg-rgb: 244, 246, 245;
+  --bs-body-color: var(--tema-texto);
+  --bs-body-color-rgb: 30, 41, 59;
+  --bs-secondary-color: var(--tema-texto-suave);
+  --bs-border-color: var(--tema-borde);
+  --bs-border-radius: var(--radio);
+  --bs-border-radius-sm: 4px;
+  --bs-border-radius-lg: 8px;
+  --bs-primary: var(--tema-primario);
+  --bs-primary-rgb: var(--tema-primario-rgb);
+  --bs-success: var(--tema-primario);
+  --bs-success-rgb: var(--tema-primario-rgb);
+  --bs-info: #0f766e;
+  --bs-info-rgb: 15, 118, 110;
+  --bs-primary-bg-subtle: var(--estado-ok-fondo);
+  --bs-primary-border-subtle: var(--estado-ok-borde);
+  --bs-primary-text-emphasis: var(--tema-primario-profundo);
+  --bs-success-bg-subtle: var(--estado-ok-fondo);
+  --bs-success-border-subtle: var(--estado-ok-borde);
+  --bs-success-text-emphasis: var(--tema-primario-profundo);
+  --bs-info-bg-subtle: var(--estado-info-fondo);
+  --bs-info-border-subtle: var(--estado-info-borde);
+  --bs-info-text-emphasis: var(--estado-info-texto);
+  --bs-link-color: var(--tema-primario);
+  --bs-link-color-rgb: var(--tema-primario-rgb);
+  --bs-link-hover-color: var(--tema-primario-hover);
+  --bs-link-hover-color-rgb: 22, 101, 52;
+  --bs-focus-ring-color: rgba(21, 128, 61, 0.3);
+}
+
+/* Base */
+body {
+  background-color: var(--tema-fondo);
+  color: var(--tema-texto);
+  font-family: var(--fuente-cuerpo);
+  -webkit-font-smoothing: antialiased;
+}
+
+.display-1,
+.display-2,
+.display-3,
+.display-4,
+.display-5,
+.display-6 {
+  font-family: var(--fuente-titulos);
+  font-weight: 600;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.titulo {
+  font-family: var(--fuente-titulos);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--tema-pizarra);
+}
+
+/* Horarios, precios y métricas */
+.num {
+  font-family: var(--fuente-titulos);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+a {
+  text-underline-offset: 0.18em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--tema-primario);
+  outline-offset: 2px;
+}
+
+.salto-contenido {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 2000;
+  padding: 0.75rem 1rem;
+  background: var(--tema-superficie);
+  color: var(--tema-pizarra);
+}
+
+.salto-contenido:focus {
+  left: 0;
+}
+
+/* Botones: áreas táctiles de al menos 44 px */
+.btn {
+  --bs-btn-border-radius: var(--radio);
+  --bs-btn-font-weight: 600;
+  min-height: var(--toque-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.btn-primary {
+  --bs-btn-color: #ffffff;
+  --bs-btn-bg: var(--tema-primario);
+  --bs-btn-border-color: var(--tema-primario);
+  --bs-btn-hover-color: #ffffff;
+  --bs-btn-hover-bg: var(--tema-primario-hover);
+  --bs-btn-hover-border-color: var(--tema-primario-hover);
+  --bs-btn-focus-shadow-rgb: var(--tema-primario-rgb);
+  --bs-btn-active-color: #ffffff;
+  --bs-btn-active-bg: var(--tema-primario-profundo);
+  --bs-btn-active-border-color: var(--tema-primario-profundo);
+  --bs-btn-disabled-color: #ffffff;
+  --bs-btn-disabled-bg: var(--tema-primario);
+  --bs-btn-disabled-border-color: var(--tema-primario);
+}
+
+.btn-outline-primary {
+  --bs-btn-color: var(--tema-primario);
+  --bs-btn-border-color: var(--tema-primario);
+  --bs-btn-hover-color: #ffffff;
+  --bs-btn-hover-bg: var(--tema-primario);
+  --bs-btn-hover-border-color: var(--tema-primario);
+  --bs-btn-focus-shadow-rgb: var(--tema-primario-rgb);
+  --bs-btn-active-color: #ffffff;
+  --bs-btn-active-bg: var(--tema-primario-hover);
+  --bs-btn-active-border-color: var(--tema-primario-hover);
+  --bs-btn-disabled-color: var(--tema-primario);
+  --bs-btn-disabled-border-color: var(--tema-primario);
+}
+
+.btn-success {
+  --bs-btn-bg: var(--tema-primario);
+  --bs-btn-border-color: var(--tema-primario);
+  --bs-btn-hover-bg: var(--tema-primario-hover);
+  --bs-btn-hover-border-color: var(--tema-primario-hover);
+  --bs-btn-active-bg: var(--tema-primario-profundo);
+  --bs-btn-active-border-color: var(--tema-primario-profundo);
+  --bs-btn-disabled-bg: var(--tema-primario);
+  --bs-btn-disabled-border-color: var(--tema-primario);
+  --bs-btn-focus-shadow-rgb: var(--tema-primario-rgb);
+}
+
+.btn-outline-secondary {
+  --bs-btn-color: var(--tema-texto);
+  --bs-btn-border-color: #94a3b8;
+  --bs-btn-hover-bg: var(--tema-pizarra);
+  --bs-btn-hover-border-color: var(--tema-pizarra);
+  --bs-btn-active-bg: var(--tema-pizarra-suave);
+  --bs-btn-active-border-color: var(--tema-pizarra-suave);
+  --bs-btn-focus-shadow-rgb: 15, 23, 42;
+}
+
+.btn-link {
+  --bs-btn-color: var(--tema-primario);
+  --bs-btn-hover-color: var(--tema-primario-hover);
+  --bs-btn-active-color: var(--tema-primario-hover);
+  --bs-btn-focus-shadow-rgb: var(--tema-primario-rgb);
+}
+
+/* Formularios */
+.form-control,
+.form-select {
+  min-height: var(--toque-min);
+  border-color: #cbd5d1;
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--tema-primario);
+  box-shadow: 0 0 0 0.25rem rgba(var(--tema-primario-rgb), 0.25);
+}
+
+.form-check-input {
+  width: 1.25em;
+  height: 1.25em;
+  border-color: #94a3b8;
+}
+
+.form-check-input:checked {
+  background-color: var(--tema-primario);
+  border-color: var(--tema-primario);
+}
+
+.form-check-input:focus {
+  border-color: var(--tema-primario);
+  box-shadow: 0 0 0 0.25rem rgba(var(--tema-primario-rgb), 0.25);
+}
+
+.form-check-input[type='checkbox']:indeterminate {
+  background-color: var(--tema-primario);
+  border-color: var(--tema-primario);
+}
+
+.form-range::-webkit-slider-thumb {
+  background-color: var(--tema-primario);
+}
+
+.form-range::-moz-range-thumb {
+  background-color: var(--tema-primario);
+}
+
+/* Navegación interna: pestañas y pastillas */
+.nav {
+  --bs-nav-link-color: var(--tema-primario);
+  --bs-nav-link-hover-color: var(--tema-primario-hover);
+  --bs-nav-link-font-weight: 600;
+}
+
+.nav-link {
+  min-height: var(--toque-min);
+  display: flex;
+  align-items: center;
+}
+
+.nav-tabs {
+  --bs-nav-tabs-border-color: var(--tema-borde);
+  --bs-nav-tabs-link-hover-border-color: var(--tema-borde);
+  --bs-nav-tabs-link-active-color: var(--tema-primario-profundo);
+  --bs-nav-tabs-link-active-border-color: var(--tema-borde) var(--tema-borde) var(--tema-primario);
+}
+
+.nav-pills {
+  --bs-nav-pills-link-active-bg: var(--tema-primario);
+  --bs-nav-pills-link-active-color: #ffffff;
+}
+
+/* Paginación */
+.pagination {
+  --bs-pagination-color: var(--tema-primario);
+  --bs-pagination-bg: var(--tema-superficie);
+  --bs-pagination-border-color: var(--tema-borde);
+  --bs-pagination-hover-color: var(--tema-primario-hover);
+  --bs-pagination-hover-bg: var(--tema-primario-suave);
+  --bs-pagination-hover-border-color: var(--tema-borde);
+  --bs-pagination-focus-color: var(--tema-primario-hover);
+  --bs-pagination-focus-bg: var(--tema-primario-suave);
+  --bs-pagination-focus-box-shadow: 0 0 0 0.25rem rgba(var(--tema-primario-rgb), 0.25);
+  --bs-pagination-active-color: #ffffff;
+  --bs-pagination-active-bg: var(--tema-primario);
+  --bs-pagination-active-border-color: var(--tema-primario);
+  --bs-pagination-disabled-color: #94a3b8;
+  --bs-pagination-border-radius: var(--radio);
+}
+
+.page-link {
+  min-width: var(--toque-min);
+  min-height: var(--toque-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Listas, menús, acordeones y barras de progreso */
+.list-group {
+  --bs-list-group-active-bg: var(--tema-primario);
+  --bs-list-group-active-border-color: var(--tema-primario);
+  --bs-list-group-active-color: #ffffff;
+  --bs-list-group-border-color: var(--tema-borde);
+  --bs-list-group-action-hover-bg: var(--tema-primario-suave);
+}
+
+.dropdown-menu {
+  --bs-dropdown-link-active-bg: var(--tema-primario);
+  --bs-dropdown-link-active-color: #ffffff;
+  --bs-dropdown-link-hover-bg: var(--tema-primario-suave);
+  --bs-dropdown-border-color: var(--tema-borde);
+  --bs-dropdown-border-radius: var(--radio);
+}
+
+.accordion {
+  --bs-accordion-active-bg: var(--tema-primario-suave);
+  --bs-accordion-active-color: var(--tema-primario-profundo);
+  --bs-accordion-btn-focus-box-shadow: 0 0 0 0.25rem rgba(var(--tema-primario-rgb), 0.25);
+  --bs-accordion-border-color: var(--tema-borde);
+}
+
+.progress {
+  --bs-progress-bar-bg: var(--tema-primario);
+}
+
+.alert-info {
+  --bs-alert-color: var(--estado-info-texto);
+  --bs-alert-bg: var(--estado-info-fondo);
+  --bs-alert-border-color: var(--estado-info-borde);
+}
+
+/* Superficies: bordes finos, sin sombra */
+.card {
+  --bs-card-bg: var(--tema-superficie);
+  --bs-card-border-color: var(--tema-borde);
+  --bs-card-border-radius: var(--radio);
+  --bs-card-inner-border-radius: calc(var(--radio) - 1px);
+  --bs-card-cap-bg: var(--tema-superficie);
+  box-shadow: none;
+}
+
+/* Tarjeta de cancha elegible: el borde de 2px evita que la elegida se corra al resaltarse */
+.cancha-opcion {
+  --bs-card-border-width: 2px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.cancha-opcion:hover {
+  --bs-card-border-color: #86efac;
+}
+
+.cancha-opcion:focus-visible {
+  outline: 2px solid var(--tema-primario);
+  outline-offset: 2px;
+}
+
+.cancha-opcion.cancha-opcion-activa {
+  --bs-card-border-color: var(--tema-primario);
+  --bs-card-bg: var(--tema-primario-suave);
+}
+
+.superficie {
+  background: var(--tema-superficie);
+  border: 1px solid var(--tema-borde);
+  border-radius: var(--radio);
+}
+
+.modal-content,
+.offcanvas {
+  border: 1px solid var(--tema-borde);
+}
+
+.modal-content {
+  border-radius: var(--radio);
+}
+
+.table {
+  --bs-table-bg: var(--tema-superficie);
+  --bs-table-border-color: var(--tema-borde);
+  --bs-table-hover-bg: var(--tema-primario-suave);
+}
+
+.table > thead > tr > th {
+  font-family: var(--fuente-titulos);
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--tema-texto-suave);
+  background: var(--tema-fondo);
+}
+
+/* Badges de estado */
+.badge {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0.3em 0.6em;
+}
+
+.badge-ok {
+  background: var(--estado-ok-fondo);
+  color: var(--estado-ok-texto);
+  border-color: var(--estado-ok-borde);
+}
+
+.badge-aviso {
+  background: var(--estado-aviso-fondo);
+  color: var(--estado-aviso-texto);
+  border-color: var(--estado-aviso-borde);
+}
+
+.badge-peligro {
+  background: var(--estado-peligro-fondo);
+  color: var(--estado-peligro-texto);
+  border-color: var(--estado-peligro-borde);
+}
+
+.badge-info {
+  background: var(--estado-info-fondo);
+  color: var(--estado-info-texto);
+  border-color: var(--estado-info-borde);
+}
+
+.badge-neutro {
+  background: var(--estado-neutro-fondo);
+  color: var(--estado-neutro-texto);
+  border-color: var(--estado-neutro-borde);
+}
+
+/* Texto libre del complejo (por ejemplo, las condiciones de seña): respeta los saltos de línea */
+.texto-multilinea {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+/* Casilleros de la grilla */
+.casillero {
+  --casillero-borde-ancho: 1px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  min-width: 4.75rem;
+  min-height: var(--toque-min);
+  padding: calc(0.35rem + 1px - var(--casillero-borde-ancho)) 0.5rem;
+  border: var(--casillero-borde-ancho) solid var(--casillero-borde);
+  border-radius: var(--radio);
+  background: var(--casillero-fondo);
+  color: var(--casillero-texto);
+  font-family: var(--fuente-titulos);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  text-align: center;
+  user-select: none;
+}
+
+.casillero__hora {
+  font-size: 1.05rem;
+}
+
+.casillero__detalle {
+  font-size: 0.8rem;
+  font-family: var(--fuente-cuerpo);
+}
+
+.casillero__marca {
+  display: none;
+}
+
+.casillero-libre {
+  --casillero-fondo: var(--casillero-libre-fondo);
+  --casillero-borde: var(--casillero-libre-borde);
+  --casillero-texto: var(--casillero-libre-texto);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.casillero-libre:hover {
+  --casillero-fondo: var(--casillero-libre-fondo-hover);
+}
+
+.casillero-ocupado {
+  --casillero-fondo: var(--casillero-ocupado-fondo);
+  --casillero-borde: var(--casillero-ocupado-borde);
+  --casillero-texto: var(--casillero-ocupado-texto);
+  font-weight: 500;
+  cursor: not-allowed;
+}
+
+.casillero-ocupado .casillero__hora {
+  text-decoration: line-through;
+}
+
+.casillero-excepcion {
+  --casillero-fondo: var(--casillero-excepcion-fondo);
+  --casillero-borde: var(--casillero-excepcion-borde);
+  --casillero-texto: var(--casillero-excepcion-texto);
+  border-style: dashed;
+  font-style: italic;
+  font-weight: 500;
+  cursor: not-allowed;
+}
+
+.casillero-seleccionado {
+  --casillero-borde-ancho: 2px;
+  --casillero-fondo: var(--casillero-seleccionado-fondo);
+  --casillero-borde: var(--casillero-seleccionado-borde);
+  --casillero-texto: var(--casillero-seleccionado-texto);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.casillero-seleccionado .casillero__marca {
+  display: inline-flex;
+}
+
+.casillero-no-disponible {
+  --casillero-fondo: var(--casillero-nodisponible-fondo);
+  --casillero-borde: var(--casillero-nodisponible-borde);
+  --casillero-texto: var(--casillero-nodisponible-texto);
+  border-style: dotted;
+  font-weight: 500;
+  cursor: not-allowed;
+}
+
+/* Indicador de carga: el aspecto vive en Cargando.jsx y en estas reglas */
+.cargando-indicador {
+  display: inline-block;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 3px solid var(--tema-borde);
+  border-top-color: var(--tema-primario);
+  border-radius: 50%;
+  animation: cargando-giro 0.8s linear infinite;
+}
+
+.cargando-indicador-chico {
+  width: 1rem;
+  height: 1rem;
+  border-width: 2px;
+}
+
+.cargando-pantalla {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: var(--tema-texto-suave);
+}
+
+.cargando-pantalla.cargando-contenido {
+  min-height: 0;
+  height: 100%;
+}
+
+.cargando-seccion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem 1rem;
+  color: var(--tema-texto-suave);
+}
+
+.btn .cargando-indicador {
+  border-color: rgba(255, 255, 255, 0.4);
+  border-top-color: #ffffff;
+}
+
+.btn-outline-primary .cargando-indicador,
+.btn-outline-secondary .cargando-indicador,
+.btn-link .cargando-indicador {
+  border-color: var(--tema-borde);
+  border-top-color: var(--tema-primario);
+}
+
+/* Carga entre pantallas: capa sobre el contenido (debajo de la barra superior), con demora de entrada */
+.cargando-superpuesto {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 20vh;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  animation: cargando-aparecer 0.2s ease 150ms forwards;
+}
+
+.cargando-transicion {
+  display: inline-block;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 4px solid var(--tema-borde);
+  border-top-color: var(--tema-primario);
+  border-radius: 50%;
+  animation: cargando-giro 0.8s linear infinite;
+}
+
+@keyframes cargando-aparecer {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes cargando-giro {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cargando-indicador,
+  .cargando-transicion {
+    animation-duration: 2.4s;
+  }
+
+  .cargando-superpuesto {
+    animation-duration: 0.01s;
+  }
+}
+
+/* Fuera del tope de la página la barra se vuelve apenas translúcida para dejar ver lo que pasa por detrás */
+.barra-superior.barra-superior-translucida {
+  background: rgba(15, 23, 42, 0.9);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+/* Navegación superior: queda fija arriba al desplazarse, por encima del contenido y del indicador de carga y por debajo de los modales */
+.barra-superior {
+  position: sticky;
+  top: 0;
+  z-index: 1030;
+  background: var(--tema-pizarra);
+  color: #e2e8f0;
+  border-bottom: 1px solid var(--barra-borde-inferior, rgba(255, 255, 255, 0.12));
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25);
+}
+
+.barra-superior .navbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--fuente-titulos);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+}
+
+.barra-superior .navbar-brand img {
+  width: 2rem;
+  height: 2rem;
+}
+
+/* La barra ocupa todo el ancho en todas las pantallas, con márgenes laterales fijos: marca y sesión en los extremos. */
+.barra-superior > .container-fluid {
+  width: 100%;
+  max-width: none;
+  padding-inline: 1.25rem;
+}
+
+.barra-superior .navbar-brand {
+  margin-right: 0;
+}
+
+/*
+ * Barra superior. En escritorio (>= lg) tiene tres zonas en una grilla: marca a la izquierda, secciones centradas en
+ * una botonera segmentada y sesión a la derecha. En móvil, el menú es un panel flotante anclado bajo el botón.
+ */
+.barra-superior {
+  --barra-separador: rgba(255, 255, 255, 0.14);
+  --barra-resalte: rgba(255, 255, 255, 0.1);
+}
+
+.barra-superior .barra-secciones {
+  gap: 0.25rem;
+}
+
+.barra-superior .nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.2;
+  color: #cbd5e1;
+  font-weight: 600;
+  border: 1px solid transparent;
+  border-radius: var(--radio);
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.barra-superior .nav-link:hover,
+.barra-superior .nav-link:focus-visible {
+  color: #ffffff;
+  background: var(--barra-resalte);
+}
+
+/* El verde es exclusivo del enlace de la ruta actual: foco, toque o clic en uno inactivo nunca lo pintan */
+.barra-superior .nav-link:not(.active):focus {
+  background: transparent;
+  border-color: transparent;
+  color: #cbd5e1;
+}
+
+.barra-superior .nav-link:not(.active):focus-visible,
+.barra-superior .nav-link:not(.active):hover {
+  background: var(--barra-resalte);
+  color: #ffffff;
+}
+
+.barra-superior .nav-link:not(.active):active {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.barra-superior .nav-link:active {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.barra-superior .nav-link.active {
+  color: #ffffff;
+  background: var(--tema-primario);
+  border-color: #4ade80;
+}
+
+.barra-superior .nav-link.active:hover {
+  background: var(--tema-primario-hover);
+}
+
+.barra-superior .barra-sesion {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.barra-superior .barra-usuario {
+  color: #ffffff;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+/* Campana de notificaciones: mismo lenguaje que los enlaces de la barra; el verde queda para la ruta actual */
+.barra-superior .campana {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-width: var(--toque-min);
+  min-height: var(--toque-min);
+  padding: 0 0.6rem;
+  color: #cbd5e1;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid transparent;
+  border-radius: var(--radio);
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.barra-superior .campana:hover,
+.barra-superior .campana:focus-visible {
+  color: #ffffff;
+  background: var(--barra-resalte);
+}
+
+.barra-superior .campana-activa,
+.barra-superior .campana-activa:hover,
+.barra-superior .campana-activa:focus-visible {
+  color: #ffffff;
+  background: var(--tema-primario);
+  border-color: #4ade80;
+}
+
+.barra-superior .campana-badge {
+  min-width: 1.25rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--barra-peligro);
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+  text-align: center;
+}
+
+@media (min-width: 992px) {
+  .barra-superior .campana-badge {
+    position: absolute;
+    top: 0.1rem;
+    right: 0.05rem;
+  }
+}
+
+/* Notificaciones: la urgente lleva un borde lateral marcado y la sin leer, el mensaje en negrita */
+.notificacion-urgente {
+  border-left: 4px solid var(--barra-peligro);
+}
+
+.notificacion-sin-leer .notificacion-mensaje {
+  font-weight: 600;
+}
+
+.bloque-urgente {
+  background: var(--estado-peligro-fondo);
+  border: 1px solid var(--estado-peligro-borde);
+  border-radius: var(--radio);
+}
+
+.bloque-urgente .superficie {
+  background: var(--tema-superficie);
+}
+
+/* Botón del menú móvil: verde de marca, con tres barras que se transforman en una X al abrir */
+.barra-superior .barra-hamburguesa {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--toque-min);
+  min-height: var(--toque-min);
+  padding: 0;
+  border: 1px solid #4ade80;
+  border-radius: var(--radio);
+  background: var(--tema-primario);
+  transition: background-color 0.18s ease, transform 0.18s ease;
+}
+
+.barra-superior .barra-hamburguesa:hover {
+  background: var(--tema-primario-hover);
+}
+
+.barra-superior .barra-hamburguesa:active {
+  background: var(--tema-primario-profundo);
+  transform: scale(0.96);
+}
+
+.barra-superior .barra-hamburguesa:focus-visible {
+  box-shadow: none;
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.barra-hamburguesa-icono {
+  position: relative;
+  display: block;
+  width: 1.25rem;
+  height: 0.875rem;
+}
+
+.barra-hamburguesa-icono > span {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  border-radius: 2px;
+  background: #ffffff;
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.barra-hamburguesa-icono > span:nth-child(1) {
+  top: 0;
+}
+
+.barra-hamburguesa-icono > span:nth-child(2) {
+  top: calc(50% - 1px);
+}
+
+.barra-hamburguesa-icono > span:nth-child(3) {
+  bottom: 0;
+}
+
+.barra-hamburguesa[aria-expanded='true'] .barra-hamburguesa-icono > span:nth-child(1) {
+  transform: translateY(6px) rotate(45deg);
+}
+
+.barra-hamburguesa[aria-expanded='true'] .barra-hamburguesa-icono > span:nth-child(2) {
+  opacity: 0;
+  transform: scaleX(0);
+}
+
+.barra-hamburguesa[aria-expanded='true'] .barra-hamburguesa-icono > span:nth-child(3) {
+  transform: translateY(-6px) rotate(-45deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barra-superior .barra-hamburguesa,
+  .barra-hamburguesa-icono > span {
+    transition-duration: 0.01s;
+  }
+}
+
+@media (min-width: 992px) {
+  .barra-superior > .container,
+  .barra-superior > .container-fluid {
+    display: grid;
+    grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .barra-superior .navbar-brand {
+    justify-self: start;
+  }
+
+  /* El botón del menú móvil no existe en escritorio: si ocupara una celda de la grilla empujaría la sesión a otra fila. */
+  .barra-superior .barra-hamburguesa {
+    display: none !important;
+  }
+
+  /* El contenedor del menú no genera caja: sus dos hijos pasan a ser la zona central y la derecha de la grilla. */
+  .navbar.barra-superior .navbar-collapse.menu-principal {
+    display: contents !important;
+  }
+
+  .barra-superior .barra-secciones {
+    flex-direction: row;
+    justify-self: center;
+    padding: 0.25rem;
+    border: 1px solid var(--barra-separador);
+    border-radius: calc(var(--radio) + 4px);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .barra-superior .barra-secciones .nav-link {
+    min-height: 2.5rem;
+    padding: 0.35rem 1.1rem;
+  }
+
+  .barra-superior .barra-sesion {
+    justify-self: end;
+    align-items: center;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 991.98px) {
+  /* La hamburguesa queda pegada al extremo derecho de la barra. */
+  .barra-superior .barra-hamburguesa {
+    margin-left: auto;
+  }
+
+  .barra-superior .menu-principal {
+    position: absolute;
+    top: calc(100% + 0.25rem);
+    right: 1.25rem;
+    z-index: 1040;
+    width: max-content;
+    min-width: 220px;
+    max-width: calc(100vw - 2rem);
+    padding: 0.5rem;
+    border: 1px solid var(--barra-separador);
+    border-radius: calc(var(--radio) + 4px);
+    background: var(--tema-pizarra-suave);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.4);
+  }
+
+  .barra-superior .barra-secciones {
+    flex-direction: column;
+  }
+
+  .barra-superior .barra-secciones .nav-link {
+    min-height: var(--toque-min);
+    padding: 0.5rem 0.9rem;
+  }
+
+  .barra-superior .barra-sesion {
+    flex-direction: column;
+    margin-top: 0.5rem;
+    padding: 0.75rem 0.5rem 0.25rem;
+    border-top: 1px solid var(--barra-separador);
+  }
+
+  .barra-superior .barra-sesion .btn {
+    min-height: var(--toque-min);
+  }
+}
+
+.pie-pagina {
+  margin-top: auto;
+  border-top: 3px solid var(--tema-primario);
+  background: var(--tema-pizarra);
+  color: #cbd5e1;
+  font-size: 0.9rem;
+}
+
+.pie-pagina a {
+  color: #e2e8f0;
+  text-decoration: none;
+}
+
+.pie-pagina a:hover,
+.pie-pagina a:focus-visible {
+  color: #86efac;
+  text-decoration: underline;
+}
+
+.pie-pagina-marca {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--fuente-titulos);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.pie-pagina-titulo {
+  margin-bottom: 0.75rem;
+  font-family: var(--fuente-titulos);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.pie-pagina-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pie-pagina-enlace {
+  overflow-wrap: anywhere;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1.75rem;
+}
+
+.pie-pagina-canal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--toque-min);
+  height: var(--toque-min);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+}
+
+.pie-pagina-red {
+  font-size: 0.72rem;
+}
+
+.pie-pagina-red .pie-pagina-canal {
+  width: 1.925rem;
+  height: 1.925rem;
+}
+
+.pie-pagina-canal:hover,
+.pie-pagina-canal:focus-visible {
+  border-color: #86efac;
+  text-decoration: none;
+}
+
+.pie-pagina-nota {
+  color: #94a3b8;
+}
+
+.pie-pagina-legal {
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  color: #94a3b8;
+}
+
+/* Paneles de administración: densidad de escritorio a partir de lg */
+@media (min-width: 992px) {
+  .panel-admin {
+    font-size: 0.9rem;
+  }
+
+  .panel-admin .btn {
+    min-height: 2rem;
+    padding: 0.25rem 0.7rem;
+    font-size: 0.875rem;
+  }
+
+  .panel-admin .form-control,
+  .panel-admin .form-select {
+    min-height: 2rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  .panel-admin .table > :not(caption) > * > * {
+    padding: 0.35rem 0.65rem;
+  }
+
+  .panel-admin .page-link,
+  .panel-admin .nav-link {
+    min-width: 2rem;
+    min-height: 2rem;
+  }
+
+  .panel-admin .casillero {
+    min-height: 2.25rem;
+  }
+}
+
+/* Modo solo lectura: los datos se ven atenuados y no admiten clic, foco ni selección */
+.solo-lectura {
+  opacity: 0.65;
+  pointer-events: none;
+  user-select: none;
+}
+
+.solo-lectura-datos {
+  user-select: none;
+}
+
+/* Estructura del panel: selector de complejo y subnavegación */
+.selector-complejo {
+  min-width: 14rem;
+  max-width: 22rem;
+}
+
+.subnavegacion-panel {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.subnavegacion-panel .nav-link {
+  white-space: nowrap;
+}
+
+/* Tablas de administración: tabla densa desde lg y bloques apilados con etiqueta por celda en pantallas chicas */
+@media (max-width: 991.98px) {
+  .tabla-apilable thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .tabla-apilable,
+  .tabla-apilable tbody,
+  .tabla-apilable tr,
+  .tabla-apilable td {
+    display: block;
+  }
+
+  .tabla-apilable tr {
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--tema-borde);
+    border-radius: var(--radio);
+    background: var(--tema-superficie);
+  }
+
+  .tabla-apilable tr:last-child {
+    margin-bottom: 0;
+  }
+
+  .tabla-apilable td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.4rem 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    text-align: right;
+  }
+
+  .tabla-apilable td::before {
+    content: attr(data-etiqueta);
+    flex-shrink: 0;
+    font-weight: 600;
+    color: var(--tema-texto-suave);
+    text-align: left;
+  }
+
+  .tabla-apilable td[data-etiqueta='']::before {
+    content: none;
+  }
+
+  .tabla-apilable td[data-etiqueta=''] {
+    justify-content: flex-end;
+    padding-top: 0.6rem;
+  }
+}
+
+/* Editor de horarios: un bloque por día, en columnas cuando hay lugar */
+.grilla-dias {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 992px) {
+  .grilla-dias {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1400px) {
+  .grilla-dias {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.dia-horarios {
+  padding: 0.75rem 1rem;
+  background: var(--tema-superficie);
+  border: 1px solid var(--tema-borde);
+  border-radius: var(--radio);
+}
+
+.rango-campo {
+  flex: 1 1 7.5rem;
+  max-width: 12rem;
+}
+
+/* Formulario de vinculación de operadores */
+.campo-operador {
+  flex: 1 1 16rem;
+  max-width: 28rem;
+}
+
+@media (min-width: 576px) {
+  .boton-alineado-campo {
+    margin-top: 2rem;
+  }
+}
+
+/* Botón para volver a la pantalla anterior */
+.boton-volver {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--toque-min);
+  padding: 0.35rem 1rem 0.35rem 0.7rem;
+  border: 1px solid #94a3b8;
+  border-radius: var(--radio);
+  background: var(--tema-superficie);
+  color: var(--tema-texto);
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.boton-volver:hover,
+.boton-volver:focus-visible {
+  background: var(--tema-primario-suave);
+  border-color: var(--tema-primario);
+  color: var(--tema-primario-profundo);
+}
+
+.boton-volver:active {
+  box-shadow: none;
+}
+
+/* Clima: estado de carga o de error en el lugar de la tarjeta, y variantes compacta y del día */
+.clima-estado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.clima-estado-chico {
+  padding: 0.25rem 0;
+}
+
+.clima-dia {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--tema-borde);
+  border-left: 3px solid var(--estado-info-borde);
+  border-radius: var(--radio);
+  background: var(--tema-superficie);
+}
+
+.clima-dia-compacto {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 6.5rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--tema-borde);
+  border-radius: var(--radio);
+  background: var(--tema-fondo);
+  line-height: 1.25;
+}
+
+/* Dashboard: cifras destacadas, barras proporcionales y serie de columnas */
+.metrica-valor {
+  font-family: var(--fuente-titulos);
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.lista-barras {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.barra-fila-texto {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.barra {
+  height: 0.6rem;
+  background: var(--barra-fondo);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.barra-relleno {
+  height: 100%;
+  min-width: 0;
+  border-radius: 3px;
+}
+
+.barra-relleno-ok {
+  background: var(--barra-ok);
+}
+
+.barra-relleno-aviso {
+  background: var(--barra-aviso);
+}
+
+.barra-relleno-peligro {
+  background: var(--barra-peligro);
+}
+
+.barra-relleno-info {
+  background: var(--barra-info);
+}
+
+.barra-relleno-neutro {
+  background: var(--barra-neutro);
+}
+
+.serie-columnas {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 7rem;
+}
+
+.serie-columna {
+  flex: 1 1 0;
+  min-width: 2px;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  background: var(--barra-fondo);
+  border-radius: 2px;
+}
+
+.serie-columna-relleno {
+  width: 100%;
+  background: var(--barra-ok);
+  border-radius: 2px;
+}
+
+/* Cambio de estado en línea de la agenda */
+.agenda-cambio-estado {
+  width: auto;
+  min-width: 10rem;
+}
+
+/* Campo de fecha dd/mm/aaaa: el selector nativo solo aporta el calendario y queda oculto junto al botón */
+.campo-fecha {
+  position: relative;
+  flex-wrap: nowrap;
+}
+
+.campo-fecha > .form-control {
+  min-width: 7.5rem;
+}
+
+.campo-fecha-nativo {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.campo-fecha-grilla {
+  width: 11rem;
+}
+
+/* Mini-grilla de una cancha dentro de un formulario */
+.grilla-compacta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  max-height: 14rem;
+  overflow-y: auto;
+  padding: 0.25rem;
+}
+
+/* Pantallas de estado (acceso restringido y página no encontrada) */
+.pantalla-estado {
+  display: flex;
+  justify-content: center;
+  padding: 2rem 0;
+}
+
+.pantalla-estado-tarjeta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 32rem;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+}
+
+.pantalla-estado-emblema {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 5rem;
+  height: 5rem;
+  margin-bottom: 1.25rem;
+  border: 2px solid var(--estado-ok-borde);
+  border-radius: 50%;
+  background: var(--tema-primario-suave);
+  color: var(--tema-primario);
+}
+
+.pantalla-estado-titulo {
+  margin-bottom: 0.75rem;
+  font-family: var(--fuente-titulos);
+  font-size: 1.85rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.pantalla-estado-acciones {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin-top: 1.5rem;
+}
+
+/* Conmutador Lista / Mapa del catálogo */
+.selector-vista {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+/* Mapa de complejos: el contenedor crea su propio contexto de apilado para que los controles de Leaflet no pasen por encima de la barra, los menús ni los modales */
+.mapa-contenedor {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+  height: clamp(22rem, 70vh, 40rem);
+  overflow: hidden;
+  border: 1px solid var(--tema-borde);
+  border-radius: var(--radio);
+  background: var(--tema-fondo);
+}
+
+/* El mapa tiene su propio contexto de apilado (z-index 0): los controles propios, hermanos suyos, quedan por encima */
+.mapa-contenedor .mapa-complejos {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+
+/* Capa Mapa: las teselas de calles son ráster y no admiten otro estilo, así que se desaturan y se llevan a un verde muy suave (calles en gris claro, manzanas verdosas). El satélite no se toca. */
+.mapa-capa-mapa .leaflet-tile-pane {
+  filter: saturate(0.3) hue-rotate(22deg);
+}
+
+/* Controles flotantes propios: capa de teselas arriba a la derecha y "Centrar en Goya" abajo a la izquierda */
+.mapa-control {
+  position: absolute;
+  z-index: 5;
+  border: 1px solid var(--tema-borde);
+  border-radius: var(--radio);
+  background: var(--tema-superficie);
+  color: var(--tema-texto);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.22);
+}
+
+.mapa-control-capas {
+  top: 0.75rem;
+  right: 0.75rem;
+  display: inline-flex;
+  overflow: hidden;
+}
+
+.mapa-control-opcion {
+  min-width: var(--toque-min);
+  min-height: var(--toque-min);
+  padding: 0 1rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-weight: 600;
+  transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
+}
+
+.mapa-control-opcion:hover {
+  background: var(--tema-primario-suave);
+}
+
+.mapa-control-opcion.activa,
+.mapa-control-opcion.activa:hover {
+  background: var(--tema-primario);
+  color: #ffffff;
+}
+
+.mapa-control-centrar {
+  bottom: 1.75rem;
+  left: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: var(--toque-min);
+  padding: 0 0.9rem;
+  font-weight: 600;
+  transition: background-color 0.15s ease-in-out;
+}
+
+.mapa-control-centrar:hover {
+  background: var(--tema-primario-suave);
+}
+
+.mapa-control-opcion:focus-visible,
+.mapa-control-centrar:focus-visible {
+  outline: 3px solid rgba(var(--tema-primario-rgb), 0.45);
+  outline-offset: -3px;
+}
+
+/* Controles propios de Leaflet (zoom y atribución) con el lenguaje visual del tema. Leaflet carga su hoja después de esta, así que sus reglas se pisan con más especificidad y no por orden */
+.mapa-contenedor .mapa-complejos .leaflet-bar {
+  border: 1px solid var(--tema-borde);
+  border-radius: var(--radio);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.22);
+}
+
+.mapa-contenedor .mapa-complejos .leaflet-bar a {
+  color: var(--tema-texto);
+}
+
+.mapa-contenedor .mapa-complejos .leaflet-bar a:first-child {
+  border-top-left-radius: calc(var(--radio) - 1px);
+  border-top-right-radius: calc(var(--radio) - 1px);
+}
+
+.mapa-contenedor .mapa-complejos .leaflet-bar a:last-child {
+  border-bottom-left-radius: calc(var(--radio) - 1px);
+  border-bottom-right-radius: calc(var(--radio) - 1px);
+}
+
+.mapa-contenedor .mapa-complejos .leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.88);
+  font-size: 0.7rem;
+}
+
+.mapa-contenedor .mapa-complejos .leaflet-control-attribution a {
+  color: var(--tema-primario-hover);
+}
+
+@media (pointer: coarse) {
+  .mapa-contenedor .mapa-complejos .leaflet-bar a {
+    width: var(--toque-min);
+    height: var(--toque-min);
+    line-height: var(--toque-min);
+  }
+}
+
+/* Marcador de cada complejo: un pin en el verde de marca, con borde blanco y sombra de elevación, sin imágenes de Leaflet */
+.marcador-complejo {
+  background: transparent;
+  border: 0;
+}
+
+.marcador-complejo-raiz {
+  position: relative;
+  display: block;
+  width: 44px;
+  height: 44px;
+}
+
+.marcador-complejo-cuerpo {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  filter: drop-shadow(0 2px 3px rgba(15, 23, 42, 0.4));
+}
+
+.marcador-complejo-pin {
+  position: relative;
+  display: block;
+  width: 28px;
+  height: 28px;
+  margin-bottom: 6px;
+  border: 2px solid #ffffff;
+  border-radius: 50% 50% 50% 0;
+  background: var(--tema-primario);
+  transform: rotate(-45deg);
+  transition: background-color 0.15s ease-in-out, transform 0.15s ease-in-out;
+}
+
+.marcador-complejo-pin::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.marcador-complejo:hover .marcador-complejo-pin,
+.marcador-complejo:focus-visible .marcador-complejo-pin {
+  background: var(--tema-primario-hover);
+  transform: rotate(-45deg) scale(1.1);
+}
+
+.marcador-complejo.marcador-activo .marcador-complejo-pin {
+  background: var(--tema-primario-profundo);
+  transform: rotate(-45deg) scale(1.2);
+}
+
+.marcador-complejo:focus-visible {
+  outline: 3px solid rgba(var(--tema-primario-rgb), 0.45);
+  outline-offset: -4px;
+  border-radius: var(--radio);
+}
+
+/* Etiqueta con el nombre y el precio: oculta con el mapa lejos, siempre visible desde el nivel de zoom configurado */
+.marcador-complejo-etiqueta {
+  position: absolute;
+  top: 3px;
+  left: calc(100% - 6px);
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.2rem 0.65rem;
+  border: 1px solid var(--tema-borde);
+  border-radius: 999px;
+  background: var(--tema-superficie);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+  color: var(--tema-texto);
+  font-family: var(--fuente-titulos);
+  line-height: 1.2;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-4px);
+  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out, visibility 0.2s;
+}
+
+.marcador-complejo-nombre {
+  max-width: 11rem;
+  overflow: hidden;
+  font-size: 1rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+
+.marcador-complejo-precio {
+  color: var(--tema-texto-suave);
+  font-size: 0.85rem;
+}
+
+.mapa-zoom-cercano .marcador-complejo-etiqueta,
+.marcador-complejo:hover .marcador-complejo-etiqueta,
+.marcador-complejo:focus-visible .marcador-complejo-etiqueta,
+.marcador-complejo.marcador-activo .marcador-complejo-etiqueta {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+}
+
+.marcador-complejo.marcador-activo .marcador-complejo-etiqueta {
+  border-color: var(--tema-primario);
+}
+
+/* Popup del marcador: tarjeta con franja verde de marca, nombre en la tipografía de títulos, precio destacado y acceso al detalle de ancho completo */
+.mapa-contenedor .mapa-complejos .leaflet-popup-content-wrapper {
+  padding: 0;
+  overflow: hidden;
+  border-top: 4px solid var(--tema-primario);
+  border-radius: var(--radio);
+  background: var(--tema-superficie);
+  color: var(--tema-texto);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.32);
+}
+
+.mapa-contenedor .mapa-complejos .leaflet-popup-content {
+  margin: 0.9rem 1rem 1rem;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.mapa-contenedor .mapa-complejos .leaflet-popup-content p {
+  margin: 0;
+}
+
+.mapa-contenedor .mapa-complejos .leaflet-popup-tip {
+  background: var(--tema-superficie);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.25);
+}
+
+.mapa-contenedor .mapa-complejos a.leaflet-popup-close-button {
+  top: 0.4rem;
+  right: 0.3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  color: var(--tema-texto-suave);
+  font: 1.4rem/1 var(--fuente-titulos);
+  transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
+}
+
+.mapa-contenedor .mapa-complejos a.leaflet-popup-close-button:hover,
+.mapa-contenedor .mapa-complejos a.leaflet-popup-close-button:focus-visible {
+  background: var(--tema-primario-suave);
+  color: var(--tema-primario-profundo);
+}
+
+.mapa-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.mapa-popup-nombre {
+  padding-right: 1.6rem;
+  font-family: var(--fuente-titulos);
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.mapa-popup-precio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.4rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--estado-ok-borde);
+  border-radius: var(--radio);
+  background: var(--tema-primario-suave);
+  color: var(--tema-texto-suave);
+}
+
+.mapa-popup-importe {
+  color: var(--tema-primario-profundo);
+  font-family: var(--fuente-titulos);
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.mapa-popup-sin-precio {
+  color: var(--tema-texto-suave);
+  font-size: 0.9rem;
+}
+
+.mapa-contenedor .mapa-complejos .mapa-popup-enlace {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: var(--toque-min);
+  padding: 0 1rem;
+  border: 1px solid var(--tema-primario);
+  border-radius: var(--radio);
+  background: var(--tema-primario);
+  color: #ffffff;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color 0.15s ease-in-out;
+}
+
+.mapa-contenedor .mapa-complejos .mapa-popup-enlace:hover,
+.mapa-contenedor .mapa-complejos .mapa-popup-enlace:focus-visible {
+  background: var(--tema-primario-hover);
+  color: #ffffff;
+}
+
+/* Invitación a instalar la aplicación: capa flotante al pie, por debajo de la barra superior y de los modales */
+.banner-pwa {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1025;
+  padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+  border-top: 3px solid var(--tema-primario);
+  background: var(--tema-pizarra);
+  color: #e2e8f0;
+  box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.3);
+}
+
+.banner-pwa-contenido {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  max-width: 60rem;
+  margin: 0 auto;
+}
+
+.banner-pwa-icono {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: var(--tema-primario);
+  color: #ffffff;
+}
+
+.banner-pwa-texto {
+  flex: 1 1 14rem;
+  font-size: 0.95rem;
+  line-height: 1.3;
+}
+
+.banner-pwa-acciones {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.banner-pwa-acciones .btn {
+  min-height: 44px;
+}
+
+.banner-pwa-cerrar {
+  min-width: 44px;
+}

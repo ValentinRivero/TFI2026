@@ -3,6 +3,21 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import F, Q
 
+# Largos y límites que comparten el modelo y la API: se declaran una sola vez para que no se desalineen.
+LARGO_NOMBRE = 120  # personas, complejos y clientes cargados a mano
+LARGO_EMAIL = 120
+LARGO_TELEFONO = 30
+LARGO_DIRECCION = 160
+LARGO_INFO_SENA = 200
+LARGO_NOMBRE_CANCHA = 80
+LARGO_TEXTO_LIBRE = 255  # observaciones y descripciones
+LARGO_ACCION_AUDITORIA = 120
+LARGO_MAXIMO_PASSWORD = 128  # solo se aplica en la API; la base guarda el hash
+LATITUD_MAXIMA = 90
+LONGITUD_MAXIMA = 180
+HORAS_CANCELACION_DEFECTO = 4
+HORAS_CANCELACION_MAXIMAS = 168
+
 
 class EstadoRegistro(models.IntegerChoices):
     BAJA = 0, 'Baja lógica'
@@ -217,9 +232,9 @@ class Usuario(AbstractBaseUser, ModeloBase):
         db_index=True,
     )
     rol = models.ForeignKey(Rol, on_delete=models.PROTECT, related_name='usuarios')
-    nombre_completo = models.CharField(max_length=120)
-    email = models.EmailField(max_length=120, unique=True)
-    telefono = models.CharField(max_length=30, blank=True)
+    nombre_completo = models.CharField(max_length=LARGO_NOMBRE)
+    email = models.EmailField(max_length=LARGO_EMAIL, unique=True)
+    telefono = models.CharField(max_length=LARGO_TELEFONO, blank=True)
     complejo_operado = models.ForeignKey(
         'Complejo',
         null=True,
@@ -282,21 +297,21 @@ class Usuario(AbstractBaseUser, ModeloBase):
 
 class Complejo(ModeloBase):
     propietario = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name='complejos_propios')
-    nombre = models.CharField(max_length=120)
-    direccion = models.CharField(max_length=160)
+    nombre = models.CharField(max_length=LARGO_NOMBRE)
+    direccion = models.CharField(max_length=LARGO_DIRECCION)
     latitud = models.DecimalField(
         max_digits=9,
         decimal_places=6,
-        validators=[MinValueValidator(-90), MaxValueValidator(90)],
+        validators=[MinValueValidator(-LATITUD_MAXIMA), MaxValueValidator(LATITUD_MAXIMA)],
     )
     longitud = models.DecimalField(
         max_digits=9,
         decimal_places=6,
-        validators=[MinValueValidator(-180), MaxValueValidator(180)],
+        validators=[MinValueValidator(-LONGITUD_MAXIMA), MaxValueValidator(LONGITUD_MAXIMA)],
     )
-    telefono_contacto = models.CharField(max_length=30, blank=True)
-    horas_limite_cancelacion = models.SmallIntegerField(default=4)
-    info_sena = models.CharField(max_length=200, blank=True)
+    telefono_contacto = models.CharField(max_length=LARGO_TELEFONO, blank=True)
+    horas_limite_cancelacion = models.SmallIntegerField(default=HORAS_CANCELACION_DEFECTO)
+    info_sena = models.CharField(max_length=LARGO_INFO_SENA, blank=True)
     estado_contrato = models.SmallIntegerField(
         choices=EstadoContrato.choices,
         default=EstadoContrato.PENDIENTE,
@@ -376,7 +391,7 @@ class Cancha(ModeloBase):
     )
     complejo = models.ForeignKey(Complejo, on_delete=models.PROTECT, related_name='canchas')
     deporte = models.ForeignKey(Deporte, on_delete=models.PROTECT, related_name='canchas')
-    nombre = models.CharField(max_length=80)
+    nombre = models.CharField(max_length=LARGO_NOMBRE_CANCHA)
     tipo_superficie = models.SmallIntegerField(choices=TipoSuperficie.choices)
     cobertura = models.SmallIntegerField(choices=Cobertura.choices)
     iluminacion = models.SmallIntegerField(choices=Iluminacion.choices)
@@ -460,7 +475,7 @@ class ExcepcionHoraria(ModeloBase):
     hora_inicio = models.TimeField(null=True, blank=True)
     hora_fin = models.TimeField(null=True, blank=True)
     tipo_motivo = models.SmallIntegerField(choices=TipoMotivoExcepcion.choices)
-    descripcion = models.CharField(max_length=255, blank=True)
+    descripcion = models.CharField(max_length=LARGO_TEXTO_LIBRE, blank=True)
 
     class Meta:
         db_table = 'excepciones_horarias'
@@ -509,8 +524,8 @@ class TurnoFijo(ModeloBase):
         related_name='turnos_fijos',
     )
     creado_por = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name='turnos_fijos_creados')
-    nombre_cliente_manual = models.CharField(max_length=120, blank=True)
-    telefono_cliente_manual = models.CharField(max_length=30, blank=True)
+    nombre_cliente_manual = models.CharField(max_length=LARGO_NOMBRE, blank=True)
+    telefono_cliente_manual = models.CharField(max_length=LARGO_TELEFONO, blank=True)
     dia_semana = models.SmallIntegerField(choices=DiaSemana.choices)
     hora_inicio = models.TimeField()
     hora_fin = models.TimeField()
@@ -569,14 +584,14 @@ class Reserva(ModeloBase):
         related_name='reservas',
     )
     creado_por = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name='reservas_creadas')
-    nombre_cliente_manual = models.CharField(max_length=120, blank=True)
-    telefono_cliente_manual = models.CharField(max_length=30, blank=True)
+    nombre_cliente_manual = models.CharField(max_length=LARGO_NOMBRE, blank=True)
+    telefono_cliente_manual = models.CharField(max_length=LARGO_TELEFONO, blank=True)
     fecha_turno = models.DateField()
     hora_inicio = models.TimeField()
     hora_fin = models.TimeField()
     precio_acordado = models.DecimalField(max_digits=10, decimal_places=2)
     tipo_ocupacion = models.SmallIntegerField(choices=TipoOcupacion.choices, default=TipoOcupacion.WEB)
-    observaciones = models.CharField(max_length=255, blank=True)
+    observaciones = models.CharField(max_length=LARGO_TEXTO_LIBRE, blank=True)
 
     class Meta:
         db_table = 'reservas'
@@ -632,7 +647,7 @@ class LogAuditoria(ModeloBase):
         related_name='logs_auditoria',
     )
     tipo_evento = models.SmallIntegerField(choices=TipoEventoAuditoria.choices)
-    accion = models.CharField(max_length=120)
+    accion = models.CharField(max_length=LARGO_ACCION_AUDITORIA)
     detalle = models.TextField(blank=True)
     ip_origen = models.GenericIPAddressField(null=True, blank=True)
 

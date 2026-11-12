@@ -11,7 +11,6 @@ from urllib.parse import urlsplit
 from django.conf import settings
 
 RUTA_NOTIFICACIONES = '/api/interno/notificaciones'
-TIEMPO_MAXIMO_SEGUNDOS = 3
 LARGO_MINIMO_DE_CLAVE = 32
 
 
@@ -51,7 +50,7 @@ def _enviar(url, clave, datos):
         headers={'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Internal-Key': clave},
     )
     try:
-        with _abridor.open(pedido, timeout=TIEMPO_MAXIMO_SEGUNDOS) as respuesta:
+        with _abridor.open(pedido, timeout=settings.NODE_TIMEOUT_SEGUNDOS) as respuesta:
             return json.loads(respuesta.read())
     except urllib.error.HTTPError as error:
         raise NodeNoDisponible(f'respondió HTTP {error.code}') from error

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 
+import { LIMITES } from '../config/parametros.js';
 import { crearNotificacionInterna } from '../controllers/interno.controller.js';
 import { crearLimitadorInterno } from '../middlewares/rateLimit.middleware.js';
 import { autenticarServicio } from '../middlewares/servicioInterno.middleware.js';
@@ -39,7 +40,8 @@ router.post(
     .isString().withMessage('Debe ser un texto.').bail()
     .trim()
     .notEmpty().withMessage('El mensaje es obligatorio.')
-    .isLength({ max: 280 }).withMessage('El mensaje no puede superar los 280 caracteres.'),
+    .isLength({ max: LIMITES.maximoMensaje })
+    .withMessage(`El mensaje no puede superar los ${LIMITES.maximoMensaje} caracteres.`),
   body('evento').optional().isObject({ strict: true }).withMessage('Debe ser un objeto.'),
   // Por esta vía solo llegan las reservas realizadas: las visitas y consultas las registra el frontend.
   body('evento.tipo_evento')

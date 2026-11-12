@@ -6,6 +6,17 @@ import nh3
 from rest_framework import serializers
 
 from .models import (
+    HORAS_CANCELACION_DEFECTO,
+    HORAS_CANCELACION_MAXIMAS,
+    LARGO_DIRECCION,
+    LARGO_EMAIL,
+    LARGO_INFO_SENA,
+    LARGO_NOMBRE,
+    LARGO_NOMBRE_CANCHA,
+    LARGO_TELEFONO,
+    LARGO_TEXTO_LIBRE,
+    LATITUD_MAXIMA,
+    LONGITUD_MAXIMA,
     AlcanceExcepcion,
     Cancha,
     Complejo,
@@ -35,7 +46,7 @@ from .services import (
 
 MAXIMO_PASADAS_SANITIZACION = 5
 
-PATRON_TELEFONO = re.compile(r'^\+?[0-9\s()-]{6,30}$')
+PATRON_TELEFONO = re.compile(rf'^\+?[0-9\s()-]{{6,{LARGO_TELEFONO}}}$')
 MENSAJE_TELEFONO = 'Ingresá un teléfono válido: solo números, espacios, guiones, paréntesis y un + inicial.'
 MENSAJE_SIN_CAMPOS = 'Indicá al menos uno de los campos editables.'
 
@@ -84,13 +95,15 @@ def _exigir_algun_campo(attrs):
 
 def _latitud(**opciones):
     return serializers.DecimalField(
-        max_digits=9, decimal_places=6, min_value=Decimal('-90'), max_value=Decimal('90'), **opciones,
+        max_digits=9, decimal_places=6, min_value=Decimal(-LATITUD_MAXIMA), max_value=Decimal(LATITUD_MAXIMA),
+        **opciones,
     )
 
 
 def _longitud(**opciones):
     return serializers.DecimalField(
-        max_digits=9, decimal_places=6, min_value=Decimal('-180'), max_value=Decimal('180'), **opciones,
+        max_digits=9, decimal_places=6, min_value=Decimal(-LONGITUD_MAXIMA), max_value=Decimal(LONGITUD_MAXIMA),
+        **opciones,
     )
 
 
@@ -222,6 +235,17 @@ class ComplejoCatalogoSerializer(serializers.ModelSerializer):
         ]
 
 
+class MarcadorComplejoSerializer(serializers.ModelSerializer):
+    """Lo mínimo que dibuja un marcador del mapa: sin propietario, contacto ni ningún dato personal."""
+
+    precio_desde = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True, allow_null=True)
+
+    class Meta:
+        model = Complejo
+        fields = ('id', 'nombre', 'latitud', 'longitud', 'precio_desde')
+        read_only_fields = fields
+
+
 class ComplejoDetallePublicoSerializer(ComplejoCatalogoSerializer):
     canchas = serializers.SerializerMethodField()
 
@@ -261,13 +285,13 @@ class ComplejoAdminSerializer(serializers.ModelSerializer):
 
 
 class ComplejoConfiguracionSerializer(serializers.Serializer):
-    nombre = TextoLimpioField(max_length=120, required=False)
-    direccion = TextoLimpioField(max_length=160, required=False)
+    nombre = TextoLimpioField(max_length=LARGO_NOMBRE, required=False)
+    direccion = TextoLimpioField(max_length=LARGO_DIRECCION, required=False)
     latitud = _latitud(required=False)
     longitud = _longitud(required=False)
-    telefono_contacto = TelefonoField(max_length=30, required=False, allow_blank=True)
-    horas_limite_cancelacion = serializers.IntegerField(min_value=0, max_value=168, required=False)
-    info_sena = TextoLimpioField(max_length=200, required=False, allow_blank=True)
+    telefono_contacto = TelefonoField(max_length=LARGO_TELEFONO, required=False, allow_blank=True)
+    horas_limite_cancelacion = serializers.IntegerField(min_value=0, max_value=HORAS_CANCELACION_MAXIMAS, required=False)
+    info_sena = TextoLimpioField(max_length=LARGO_INFO_SENA, required=False, allow_blank=True)
 
     def validate(self, attrs):
         return _exigir_algun_campo(attrs)
@@ -325,13 +349,13 @@ class ContratoAltaSerializer(serializers.Serializer):
         queryset=UsuarioRepository.duenos_activos(),
         error_messages={'does_not_exist': 'El propietario debe ser un usuario activo con rol de dueño de complejo.'},
     )
-    nombre = TextoLimpioField(max_length=120)
-    direccion = TextoLimpioField(max_length=160)
+    nombre = TextoLimpioField(max_length=LARGO_NOMBRE)
+    direccion = TextoLimpioField(max_length=LARGO_DIRECCION)
     latitud = _latitud()
     longitud = _longitud()
-    telefono_contacto = TelefonoField(max_length=30, required=False, allow_blank=True, default='')
-    horas_limite_cancelacion = serializers.IntegerField(min_value=0, max_value=168, default=4)
-    info_sena = TextoLimpioField(max_length=200, required=False, allow_blank=True, default='')
+    telefono_contacto = TelefonoField(max_length=LARGO_TELEFONO, required=False, allow_blank=True, default='')
+    horas_limite_cancelacion = serializers.IntegerField(min_value=0, max_value=HORAS_CANCELACION_MAXIMAS, default=HORAS_CANCELACION_DEFECTO)
+    info_sena = TextoLimpioField(max_length=LARGO_INFO_SENA, required=False, allow_blank=True, default='')
     estado_contrato = serializers.ChoiceField(choices=ESTADOS_CONTRATO_INICIALES, default=EstadoContrato.PENDIENTE)
 
 
@@ -365,8 +389,8 @@ class UsuarioAdminSerializer(serializers.ModelSerializer):
 
 
 class UsuarioAdminEdicionSerializer(serializers.Serializer):
-    nombre_completo = TextoLimpioField(max_length=120, required=False)
-    telefono = TelefonoField(max_length=30, required=False, allow_blank=True)
+    nombre_completo = TextoLimpioField(max_length=LARGO_NOMBRE, required=False)
+    telefono = TelefonoField(max_length=LARGO_TELEFONO, required=False, allow_blank=True)
     rol = serializers.SlugRelatedField(slug_field='nombre', queryset=RolRepository.activos(), required=False)
     complejo_operado = serializers.PrimaryKeyRelatedField(
         queryset=ComplejoRepository.vigentes(), allow_null=True, required=False,
@@ -387,7 +411,7 @@ class OperadorSerializer(serializers.ModelSerializer):
 
 
 class VincularOperadorSerializer(serializers.Serializer):
-    email = serializers.EmailField(max_length=120)
+    email = serializers.EmailField(max_length=LARGO_EMAIL)
 
     def validate_email(self, valor):
         return valor.strip().lower()
@@ -403,7 +427,7 @@ class CanchaSerializer(serializers.ModelSerializer):
 
     complejo = serializers.PrimaryKeyRelatedField(queryset=ComplejoRepository.vigentes())
     deporte = serializers.PrimaryKeyRelatedField(queryset=CatalogoRepository.deportes_activos())
-    nombre = TextoLimpioField(max_length=80)
+    nombre = TextoLimpioField(max_length=LARGO_NOMBRE_CANCHA)
     precio_base = _precio()
     estado = serializers.ChoiceField(choices=ESTADOS_CANCHA_EDITABLES, required=False)
     deporte_nombre = serializers.CharField(source='deporte.nombre', read_only=True)
@@ -487,7 +511,7 @@ class ExcepcionHorariaSerializer(serializers.ModelSerializer):
     hora_inicio = serializers.TimeField(allow_null=True, default=None)
     hora_fin = serializers.TimeField(allow_null=True, default=None)
     tipo_motivo = serializers.ChoiceField(choices=TipoMotivoExcepcion.choices)
-    descripcion = TextoLimpioField(max_length=255, allow_blank=True, default='')
+    descripcion = TextoLimpioField(max_length=LARGO_TEXTO_LIBRE, allow_blank=True, default='')
     cancha_nombre = serializers.CharField(source='cancha.nombre', read_only=True, default=None)
     es_dia_completo_nombre = serializers.CharField(source='get_es_dia_completo_display', read_only=True)
     tipo_motivo_nombre = serializers.CharField(source='get_tipo_motivo_display', read_only=True)
@@ -579,9 +603,9 @@ class ReservaAltaSerializer(serializers.Serializer):
 
 
 class ReservaManualSerializer(ReservaAltaSerializer):
-    nombre_cliente_manual = TextoLimpioField(max_length=120)
-    telefono_cliente_manual = TelefonoField(max_length=30, allow_blank=True, default='')
-    observaciones = TextoLimpioField(max_length=255, allow_blank=True, default='')
+    nombre_cliente_manual = TextoLimpioField(max_length=LARGO_NOMBRE)
+    telefono_cliente_manual = TelefonoField(max_length=LARGO_TELEFONO, allow_blank=True, default='')
+    observaciones = TextoLimpioField(max_length=LARGO_TEXTO_LIBRE, allow_blank=True, default='')
 
 
 ESTADOS_RESERVA_EDITABLES = [
@@ -617,7 +641,7 @@ class ReservaAgendaEdicionSerializer(CamposInmutablesMixin, serializers.Serializ
     """Las cancelaciones tienen su propia ruta; acá solo se confirma, se seña o se cierra el turno."""
 
     estado = serializers.ChoiceField(choices=ESTADOS_RESERVA_EDITABLES, required=False)
-    observaciones = TextoLimpioField(max_length=255, allow_blank=True, required=False)
+    observaciones = TextoLimpioField(max_length=LARGO_TEXTO_LIBRE, allow_blank=True, required=False)
     cancha = serializers.PrimaryKeyRelatedField(queryset=CanchaRepository.vigentes(), required=False)
     fecha_turno = serializers.DateField(required=False, error_messages=MENSAJES_FECHA_ISO)
     hora_inicio = serializers.TimeField(required=False, error_messages=MENSAJES_HORA)
@@ -761,8 +785,8 @@ class TurnoFijoSerializer(CamposInmutablesMixin, serializers.ModelSerializer):
     hora_inicio = serializers.TimeField(error_messages=MENSAJES_HORA)
     fecha_inicio_vigencia = serializers.DateField(error_messages=MENSAJES_FECHA_ISO)
     fecha_fin_vigencia = serializers.DateField(allow_null=True, default=None, error_messages=MENSAJES_FECHA_ISO)
-    nombre_cliente_manual = TextoLimpioField(max_length=120)
-    telefono_cliente_manual = TelefonoField(max_length=30, allow_blank=True, default='')
+    nombre_cliente_manual = TextoLimpioField(max_length=LARGO_NOMBRE)
+    telefono_cliente_manual = TelefonoField(max_length=LARGO_TELEFONO, allow_blank=True, default='')
     estado = serializers.ChoiceField(choices=ESTADOS_TURNO_FIJO_EDITABLES, required=False)
     cancha_nombre = serializers.CharField(source='cancha.nombre', read_only=True)
     dia_semana_nombre = serializers.CharField(source='get_dia_semana_display', read_only=True)

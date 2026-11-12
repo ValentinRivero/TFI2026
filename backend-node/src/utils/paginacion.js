@@ -1,8 +1,9 @@
+import { LIMITES } from '../config/parametros.js';
 import { ErrorHttp } from '../middlewares/errores.middleware.js';
 import { parametroUnico } from './validaciones.js';
 
-export const TAMANO_DE_PAGINA = 20;
-export const MAXIMO_POR_PAGINA = 50;
+export const TAMANO_DE_PAGINA = LIMITES.paginacion.tamanoDePagina;
+export const MAXIMO_POR_PAGINA = LIMITES.paginacion.maximoPorPagina;
 
 export const validarPaginacion = [
   parametroUnico('page').optional().isInt({ min: 1 }).withMessage('Debe ser un número entero positivo.').toInt(),

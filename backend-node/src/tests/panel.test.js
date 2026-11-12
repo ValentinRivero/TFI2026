@@ -282,6 +282,126 @@ describe('GET /api/actividad/notificaciones/mias (bandeja propia de cualquier us
   });
 });
 
+describe('Filtros de las bandejas de notificaciones', () => {
+  const RUTAS = [
+    ['del complejo', '/api/actividad/notificaciones?complejo_id=4', ROLES.DUENO_COMPLEJO, { complejo_id: 4 }],
+    ['propia', '/api/actividad/notificaciones/mias?', ROLES.JUGADOR, { usuario_id: 7 }],
+  ];
+  const separador = (ruta) => (ruta.endsWith('?') ? '' : '&');
+  const pedir = (ruta, rol, filtros = '') => request(app).get(`${ruta}${filtros ? separador(ruta) : ''}${filtros}`).set(como(rol));
+  const filtroEnviado = () => consultasDe('Notificacion', 'find')[0].filtro;
+
+  describe.each(RUTAS)('bandeja %s', (_nombre, ruta, rol, destinatario) => {
+    beforeEach(() => {
+      datos.cantidad = 0;
+    });
+
+    test('sin filtros rige el criterio de siempre: no leídas y leídas', async () => {
+      await pedir(ruta, rol);
+
+      expect(filtroEnviado()).toEqual({ ...destinatario, usuario_id: destinatario.usuario_id ?? null, estado: { $in: [1, 2] } });
+    });
+
+    test.each([
+      ['categoria=2', { categoria: 2 }],
+      ['prioridad=2', { prioridad: 2 }],
+      ['estado=1', { estado: 1 }],
+      ['estado=2', { estado: 2 }],
+    ])('%s acota la consulta y el conteo', async (parametro, esperado) => {
+      await pedir(ruta, rol, parametro);
+
+      const base = { ...destinatario, usuario_id: destinatario.usuario_id ?? null, estado: { $in: [1, 2] } };
+      expect(filtroEnviado()).toEqual({ ...base, ...esperado });
+      expect(consultasDe('Notificacion', 'countDocuments')[0].filtro).toEqual(filtroEnviado());
+    });
+
+    test('combina los tres filtros', async () => {
+      const respuesta = await pedir(ruta, rol, 'categoria=1&prioridad=2&estado=1');
+
+      expect(respuesta.status).toBe(200);
+      expect(filtroEnviado()).toMatchObject({ categoria: 1, prioridad: 2, estado: 1 });
+    });
+
+    test('los filtros se pueden combinar con la paginación', async () => {
+      datos.cantidad = 30;
+
+      await pedir(ruta, rol, 'prioridad=2&page=2&limit=10');
+
+      expect(consultasDe('Notificacion', 'find')[0].opciones).toMatchObject({ skip: 10, limit: 10 });
+      expect(filtroEnviado()).toMatchObject({ prioridad: 2 });
+    });
+
+    test('los enlaces next y previous conservan los filtros', async () => {
+      datos.cantidad = 65;
+
+      const respuesta = await pedir(ruta, rol, 'categoria=3&prioridad=2&estado=1&page=2');
+
+      const filtros = new URLSearchParams(new URL(respuesta.body.next, 'http://servicio').search);
+      expect(Object.fromEntries(filtros)).toMatchObject({ categoria: '3', prioridad: '2', estado: '1', page: '3', limit: '20' });
+      const anterior = new URLSearchParams(new URL(respuesta.body.previous, 'http://servicio').search);
+      expect(Object.fromEntries(anterior)).toMatchObject({ categoria: '3', prioridad: '2', estado: '1', page: '1' });
+    });
+
+    test.each([
+      ['una categoría fuera de la lista', 'categoria=9', 'categoria'],
+      ['una prioridad fuera de la lista', 'prioridad=3', 'prioridad'],
+      ['un estado fuera de la lista', 'estado=5', 'estado'],
+      ['el estado de baja', 'estado=0', 'estado'],
+      ['una categoría no numérica', 'categoria=reservas', 'categoria'],
+      ['una prioridad decimal', 'prioridad=1.5', 'prioridad'],
+      ['una categoría repetida', 'categoria=1&categoria=2', 'categoria'],
+      ['una prioridad repetida', 'prioridad=1&prioridad=2', 'prioridad'],
+      ['un estado repetido', 'estado=1&estado=2', 'estado'],
+    ])('%s responde 400 con el detalle del campo y sin consultar MongoDB', async (_caso, parametros, campo) => {
+      const respuesta = await pedir(ruta, rol, parametros);
+
+      expect(respuesta.status).toBe(400);
+      expect(respuesta.body.detalles.map((detalle) => detalle.campo)).toContain(campo);
+      expect(JSON.stringify(respuesta.body)).not.toContain('reservas');
+      expect(consultas).toHaveLength(0);
+    });
+
+    test('un parámetro desconocido se ignora, como antes', async () => {
+      const respuesta = await pedir(ruta, rol, 'color=rojo');
+
+      expect(respuesta.status).toBe(200);
+      expect(Object.keys(filtroEnviado())).not.toContain('color');
+    });
+  });
+
+  test('los filtros no abren las notificaciones de otra cuenta: el destinatario sigue saliendo del token', async () => {
+    datos.cantidad = 0;
+
+    await pedir('/api/actividad/notificaciones/mias?', ROLES.JUGADOR, 'usuario_id=99&categoria=1');
+
+    expect(filtroEnviado()).toEqual({ usuario_id: 7, estado: { $in: [1, 2] }, categoria: 1 });
+  });
+
+  test('la bandeja del complejo sigue mostrando solo avisos generales aunque se filtre', async () => {
+    datos.cantidad = 0;
+
+    await pedir('/api/actividad/notificaciones?complejo_id=4', ROLES.OPERADOR_COMPLEJO, 'prioridad=2');
+
+    expect(filtroEnviado()).toMatchObject({ complejo_id: 4, usuario_id: null });
+  });
+
+  test('un jugador sigue sin ver la bandeja de un complejo, con o sin filtros', async () => {
+    const respuesta = await pedir('/api/actividad/notificaciones?complejo_id=4', ROLES.JUGADOR, 'categoria=1');
+
+    expect(respuesta.status).toBe(403);
+    expect(fetchSimulado).not.toHaveBeenCalled();
+  });
+
+  test('el listado de actividad no admite estos filtros: los ignora', async () => {
+    datos.cantidad = 0;
+
+    const respuesta = await pedir('/api/actividad?complejo_id=4', ROLES.DUENO_COMPLEJO, 'categoria=9');
+
+    expect(respuesta.status).toBe(200);
+    expect(consultasDe('Evento', 'find')[0].filtro).toEqual({ complejo_id: 4, estado: 1 });
+  });
+});
+
 describe('PATCH /api/actividad/notificaciones/:id', () => {
   const ID = new mongoose.Types.ObjectId().toString();
   const marcar = (headers, cuerpo = { estado: ESTADOS_NOTIFICACION.LEIDA }) => request(app)

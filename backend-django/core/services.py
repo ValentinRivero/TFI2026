@@ -23,6 +23,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from . import node_client
 from .exceptions import ConflictoConConfirmacion, ConflictoNegocio, ServicioNoDisponible
 from .models import (
+    LARGO_ACCION_AUDITORIA,
     AlcanceExcepcion,
     DiaSemana,
     EstadoCancha,
@@ -206,7 +207,7 @@ class AuditoriaService:
         tipo_evento = TipoEventoAuditoria(tipo_evento)
         usuario_id = getattr(usuario, 'pk', usuario)
         complejo_id = getattr(complejo, 'pk', complejo)
-        accion = AuditoriaService.depurar(accion)[:120]
+        accion = AuditoriaService.depurar(accion)[:LARGO_ACCION_AUDITORIA]
         detalle = AuditoriaService.depurar(detalle)
 
         logger_seguridad.log(
@@ -271,6 +272,16 @@ class AuditoriaService:
             desde=desde,
             hasta=hasta,
         )
+
+    @staticmethod
+    def anonimizar_ips_vencidas():
+        """
+        Retención de la IP de origen: pasados `AUDITORIA_RETENCION_MESES` meses calendario se anonimiza. Una segunda
+        corrida no encuentra nada que cambiar. Devuelve la cantidad de registros anonimizados.
+        """
+        corte = _sumar_meses(timezone.localdate(), -settings.AUDITORIA_RETENCION_MESES)
+        limite = datetime.combine(corte, time.min, tzinfo=timezone.get_current_timezone())
+        return AuditoriaRepository.anonimizar_ips_anteriores_a(limite)
 
 
 MENSAJE_CREDENCIALES_INVALIDAS = 'Email o contraseña incorrectos.'
@@ -622,6 +633,10 @@ class CatalogoService:
     def complejos_publicos():
         return ComplejoRepository.catalogo_publico()
 
+    @staticmethod
+    def marcadores_publicos():
+        return ComplejoRepository.marcadores_publicos()
+
 
 class ComplejoService:
     @staticmethod
@@ -959,9 +974,6 @@ class DifusionGrillaService:
             logger_difusion.exception('No se pudo difundir la grilla del complejo %s', complejo_id)
 
 
-MAXIMO_DIAS_EXCEPCION = 366
-
-
 def _hora_iso(valor):
     return valor.isoformat() if valor is not None else None
 
@@ -981,9 +993,9 @@ class ExcepcionHorariaService:
                 raise ValidationError({'cancha': 'Solo se registran excepciones sobre canchas activas.'})
         if datos['fecha_inicio'] < timezone.localdate():
             raise ValidationError({'fecha_inicio': 'No puede ser anterior a hoy.'})
-        if (datos['fecha_fin'] - datos['fecha_inicio']).days >= MAXIMO_DIAS_EXCEPCION:
+        if (datos['fecha_fin'] - datos['fecha_inicio']).days >= settings.RANGO_MAXIMO_DIAS:
             raise ValidationError({
-                'fecha_fin': f'Una excepción abarca como máximo {MAXIMO_DIAS_EXCEPCION} días.',
+                'fecha_fin': f'Una excepción abarca como máximo {settings.RANGO_MAXIMO_DIAS} días.',
             })
 
     @staticmethod
@@ -1077,9 +1089,6 @@ def _primera_fecha_del_dia(desde, hasta, dia_semana):
     return fecha if hasta is None or fecha <= hasta else None
 
 
-MESES_DE_ANTICIPACION_MAXIMA = 2
-
-
 def _sumar_meses(fecha, meses):
     """Mismo día del mes destino o, si no existe (31 de enero más un mes), el último día de ese mes."""
     total = fecha.month - 1 + meses
@@ -1089,7 +1098,7 @@ def _sumar_meses(fecha, meses):
 
 def fecha_maxima_de_reserva():
     """Último día que se puede reservar: hoy más el máximo de anticipación, en meses calendario."""
-    return _sumar_meses(timezone.localdate(), MESES_DE_ANTICIPACION_MAXIMA)
+    return _sumar_meses(timezone.localdate(), settings.RESERVA_MESES_ANTICIPACION)
 
 
 def _menor_fecha(a, b):
@@ -1239,9 +1248,6 @@ class GrillaService:
         return grilla
 
 
-SEGUNDOS_DE_VIDA_DE_LA_GRILLA = 60
-
-
 class CacheGrillaService:
     """
     Caché de la grilla pública por complejo y fecha. Cada evento grilla_actualizada hace que todas las grillas
@@ -1271,7 +1277,7 @@ class CacheGrillaService:
         grilla = calcular()
         try:
             # Se envuelve para poder cachear también "complejo no público" (None) sin confundirlo con un fallo.
-            cache.set(clave, {'grilla': grilla}, SEGUNDOS_DE_VIDA_DE_LA_GRILLA)
+            cache.set(clave, {'grilla': grilla}, settings.GRILLA_CACHE_SEGUNDOS)
         except Exception:
             logger_difusion.exception('No se pudo guardar la grilla en caché')
         return grilla
@@ -1479,7 +1485,7 @@ class ReservaService:
         maxima = fecha_maxima_de_reserva()
         if fecha > maxima:
             raise ValidationError({
-                'fecha_turno': f'Se reserva con hasta {MESES_DE_ANTICIPACION_MAXIMA} meses de anticipación '
+                'fecha_turno': f'Se reserva con hasta {settings.RESERVA_MESES_ANTICIPACION} meses de anticipación '
                                f'(hasta el {maxima:%d/%m/%Y}).',
             })
 
@@ -2192,9 +2198,6 @@ class AvisoComplejoService:
             )
 
 
-DIAS_DE_CONSERVACION_DE_CONTACTO = 30
-
-
 def _plural(cantidad, singular, plural):
     return f'{cantidad} {singular if cantidad == 1 else plural}'
 
@@ -2221,7 +2224,7 @@ class BajaDeCuentaService:
                 f'{_plural(senadas, "reserva señada o pagada no se cancela", "reservas señadas o pagadas no se cancelan")}: '
                 'el complejo decide si la mantiene, la reprograma o devuelve la seña. Para eso conservamos tu nombre y '
                 'tu teléfono solo en esas reservas, hasta que se resuelvan o, como máximo, '
-                f'{DIAS_DE_CONSERVACION_DE_CONTACTO} días después de cada turno.'
+                f'{settings.CONTACTOS_BAJA_DIAS} días después de cada turno.'
             )
         return {
             'reservas_a_cancelar': len(reservas) - senadas,
@@ -2283,8 +2286,8 @@ class BajaDeCuentaService:
 
     @staticmethod
     def purgar_contactos_vencidos():
-        """Plazo máximo de conservación: 30 días después del turno, aunque la reserva siga sin resolverse."""
-        limite = timezone.localdate() - timedelta(days=DIAS_DE_CONSERVACION_DE_CONTACTO)
+        """Plazo máximo de conservación (`CONTACTOS_BAJA_DIAS`) después del turno, aunque la reserva siga sin resolverse."""
+        limite = timezone.localdate() - timedelta(days=settings.CONTACTOS_BAJA_DIAS)
         return ReservaRepository.limpiar_contactos_de_bajas_hasta(limite)
 
 
@@ -2304,7 +2307,6 @@ def _minutos_de_la_union(intervalos):
     return total
 
 
-MAXIMO_DIAS_REPORTE = 366
 MAXIMO_HORARIOS_RANKING = 10
 CRITERIO_REPORTE_POR_DEFECTO = 'fecha_turno'
 CRITERIOS_REPORTE = ('fecha_turno', 'fecha_creacion', 'fecha_modificacion')
@@ -2321,9 +2323,9 @@ class ReporteService:
             raise NotFound()
 
         desde, hasta = filtros['fecha_desde'], filtros['fecha_hasta']
-        if (hasta - desde).days >= MAXIMO_DIAS_REPORTE:
+        if (hasta - desde).days >= settings.RANGO_MAXIMO_DIAS:
             raise ValidationError({
-                'fecha_hasta': f'El rango del reporte abarca como máximo {MAXIMO_DIAS_REPORTE} días.',
+                'fecha_hasta': f'El rango del reporte abarca como máximo {settings.RANGO_MAXIMO_DIAS} días.',
             })
 
         cancha_id = filtros.get('cancha_id')
