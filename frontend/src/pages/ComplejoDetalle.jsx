@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import AlertaReintento from '../components/AlertaReintento.jsx';
-import BotonVolver from '../components/BotonVolver.jsx';
 import Cargando from '../components/Cargando.jsx';
 import ClimaCard from '../components/ClimaCard.jsx';
+import ComplejoNoEncontrado from '../components/ComplejoNoEncontrado.jsx';
 import EncabezadoComplejo from '../components/EncabezadoComplejo.jsx';
-import EstadoVacio from '../components/EstadoVacio.jsx';
 import FichaComplejo from '../components/FichaComplejo.jsx';
 import SeccionCanchas from '../components/SeccionCanchas.jsx';
 import SeccionTurnos from '../components/SeccionTurnos.jsx';
@@ -22,14 +21,6 @@ import { aFechaIso } from '../utils/formatos.js';
 import { leerRetorno } from '../utils/retornoReserva.js';
 
 const ES_ID = /^[1-9]\d{0,9}$/;
-
-function ComplejoNoEncontrado() {
-  return (
-    <EstadoVacio titulo={t('complejo.noEncontradoTitulo')} descripcion={t('complejo.noEncontradoDescripcion')}>
-      <BotonVolver destino="/">{t('complejo.volver')}</BotonVolver>
-    </EstadoVacio>
-  );
-}
 
 function DetalleDeComplejo({ id }) {
   const [parametros, setParametros] = useSearchParams();

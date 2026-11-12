@@ -25,7 +25,8 @@ const Contratos = lazy(() => import('./pages/Contratos.jsx'));
 const Auditoria = lazy(() => import('./pages/Auditoria.jsx'));
 const MisReservas = lazy(() => import('./pages/MisReservas.jsx'));
 const Perfil = lazy(() => import('./pages/Perfil.jsx'));
-const Provisoria = lazy(() => import('./pages/Provisoria.jsx'));
+const Notificaciones = lazy(() => import('./pages/Notificaciones.jsx'));
+const NotificacionesComplejo = lazy(() => import('./pages/NotificacionesComplejo.jsx'));
 
 // La guía visual es una herramienta de desarrollo: en el build de producción esta constante es `null` y el
 // bloque de la guía no se incluye. No figura en la navegación: en desarrollo se abre escribiendo `/guia`.
@@ -57,11 +58,6 @@ function PlantillaPanel() {
   );
 }
 
-// Pantallas privadas todavía provisorias: cada una se reemplaza por su página definitiva en su subfase.
-const PRIVADAS = [
-  { ruta: '/notificaciones', seccion: 'notificaciones', titulo: t('navegacion.notificaciones') },
-];
-
 export default function App() {
   return (
     <Suspense fallback={<Cargando variante="pantalla" texto={t('comun.cargandoPantalla')} />}>
@@ -80,13 +76,11 @@ export default function App() {
           />
           <Route path="/perfil" element={<ProtectedRoute seccion="perfil"><Perfil /></ProtectedRoute>} />
           {GuiaVisual && <Route path="/guia" element={<GuiaVisual />} />}
-          {PRIVADAS.map(({ ruta, seccion, titulo }) => (
-            <Route
-              key={ruta}
-              path={ruta}
-              element={<ProtectedRoute seccion={seccion}><Provisoria titulo={titulo} /></ProtectedRoute>}
-            />
-          ))}
+          <Route
+            path="/notificaciones"
+            element={<ProtectedRoute seccion="notificaciones"><Notificaciones /></ProtectedRoute>}
+          />
+
           <Route path="*" element={<NoEncontrada />} />
         </Route>
         <Route element={<PlantillaPanel />}>
@@ -96,6 +90,10 @@ export default function App() {
             <Route path="excepciones" element={<GestionExcepciones />} />
             <Route path="agenda" element={<ProtectedRoute seccion="agenda"><Agenda /></ProtectedRoute>} />
             <Route path="reportes" element={<ProtectedRoute seccion="reportes"><Reportes /></ProtectedRoute>} />
+            <Route
+              path="notificaciones"
+              element={<ProtectedRoute seccion="notificacionesComplejo"><NotificacionesComplejo /></ProtectedRoute>}
+            />
           </Route>
           <Route path="/sistema" element={<ProtectedRoute seccion="sistema"><LayoutSistema /></ProtectedRoute>}>
             <Route index element={<PanelSistema />} />

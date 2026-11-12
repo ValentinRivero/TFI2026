@@ -5,6 +5,7 @@ import Nav from 'react-bootstrap/Nav';
 import Navbar from 'react-bootstrap/Navbar';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ETIQUETA_ROL, puedeVer } from '../config/catalogos.js';
+import useContadorNotificaciones from '../hooks/useContadorNotificaciones.js';
 import useDesplazado from '../hooks/useDesplazado.js';
 import useInstalacionPwa from '../hooks/useInstalacionPwa.js';
 import useSesion from '../hooks/useSesion.js';
@@ -14,7 +15,11 @@ import { logout } from '../services/authService.js';
 import BotonAccion from './BotonAccion.jsx';
 import Cargando from './Cargando.jsx';
 import BannerInstalarPWA from './BannerInstalarPWA.jsx';
+import CampanaNotificaciones from './CampanaNotificaciones.jsx';
 import PiePagina from './PiePagina.jsx';
+
+// La bandeja personal se abre desde la campana y no tiene enlace de texto en el menú.
+const RUTA_NOTIFICACIONES = '/notificaciones';
 
 // Enlaces de la sesión según la sección y el rol: `puedeVer` decide qué se muestra; los backends deciden qué se permite.
 const SECCIONES_DE_SESION = [
@@ -22,7 +27,6 @@ const SECCIONES_DE_SESION = [
   { seccion: 'panel', a: '/panel', texto: 'navegacion.panel' },
   { seccion: 'reportes', a: '/panel/reportes', texto: 'navegacion.reportes' },
   { seccion: 'sistema', a: '/sistema', texto: 'navegacion.sistema' },
-  { seccion: 'notificaciones', a: '/notificaciones', texto: 'navegacion.notificaciones' },
   { seccion: 'perfil', a: '/perfil', texto: 'navegacion.perfil' },
 ];
 
@@ -47,7 +51,13 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
 
   const seccionesVisibles = autenticado ? SECCIONES_DE_SESION.filter(({ seccion }) => puedeVer(seccion, rol)) : [];
   // El enlace activo sale de la ruta actual y es uno solo: no depende del foco ni del historial del navegador.
-  const activo = enlaceActivo(pathname, ['/', ...enlaces.map(({ a }) => a), ...seccionesVisibles.map(({ a }) => a)]);
+  const activo = enlaceActivo(pathname, [
+    '/',
+    ...enlaces.map(({ a }) => a),
+    ...seccionesVisibles.map(({ a }) => a),
+    ...(autenticado ? [RUTA_NOTIFICACIONES] : []),
+  ]);
+  const sinLeer = useContadorNotificaciones(usuario?.id);
 
   // Al cambiar de ruta (logo, "Atrás") el foco puede quedar en el enlace anterior: se suelta si ya no es el activo.
   useEffect(() => {
@@ -125,6 +135,11 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
             </Nav>
             {autenticado ? (
               <div className="barra-sesion">
+                <CampanaNotificaciones
+                  contador={sinLeer}
+                  activa={activo === RUTA_NOTIFICACIONES}
+                  onNavegar={() => setMenuAbierto(false)}
+                />
                 <span className="barra-usuario" aria-label={t('navegacion.sesionDe', { nombre: usuario.nombre_completo })}>
                   {t('sesion.comoRol', { nombre: usuario.nombre_completo, rol: ETIQUETA_ROL[rol] ?? rol ?? '' })}
                 </span>

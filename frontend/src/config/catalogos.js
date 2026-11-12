@@ -238,6 +238,20 @@ export const ESTADO_NOTIFICACION = Object.freeze({
   2: entrada('Leída', neutro),
 });
 
+export const NOTIFICACION_NO_LEIDA = 1;
+export const NOTIFICACION_LEIDA = 2;
+export const PRIORIDAD_URGENTE = 2;
+
+/**
+ * Filtro de estado de las bandejas de notificaciones: `valor` es el que viaja en la URL, `clave` el texto que lo
+ * rotula y `codigo` el que se envía a la API (`null` no filtra por estado).
+ */
+export const FILTRO_ESTADO_NOTIFICACION = Object.freeze({
+  NO_LEIDAS: Object.freeze({ valor: 'no-leidas', clave: 'notificaciones.estadoNoLeidas', codigo: NOTIFICACION_NO_LEIDA }),
+  LEIDAS: Object.freeze({ valor: 'leidas', clave: 'notificaciones.estadoLeidas', codigo: NOTIFICACION_LEIDA }),
+  TODAS: Object.freeze({ valor: 'todas', clave: 'notificaciones.estadoTodas', codigo: null }),
+});
+
 export const TIPO_EVENTO_ACTIVIDAD = Object.freeze({
   1: entrada('Complejo visto', neutro),
   2: entrada('Grilla consultada', neutro),
@@ -310,6 +324,7 @@ export const ROLES_POR_SECCION = Object.freeze({
   sistema: [ROL.SUPERADMIN],
   perfil: Object.values(ROL),
   notificaciones: Object.values(ROL),
+  notificacionesComplejo: [ROL.OPERADOR, ROL.DUENO, ROL.SUPERADMIN],
 });
 
 export const puedeVer = (seccion, rol) => Boolean(rol) && (ROLES_POR_SECCION[seccion] ?? []).includes(rol);

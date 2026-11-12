@@ -104,11 +104,11 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - [x] **6.4.2.** `MapaComplejos`.
   - [x] **6.4.3.** Manifiesto y service worker.
   - [x] **6.4.4.** `BannerInstalarPWA` y requisitos de compatibilidad.
-- [ ] **6.5.** Sección de notificaciones para todos los roles; en los paneles de complejo, separada por categoría y con una bandeja de urgentes.
+- [x] **6.5.** Sección de notificaciones para todos los roles; en los paneles de complejo, separada por categoría y con una bandeja de urgentes.
   - [x] **6.5.1.** Node: filtros `categoria`, `prioridad` y `estado` en las bandejas de notificaciones.
-  - [ ] **6.5.2.** Campana y bandeja personal.
-  - [ ] **6.5.3.** Bandeja del complejo por categoría y bandeja de urgentes.
-  - [ ] **6.5.4.** Cierre de la Fase 6.
+  - [x] **6.5.2.** Campana y bandeja personal.
+  - [x] **6.5.3.** Bandeja del complejo por categoría y bandeja de urgentes.
+  - [x] **6.5.4.** Cierre de la Fase 6.
 
 ## Fase 7: Despliegue, Pruebas Integrales y Entrega
 - [ ] **7.1.** Imágenes Docker (`Dockerfile` y `.dockerignore` por servicio) y `docker-compose.yml` con `web`, `node`, `frontend` y `redis`.
@@ -340,8 +340,7 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - **Sesión (`services/authService.js`, `hooks/useSesion.js`):** el access vive solo en memoria; el rol y el id se leen del payload del JWT sin verificar la firma, solo para navegar. Al abrir la app se pide un access con la cookie y luego el perfil. `useSesion` usa `useSyncExternalStore`, sin Context.
 - **Login y registro:** el registro inicia la sesión al terminar; si eso falla, lleva a `/login` con un aviso. La casilla de la política nunca viene marcada. Tras iniciar sesión se vuelve a la ruta de origen o a la pantalla inicial del rol (jugador `/`, dueño y operador `/panel`, superadmin `/sistema`).
 - **Política de privacidad:** `Privacidad.jsx` incluye responsable, finalidades, destinatarios, proveedores (también OpenStreetMap, que recibe la IP de quien abre el mapa), plazos, derechos con sus plazos y la leyenda de la AAIP. `AceptarPolitica.jsx` bloquea las pantallas hasta aceptar la versión vigente y no aparece en `/privacidad` ni en `/perfil`.
-- **Rutas privadas:** `ProtectedRoute` espera la sesión inicial, lleva a `/login` guardando el origen y valida el rol contra `catalogos.js`. Las pantallas privadas que aún no existen muestran una vista provisoria.
-- **Pruebas del frontend:** 120 tests de Vitest en total (56 nuevos: decodificación del JWT y normalización de errores de Django y de Node).
+- **Rutas privadas:** `ProtectedRoute` espera la sesión inicial, lleva a `/login` guardando el origen y valida el rol contra `catalogos.js`.- **Pruebas del frontend:** 120 tests de Vitest en total (56 nuevos: decodificación del JWT y normalización de errores de Django y de Node).
 
 ## Notas de los puntos 6.2.1 a 6.2.5
 - **Catálogo (`Catalogo.jsx`, `ComplejoCard.jsx`):** portada pública en `/`. La lista crece con "Mostrar más" de a 20 (`hooks/useListaIncremental`), sin descargar la colección completa; una página siguiente que falla conserva lo ya cargado y ofrece reintentar. Estados de carga, vacío (con o sin filtros) y error con reintento.
@@ -399,6 +398,17 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - **Invitación a instalar (`BannerInstalarPWA.jsx`, `hooks/useInstalacionPwa.js`, `utils/pwa.js`):** el estado se guarda a nivel de módulo, porque `beforeinstallprompt` se emite una sola vez y `Layout` se desmonta al cambiar de plantilla. En Chromium y Android muestra "Instalar aplicación", que dispara `prompt()`, y se oculta al instalar (`appinstalled`) o al descartar. En iOS (navegador común, no incrustado en otra app) muestra la indicación manual Compartir y Agregar a pantalla de inicio. No aparece con la aplicación ya instalada (`display-mode: standalone` o `navigator.standalone`) ni después de cerrarlo; la preferencia de cierre es la única que se guarda en `localStorage`, dentro de `try/catch`, sin datos de la sesión.
 - **Requisitos de compatibilidad:** el service worker y la instalación exigen contexto seguro (HTTPS; `localhost` está exceptuado). Para probar en un teléfono antes del despliegue hace falta reenvío de puertos por USB o un túnel HTTPS.
 - **Pruebas del frontend:** 361 tests de Vitest en total (31 nuevos: validación, límites de Goya y encuadre de marcadores, atribuciones escapadas por capa, ruta y clic simple del popup, lectura de la vista en la URL, detección de iOS y de navegadores incrustados, modo instalada y modo del banner). `npm run lint` y `npm run build` sin errores; el bloque `leaflet` no figura en la carga inicial.
+
+## Notas de los puntos 6.5.2 a 6.5.4
+- **Servicio (`services/notificacionService.js`):** consume `GET /api/actividad/notificaciones/mias`, `GET /api/actividad/notificaciones?complejo_id=` y `PATCH /api/actividad/notificaciones/<id>` con `{ "estado": 2 }` contra `apiNode`. Normaliza `id` o `_id` y la página `{ count, next, previous, results }`.
+- **Campana (`CampanaNotificaciones.jsx`, `hooks/useContadorNotificaciones.js`):** en la zona de sesión de la barra, reemplaza al enlace de texto. Cuenta con `mias?estado=1&limit=1` leyendo `count`, sondea cada `PARAMETROS.notificaciones.sondeoMs`, se pausa con la pestaña oculta y se refresca al volver a verla. Falla en silencio si Node no responde. Al marcar una notificación como leída descuenta en el acto (`utils/avisosNotificaciones.js`) y confirma con el servidor. Badge con `.num` y tope `99+` (`PARAMETROS.notificaciones.contadorMaximo`); se resalta en `/notificaciones`.
+- **Bandeja personal (`pages/Notificaciones.jsx`):** filtros de estado, prioridad y categoría en la URL con `replace`, y lista con "Mostrar más". `NotificacionRow` muestra categoría, prioridad (la urgente con borde lateral y etiqueta), mensaje, fecha y hora, y "Marcar como leída" con `BotonAccion`.
+- **Bandeja del complejo (`pages/NotificacionesComplejo.jsx`, `/panel/notificaciones`):** bloque `AvisosUrgentes` (`prioridad=2&estado=1`) arriba, pestañas por categoría y filtro de estado debajo. Marcar un aviso lo actualiza en las dos listas.
+- **Listas sin recarga (`hooks/useBandejaNotificaciones.js`):** la notificación marcada pasa a leída en el acto o se oculta si la bandeja muestra solo no leídas; con páginas pendientes se vuelve a pedir la primera, porque las filas que salen del servidor correrían las páginas siguientes.
+- **Retiro de lo provisorio:** `Provisoria.jsx` y su texto se eliminaron, porque `/notificaciones` era la última ruta que lo usaba.
+- **Auditoría transversal de `frontend/src/`:** sin `dangerouslySetInnerHTML`; `localStorage` solo para el cierre del banner de instalación; sin `console` con datos (solo el aviso de clave de texto faltante, en desarrollo); sin colores fuera de `styles/tema.css`; textos fuera de `i18n/es.js` solo en `GuiaVisual.jsx`. `ComplejoNoEncontrado` pasó de `pages/ComplejoDetalle.jsx` a `components/`.
+- **Versión:** `PARAMETROS.app.version` pasa a `0.6.5`.
+- **Pruebas:** 386 tests de Vitest en total (25 nuevos: filtros y URL, parámetros de la API, normalización, marcadas como leídas, contador, tope del badge, pausa del sondeo, estados vacíos y canal de avisos). `npm run lint` y `npm run build` sin errores. Sin cambios en los backends: Django 1613 pasados y 5 salteados de concurrencia, `manage.py check` sin observaciones, Node 457 pasados.
 
 ## Decisiones de arquitectura
 - **Frontend:** React con Vite y PWA manual, en capas `services/`, `components/` y `pages/`: solo la capa de servicios conoce las URLs de la API, lo que separa el acceso a datos de la presentación. El access token vive en memoria y el refresh en una cookie HttpOnly, `Secure` y `SameSite=Strict`: un script inyectado por XSS no puede leer el refresh, y `SameSite=Strict` mitiga CSRF. Nada de la sesión se guarda en `localStorage`.

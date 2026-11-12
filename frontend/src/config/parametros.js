@@ -18,7 +18,7 @@ export const PARAMETROS = Object.freeze({
   idioma: 'es',
   // Versión de la aplicación que muestra el pie de página: `0.<fase>.<ítem>` del plan (6.4 -> 0.6.4) hasta el despliegue,
   // cuando pasa a 1.0.0 (CLAUDE.md §8.8).
-  app: Object.freeze({ version: '0.6.4' }),
+  app: Object.freeze({ version: '0.6.5' }),
   formato: Object.freeze({ locale: 'es-AR', moneda: 'ARS' }),
   // Espejo de PAGE_SIZE de Django y del límite por defecto de Node.
   paginacion: Object.freeze({ tamanio: 20, botones: 5 }),
@@ -87,7 +87,8 @@ export const PARAMETROS = Object.freeze({
   atribuciones: Object.freeze({
     clima: Object.freeze({ nombre: 'Open-Meteo.com', url: 'https://open-meteo.com/', licencia: 'CC BY 4.0' }),
   }),
-  notificaciones: Object.freeze({ sondeoMs: 60_000 }),
+  // `contadorMaximo`: desde esa cantidad la campana muestra "99+" en lugar del número exacto.
+  notificaciones: Object.freeze({ sondeoMs: 60_000, contadorMaximo: 99 }),
   // Redes del pie de página. Los usuarios son de muestra (no corresponden a cuentas reales) y los enlaces llevan a la
   // portada de cada red; al contar con las cuentas oficiales se reemplazan `usuario` y `url`. Solo se muestran las que
   // tienen una `url` https.

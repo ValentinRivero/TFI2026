@@ -19,6 +19,7 @@ const SECCIONES = [
   { a: '/panel/excepciones', texto: 'navegacion.panelExcepciones', seccion: 'excepciones' },
   { a: '/panel/agenda', texto: 'navegacion.panelAgenda', seccion: 'agenda' },
   { a: '/panel/reportes', texto: 'navegacion.panelReportes', seccion: 'reportes' },
+  { a: '/panel/notificaciones', texto: 'navegacion.panelNotificaciones', seccion: 'notificacionesComplejo' },
 ];
 
 /**
