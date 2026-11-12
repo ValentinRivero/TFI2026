@@ -17,3 +17,15 @@ export const registrarActividad = async (tipoEvento, complejoId, metadata) => {
     return false;
   }
 };
+
+/**
+ * Visitas al perfil del complejo y consultas de su grilla en un rango (`fecha_desde` y `fecha_hasta`), en total y por
+ * día. Es una métrica de `backend-node`: quien la muestre debe tolerar que falle (502) sin afectar el resto.
+ */
+export const obtenerVisitas = async (complejoId, fechaDesde, fechaHasta, signal) => {
+  const { data } = await apiNode.get('/api/reportes-aux/visitas', {
+    params: { complejo_id: complejoId, fecha_desde: fechaDesde, fecha_hasta: fechaHasta },
+    signal,
+  });
+  return data;
+};

@@ -89,16 +89,16 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - [x] **6.2.6.** Reserva de un turno.
   - [x] **6.2.7.** `MisReservas`.
   - [x] **6.2.8.** `Perfil` y baja de la cuenta con vista previa.
-- [ ] **6.3.** Vistas de Administración: `PanelComplejo`, `GestionCanchas`, `GestionExcepciones`, `Agenda` y `Reportes`; `PanelSistema`, `Contratos` y `Auditoria`.
+- [x] **6.3.** Vistas de Administración: `PanelComplejo`, `GestionCanchas`, `GestionExcepciones`, `Agenda` y `Reportes`; `PanelSistema`, `Contratos` y `Auditoria`.
   - [x] **6.3.1.** Estructura del panel, selector de complejo y `PanelComplejo`.
   - [x] **6.3.2.** Operadores del complejo.
   - [x] **6.3.3.** `GestionCanchas` y horarios, con confirmación de conflictos.
   - [x] **6.3.4.** `GestionExcepciones`.
-  - [ ] **6.3.5.** `Agenda` del día.
-  - [ ] **6.3.6.** Turnos fijos.
-  - [ ] **6.3.7.** `Reportes`.
-  - [ ] **6.3.8.** `PanelSistema` y `Contratos`.
-  - [ ] **6.3.9.** Usuarios y `Auditoria`.
+  - [x] **6.3.5.** `Agenda` del día.
+  - [x] **6.3.6.** Turnos fijos.
+  - [x] **6.3.7.** `Reportes`.
+  - [x] **6.3.8.** `PanelSistema` y `Contratos`.
+  - [x] **6.3.9.** Usuarios y `Auditoria`.
 - [ ] **6.4.** PWA manual (`public/manifest.json`, `public/sw.js`, sin cachear respuestas autenticadas) y mapa interactivo con Leaflet en `MapaComplejos`.
   - [x] **6.4.1.** Django: `GET /api/complejos/marcadores/`, público y sin paginar, con los filtros del catálogo.
   - [ ] **6.4.2.** `MapaComplejos`.
@@ -369,6 +369,21 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - **Observaciones de la reserva:** la confirmación no pide observaciones porque la API de alta del jugador no las recibe (las observaciones son internas del complejo). Sumarlas exige cambiar el contrato y declarar el dato en la tabla de datos personales antes de implementarlo.
 - **Componentes y hooks nuevos:** `DatosTurno` (compartido por el resumen y la confirmación), `EncabezadoPantalla`, `ContactoComplejo`, `useCancelarReserva`, `useAvisoDeNavegacion` y `useSeleccionTurno` con elección inicial. `ModalConfirmar` suma `confirmarDeshabilitado`. `/mis-reservas` y `/perfil` dejaron de ser pantallas provisorias.
 - **Pruebas del frontend:** 194 tests de Vitest en total (37 nuevos: descripción de la cancha con el catálogo de códigos, estado de cancelación según estado y margen, aviso previo de cancelación, ida y vuelta del turno a retomar con descarte de valores manipulados, ruta de retorno del login, formato de instantes y mayúsculas de las fechas).
+
+## Notas de los puntos 6.3.5 a 6.3.9
+- **Agenda (`Agenda.jsx`, `hooks/useAgenda.js`, `utils/agenda.js`):** lista paginada de `GET /api/agenda/` con filtros por día (abre en hoy), cancha, estado y reservas con conflicto de operatoria. Cada fila muestra turno, cliente con su contacto, origen, precio, estado, observaciones y las acciones que admite su estado. El alta manual (telefónica o presencial) exige cancha, día, hora de inicio y nombre; el fin y el precio los calcula el servidor. Las transiciones de estado replican las del backend y ausente o completada solo se ofrecen con el turno iniciado; el servidor valida igual.
+- **Cancelación y reapertura:** cancelar pide confirmación y libera el turno. Reabrir elige el estado de vuelta, deja que el servidor revalide el turno y, si está libre, muestra su vista previa (`409` con `requiere_confirmacion`) en `ConfirmarConflicto` antes de ocupar de nuevo el casillero. Un turno tomado, cerrado o fuera de la grilla es un conflicto real y su mensaje se muestra en el diálogo.
+- **Turnos fijos (`SeccionTurnosFijos.jsx`, `hooks/useTurnosFijos.js`, `services/turnoFijoService.js`):** pestaña de la agenda (`?vista=turnos-fijos`, con `replace`) con alta, pausa, reanudación, baja, filtros por cancha, estado y día, y edición del horario de inicio y del fin de la vigencia. El cambio de horario muestra la vista previa (horario actual y nuevo, desde cuándo rige y fechas ya registradas, que conservan el anterior) antes de aplicarse. Las próximas fechas del turno se llevan a la agenda con `mantener` o `cancelar`.
+- **Fechas en espera por excepción (`BandejaFechasEnEspera.jsx`):** `GET /api/turnos-fijos/?en_espera=true` aplanado en una fila por fecha, con el motivo de la excepción y las decisiones mantener o cancelar (cada una con confirmación). La bandeja no aparece si no hay nada pendiente.
+- **Reportes (`Reportes.jsx`, `hooks/useReporte.js`, `utils/reportes.js`):** rango de fechas obligatorio (máximo 366 días, validado antes de consultar), criterio de fecha, cancha y deporte, que se aplican con "Consultar". Resumen de recaudación, señas, reservas del rango y tasa de cancelación; desglose por estado, ocupación por cancha y ranking de horarios como barras proporcionales de CSS puro, sin librerías de gráficos. Las visitas al perfil vienen de `backend-node` en una consulta aparte: si falla, solo esa tarjeta lo informa y ofrece reintentar.
+- **Sistema (`LayoutSistema.jsx`, `PanelSistema.jsx`, `Contratos.jsx`, `Auditoria.jsx`):** `/sistema` (usuarios), `/sistema/contratos` y `/sistema/auditoria` comparten la subnavegación. Contratos lista con búsqueda, estado y orden, da de alta un complejo con su contrato y propietario (búsqueda de dueños activos con pausa al escribir) y cambia el estado del contrato; activar uno con el propietario inactivo lo rechaza el backend y el motivo queda en el diálogo.
+- **Usuarios y auditoría:** edición de nombre, teléfono, rol, complejo operado (solo si el rol es operador) y estado, con las restricciones del backend (último superadministrador activo, dueño con contratos vigentes) mostradas tal cual. La auditoría filtra por tipo, usuario (por id), complejo, IP y rango de fechas, e identifica al titular solo por `usuario_id`.
+- **Reutilización:** `BarraFiltros` y `useFiltrosAplicables` (filtros con borrador), `useConfirmacion`, `ListaBarras`, `CamposComplejo` (compartido con la configuración del complejo) y `VistaPreviaCambio`. `ConfirmarConflicto` suma `titulo`, `textoConfirmar`, `aclaracion`, `mostrarMensaje` e hijos para la vista previa.
+- **Fechas `dd/mm/aaaa` (`CampoFecha.jsx`):** todos los selectores de fecha muestran el valor como `dd/mm/aaaa` con máscara y un botón de calendario que abre el selector nativo (oculto) con `showPicker()`, de modo que nunca aparece `mm/dd/yyyy` según el idioma del navegador. `CampoFormulario` con `type="date"` y `SelectorFechaGrilla` delegan en él; hacia la API la fecha sigue siendo `AAAA-MM-DD`. Las fechas cortas de tablas y avisos se arman por partes en `utils/formatos.js`.
+- **Horarios sin minutos libres:** el alta manual de la agenda elige el horario en una mini-grilla de la cancha y el día (`SelectorSlotCancha`, con la grilla real y el canal de disponibilidad en vivo); el alta y el cambio de horario de un turno fijo eligen entre los bloques que arman los horarios de apertura de la cancha ese día y su duración de turno (`bloquesDeHorarios`, `SelectorBloquesHorarios`).
+- **Sistema:** la tabla de contratos muestra el id del complejo en lugar del límite de cancelación; la de usuarios suma la columna de id. La ficha de una cuenta se abre en modo consulta y recién con "Habilitar edición" permite modificarla. En la auditoría, `Usuario #<id>` muestra un resumen al pasar el mouse (nombre, rol, estado y complejo, consultado una vez por id) y enlaza a `/sistema?verUsuario=<id>`, que abre la ficha en modo consulta.
+- **Pantallas de estado:** `PantallaEstado` muestra el acceso restringido por rol y la página no encontrada con emblema, explicación y botón centrado para volver al inicio. La guía visual dejó de figurar en la navegación (en desarrollo sigue accesible en `/guia`).
+- **Pruebas del frontend:** 330 tests de Vitest en total (80 nuevos: parámetros y transiciones de la agenda, validación del alta manual, próximas fechas y bloques horarios de un turno fijo, filas de espera, rango y métricas del reporte, barras proporcionales, parámetros y validaciones de contratos, usuarios y auditoría, id de usuario en la ruta, y formatos de fecha `dd/mm/aaaa`, máscara, enteros y porcentajes).
 
 ## Decisiones de arquitectura
 - **Frontend:** React con Vite y PWA manual, en capas `services/`, `components/` y `pages/`: solo la capa de servicios conoce las URLs de la API, lo que separa el acceso a datos de la presentación. El access token vive en memoria y el refresh en una cookie HttpOnly, `Secure` y `SameSite=Strict`: un script inyectado por XSS no puede leer el refresh, y `SameSite=Strict` mitiga CSRF. Nada de la sesión se guarda en `localStorage`.

@@ -1,7 +1,7 @@
 import Button from 'react-bootstrap/Button';
-import Form from 'react-bootstrap/Form';
 import { t } from '../i18n/index.js';
 import { formatearFechaLarga, parsearFecha, sumarDias } from '../utils/formatos.js';
+import CampoFecha from './CampoFecha.jsx';
 import Icono from './Icono.jsx';
 
 /**
@@ -19,10 +19,7 @@ export default function SelectorFechaGrilla({ fecha, hoy, onCambiar, children })
         <Button variant="outline-secondary" aria-label={t('grilla.diaAnterior')} disabled={fecha <= hoy} onClick={() => cambiar(sumarDias(fecha, -1))}>
           <Icono nombre="anterior" tamano={18} />
         </Button>
-        <Form.Group controlId="grilla-fecha">
-          <Form.Label className="visually-hidden">{t('grilla.fecha')}</Form.Label>
-          <Form.Control type="date" value={fecha} min={hoy} onChange={(evento) => cambiar(evento.target.value)} />
-        </Form.Group>
+        <CampoFecha id="grilla-fecha" etiqueta={t('grilla.fecha')} etiquetaOculta valor={fecha} min={hoy} onCambiar={cambiar} className="mb-0 campo-fecha-grilla" />
         <Button variant="outline-secondary" aria-label={t('grilla.diaSiguiente')} onClick={() => cambiar(sumarDias(fecha, 1))}>
           <Icono nombre="siguiente" tamano={18} />
         </Button>

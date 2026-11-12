@@ -24,6 +24,50 @@ export const ESTADO_RESERVA = Object.freeze({
 
 export const RESERVA_SENADA = 3;
 
+/** Estados de una reserva cancelada (por el jugador o por el complejo); solo estas se reabren. */
+export const ESTADOS_RESERVA_CANCELADOS = Object.freeze([4, 5]);
+
+/** Estados a los que se puede reabrir una reserva cancelada: pendiente de seña, confirmada o señada. */
+export const ESTADOS_REAPERTURA = Object.freeze([1, 2, 3]);
+
+/**
+ * Cambios de estado que admite la agenda por reserva (espejo de `TRANSICIONES_AGENDA` de Django). Ausente y
+ * completada se corrigen entre sí; las canceladas no vuelven atrás por esta vía.
+ */
+export const TRANSICIONES_AGENDA = Object.freeze({
+  1: Object.freeze([2, 3, 6, 7]),
+  2: Object.freeze([3, 6, 7]),
+  3: Object.freeze([6, 7]),
+  6: Object.freeze([7]),
+  7: Object.freeze([6]),
+});
+
+/** Ausente y completada solo se marcan una vez iniciado el turno. */
+export const ESTADOS_QUE_EXIGEN_TURNO_INICIADO = Object.freeze([6, 7]);
+
+/** Estados que el filtro de la agenda ofrece (todos salvo la baja lógica). */
+export const ESTADOS_RESERVA_FILTRABLES = Object.freeze([1, 2, 3, 4, 5, 6, 7]);
+
+/** Clave de cada conteo del dashboard con el código de estado de reserva que lo rotula (`canceladas_total` es la suma). */
+export const CONTEO_REPORTE_POR_ESTADO = Object.freeze([
+  Object.freeze({ clave: 'pendientes', estado: 1 }),
+  Object.freeze({ clave: 'confirmadas', estado: 2 }),
+  Object.freeze({ clave: 'senadas', estado: 3 }),
+  Object.freeze({ clave: 'canceladas_jugador', estado: 4 }),
+  Object.freeze({ clave: 'canceladas_complejo', estado: 5 }),
+  Object.freeze({ clave: 'ausentes', estado: 6 }),
+  Object.freeze({ clave: 'completadas', estado: 7 }),
+]);
+
+/** Fecha de la reserva que el dashboard compara con el rango (parámetro `criterio`). */
+export const CRITERIO_REPORTE = Object.freeze({
+  fecha_turno: entrada('Día en que se juega'),
+  fecha_creacion: entrada('Día en que se registró'),
+  fecha_modificacion: entrada('Día del último cambio'),
+});
+
+export const CRITERIO_REPORTE_POR_DEFECTO = 'fecha_turno';
+
 /** Estados desde los que el jugador puede cancelar: pendiente de seña, confirmada y señada o pagada. */
 export const ESTADOS_RESERVA_CANCELABLES = Object.freeze([1, 2, 3]);
 
@@ -53,12 +97,32 @@ export const ESTADO_TURNO_FIJO = Object.freeze({
   2: entrada('Pausado', aviso),
 });
 
+export const TURNO_FIJO_VIGENTE = 1;
+export const TURNO_FIJO_PAUSADO = 2;
+
+/** Qué se hace con una fecha de turno fijo al llevarla a la agenda (campo `accion` de la API). */
+export const ACCION_FECHA_TURNO_FIJO = Object.freeze({
+  MANTENER: 'mantener',
+  CANCELAR: 'cancelar',
+});
+
 export const ESTADO_CONTRATO = Object.freeze({
   0: entrada('Baja', neutro),
   1: entrada('Pendiente', aviso),
   2: entrada('Activo', ok),
   3: entrada('Suspendido', peligro),
 });
+
+/** Órdenes del listado de contratos (`ordering`), con la clave de texto que los rotula. */
+export const ORDENES_CONTRATO = Object.freeze([
+  Object.freeze({ valor: 'nombre', clave: 'contratos.ordenNombre' }),
+  Object.freeze({ valor: '-nombre', clave: 'contratos.ordenNombreDesc' }),
+  Object.freeze({ valor: 'estado_contrato', clave: 'contratos.ordenEstado' }),
+  Object.freeze({ valor: '-fecha_creacion', clave: 'contratos.ordenReciente' }),
+]);
+
+/** Estados con los que se da de alta un contrato (los demás se alcanzan cambiando el estado). */
+export const ESTADOS_CONTRATO_INICIALES = Object.freeze([1, 2]);
 
 export const ESTADO_USUARIO = Object.freeze({
   0: entrada('Baja', neutro),
@@ -119,6 +183,14 @@ export const TIPO_MOTIVO_EXCEPCION = Object.freeze({
 
 /** Vigencias del listado de excepciones (parámetro `vigencia` de la API); vacío trae vigentes y finalizadas. */
 export const VIGENCIA_EXCEPCION = Object.freeze({ VIGENTES: 'vigentes', FINALIZADAS: 'finalizadas' });
+
+/** Vistas de la agenda del complejo (parámetro `vista` de la ruta), con la clave de texto que las rotula. */
+export const VISTA_AGENDA = Object.freeze({ RESERVAS: 'reservas', TURNOS_FIJOS: 'turnos-fijos' });
+
+export const PESTANAS_AGENDA = Object.freeze([
+  Object.freeze({ valor: VISTA_AGENDA.RESERVAS, clave: 'agenda.pestanaReservas' }),
+  Object.freeze({ valor: VISTA_AGENDA.TURNOS_FIJOS, clave: 'agenda.pestanaTurnosFijos' }),
+]);
 
 export const ES_DIA_COMPLETO = 1;
 export const ES_FRANJA_HORARIA = 0;

@@ -1,9 +1,11 @@
 import { lazy, Suspense } from 'react';
-import { Link, Outlet, Route, Routes } from 'react-router-dom';
+import { Outlet, Route, Routes } from 'react-router-dom';
 import AceptarPolitica from './components/AceptarPolitica.jsx';
 import Cargando from './components/Cargando.jsx';
 import Layout from './components/Layout.jsx';
+import PantallaEstado from './components/PantallaEstado.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
+import ScrollAlInicio from './components/ScrollAlInicio.jsx';
 import { t } from './i18n/index.js';
 import Catalogo from './pages/Catalogo.jsx';
 import Login from './pages/Login.jsx';
@@ -15,29 +17,33 @@ const LayoutPanel = lazy(() => import('./components/LayoutPanel.jsx'));
 const PanelComplejo = lazy(() => import('./pages/PanelComplejo.jsx'));
 const GestionCanchas = lazy(() => import('./pages/GestionCanchas.jsx'));
 const GestionExcepciones = lazy(() => import('./pages/GestionExcepciones.jsx'));
+const Agenda = lazy(() => import('./pages/Agenda.jsx'));
+const Reportes = lazy(() => import('./pages/Reportes.jsx'));
+const LayoutSistema = lazy(() => import('./components/LayoutSistema.jsx'));
+const PanelSistema = lazy(() => import('./pages/PanelSistema.jsx'));
+const Contratos = lazy(() => import('./pages/Contratos.jsx'));
+const Auditoria = lazy(() => import('./pages/Auditoria.jsx'));
 const MisReservas = lazy(() => import('./pages/MisReservas.jsx'));
 const Perfil = lazy(() => import('./pages/Perfil.jsx'));
 const Provisoria = lazy(() => import('./pages/Provisoria.jsx'));
 
 // La guía visual es una herramienta de desarrollo: en el build de producción esta constante es `null` y el
-// bloque de la guía no se incluye.
+// bloque de la guía no se incluye. No figura en la navegación: en desarrollo se abre escribiendo `/guia`.
 const GuiaVisual = import.meta.env.DEV ? lazy(() => import('./pages/GuiaVisual.jsx')) : null;
-
-const ENLACES = GuiaVisual ? [{ a: '/guia', texto: t('navegacion.guia') }] : [];
 
 function NoEncontrada() {
   return (
-    <section>
-      <h1 className="h2">{t('paginaNoEncontrada.titulo')}</h1>
-      <p className="text-secondary">{t('paginaNoEncontrada.descripcion')}</p>
-      <Link to="/">{t('comun.volverAlInicio')}</Link>
-    </section>
+    <PantallaEstado
+      icono="buscar"
+      titulo={t('paginaNoEncontrada.titulo')}
+      descripcion={t('paginaNoEncontrada.descripcion')}
+    />
   );
 }
 
 function PlantillaPublica() {
   return (
-    <Layout enlaces={ENLACES}>
+    <Layout>
       <Outlet />
     </Layout>
   );
@@ -45,7 +51,7 @@ function PlantillaPublica() {
 
 function PlantillaPanel() {
   return (
-    <Layout enlaces={ENLACES} ancho="panel" claveCarga="panel">
+    <Layout ancho="panel" claveCarga="panel">
       <Outlet />
     </Layout>
   );
@@ -54,13 +60,13 @@ function PlantillaPanel() {
 // Pantallas privadas todavía provisorias: cada una se reemplaza por su página definitiva en su subfase.
 const PRIVADAS = [
   { ruta: '/notificaciones', seccion: 'notificaciones', titulo: t('navegacion.notificaciones') },
-  { ruta: '/sistema', seccion: 'sistema', titulo: t('navegacion.sistema') },
 ];
 
 export default function App() {
   return (
     <Suspense fallback={<Cargando variante="pantalla" texto={t('comun.cargandoPantalla')} />}>
       <AceptarPolitica />
+      <ScrollAlInicio />
       <Routes>
         <Route element={<PlantillaPublica />}>
           <Route path="/" element={<Catalogo />} />
@@ -88,11 +94,13 @@ export default function App() {
             <Route index element={<PanelComplejo />} />
             <Route path="canchas" element={<GestionCanchas />} />
             <Route path="excepciones" element={<GestionExcepciones />} />
-            <Route path="agenda" element={<Provisoria titulo={t('navegacion.panelAgenda')} />} />
-            <Route
-              path="reportes"
-              element={<ProtectedRoute seccion="reportes"><Provisoria titulo={t('navegacion.reportes')} /></ProtectedRoute>}
-            />
+            <Route path="agenda" element={<ProtectedRoute seccion="agenda"><Agenda /></ProtectedRoute>} />
+            <Route path="reportes" element={<ProtectedRoute seccion="reportes"><Reportes /></ProtectedRoute>} />
+          </Route>
+          <Route path="/sistema" element={<ProtectedRoute seccion="sistema"><LayoutSistema /></ProtectedRoute>}>
+            <Route index element={<PanelSistema />} />
+            <Route path="contratos" element={<Contratos />} />
+            <Route path="auditoria" element={<Auditoria />} />
           </Route>
         </Route>
       </Routes>

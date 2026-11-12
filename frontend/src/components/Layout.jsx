@@ -5,12 +5,14 @@ import Nav from 'react-bootstrap/Nav';
 import Navbar from 'react-bootstrap/Navbar';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ETIQUETA_ROL, puedeVer } from '../config/catalogos.js';
+import useDesplazado from '../hooks/useDesplazado.js';
 import useSesion from '../hooks/useSesion.js';
 import { t } from '../i18n/index.js';
 import { enlaceActivo } from '../utils/navegacion.js';
 import { logout } from '../services/authService.js';
 import BotonAccion from './BotonAccion.jsx';
 import Cargando from './Cargando.jsx';
+import PiePagina from './PiePagina.jsx';
 
 // Enlaces de la sesión según la sección y el rol: `puedeVer` decide qué se muestra; los backends deciden qué se permite.
 const SECCIONES_DE_SESION = [
@@ -24,7 +26,8 @@ const SECCIONES_DE_SESION = [
 
 /**
  * Estructura común de las pantallas: barra superior en pizarra con tres zonas (marca, secciones centradas y sesión),
- * que en móvil pasa a un panel flotante anclado bajo el botón del menú, contenido principal y pie. El límite de
+ * que en móvil pasa a un panel flotante anclado bajo el botón del menú y que acompaña el desplazamiento (`sticky`),
+ * contenido principal y pie de página (`PiePagina`). El límite de
  * `Suspense` envuelve solo el contenido: mientras carga una pantalla diferida la barra y el menú siguen en su lugar. `enlaces` suma accesos propios de la pantalla (`{ a, texto }`);
  * `ancho` admite `panel` para los paneles de administración (contenedor fluido y densidad de escritorio).
  * `claveCarga` fija el límite de carga: por defecto cambia con la ruta; un panel con subvistas propias lo fija para
@@ -37,6 +40,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
   const { pathname } = useLocation();
   const [menuAbierto, setMenuAbierto] = useState(false);
   const barra = useRef(null);
+  const desplazado = useDesplazado();
 
   const seccionesVisibles = autenticado ? SECCIONES_DE_SESION.filter(({ seccion }) => puedeVer(seccion, rol)) : [];
   // El enlace activo sale de la ruta actual y es uno solo: no depende del foco ni del historial del navegador.
@@ -77,7 +81,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
       <Navbar
         ref={barra}
         expand="lg"
-        className="barra-superior"
+        className={`barra-superior${desplazado ? ' barra-superior-translucida' : ''}`}
         variant="dark"
         expanded={menuAbierto}
         onToggle={setMenuAbierto}
@@ -142,12 +146,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
         </Suspense>
       </main>
 
-      <footer className="pie-pagina py-3">
-        <Container fluid={esPanel} className="d-flex flex-wrap justify-content-between gap-2">
-          <span>{t('marca.eslogan')}</span>
-          <Link to="/privacidad">{t('navegacion.privacidad')}</Link>
-        </Container>
-      </footer>
+      <PiePagina ancho={ancho} />
     </div>
   );
 }

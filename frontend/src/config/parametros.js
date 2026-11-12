@@ -15,6 +15,9 @@ export const ENTORNO = Object.freeze({
 
 export const PARAMETROS = Object.freeze({
   idioma: 'es',
+  // Versión de la aplicación que muestra el pie de página: `0.<fase>.<ítem>` del plan (6.3 -> 0.6.3) hasta el despliegue,
+  // cuando pasa a 1.0.0 (CLAUDE.md §8.8).
+  app: Object.freeze({ version: '0.6.3' }),
   formato: Object.freeze({ locale: 'es-AR', moneda: 'ARS' }),
   // Espejo de PAGE_SIZE de Django y del límite por defecto de Node.
   paginacion: Object.freeze({ tamanio: 20, botones: 5 }),
@@ -39,11 +42,22 @@ export const PARAMETROS = Object.freeze({
     clima: Object.freeze({ nombre: 'Open-Meteo.com', url: 'https://open-meteo.com/', licencia: 'CC BY 4.0' }),
   }),
   notificaciones: Object.freeze({ sondeoMs: 60_000 }),
+  // Redes del pie de página. Los usuarios son de muestra (no corresponden a cuentas reales) y los enlaces llevan a la
+  // portada de cada red; al contar con las cuentas oficiales se reemplazan `usuario` y `url`. Solo se muestran las que
+  // tienen una `url` https.
+  pie: Object.freeze({
+    redes: Object.freeze([
+      Object.freeze({ clave: 'instagram', icono: 'instagram', usuario: '@talibre.goya', url: 'https://www.instagram.com/' }),
+      Object.freeze({ clave: 'facebook', icono: 'facebook', usuario: '@talibre.goya', url: 'https://www.facebook.com/' }),
+      Object.freeze({ clave: 'twitter', icono: 'twitter', usuario: '@talibre_goya', url: 'https://x.com/' }),
+    ]),
+  }),
   // `paginasMaximas` acota los selectores que necesitan todos los registros de una colección chica (complejos
   // administrados, canchas de un complejo, rangos horarios de una cancha). Los demás valores son espejos de
-  // HORAS_CANCELACION_MAXIMAS, LATITUD_MAXIMA y LONGITUD_MAXIMA de Django (core/models.py).
+  // HORAS_CANCELACION_DEFECTO, HORAS_CANCELACION_MAXIMAS, LATITUD_MAXIMA y LONGITUD_MAXIMA de Django (core/models.py).
   panel: Object.freeze({
     paginasMaximas: 10,
+    horasCancelacionDefecto: 4,
     horasCancelacionMaximas: 168,
     latitudMaxima: 90,
     longitudMaxima: 180,
@@ -69,6 +83,10 @@ export const PARAMETROS = Object.freeze({
     nombreCancha: 80,
     descripcion: 255,
   }),
+  // `proximasFechas`: cuántas fechas futuras de un turno fijo se ofrecen al llevarlas a la agenda.
+  agenda: Object.freeze({ proximasFechas: 8 }),
+  // Espejo de RANGO_MAXIMO_DIAS de Django y de Node (rango máximo de un reporte, en días, ambos extremos incluidos).
+  reportes: Object.freeze({ rangoMaximoDias: 366 }),
   password: Object.freeze({ largoMinimo: 8 }),
   pwa: Object.freeze({ claveBannerCerrado: 'talibre.bannerPwaCerrado' }),
 });

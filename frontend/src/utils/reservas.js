@@ -7,7 +7,8 @@ export const CANCELACION = Object.freeze({
   NO_APLICA: 'no-aplica',
 });
 
-const instanteDelTurno = (fechaTurno, hora) => {
+/** Instante local de una fecha `AAAA-MM-DD` y una hora `HH:MM`, o `null` si alguna no es válida. */
+export const instanteDelTurno = (fechaTurno, hora) => {
   const fecha = parsearFecha(fechaTurno);
   const partes = /^(\d{1,2}):(\d{2})/.exec(hora ?? '');
   if (!fecha || !partes) return null;

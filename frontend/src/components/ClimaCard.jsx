@@ -13,7 +13,7 @@ function Atribucion({ className = '' }) {
   return (
     <p className={`small text-secondary mb-0 ${className}`.trim()}>
       {t('clima.fuente')}{' '}
-      <a href={url} target="_blank" rel="noopener noreferrer">{nombre}</a> ({licencia})
+      <a href={url} target="_blank" rel="noopener noreferrer" title={t('clima.licenciaTitulo', { licencia })}>{nombre}</a>
     </p>
   );
 }

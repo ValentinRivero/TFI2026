@@ -8,14 +8,25 @@ import ModalConfirmar from './ModalConfirmar.jsx';
  * Confirmación de un cambio que deja reservas o turnos fijos fuera de la grilla (`409` con `requiere_confirmacion`).
  * Detalla qué queda afectado y avisa que nada se cancela solo. `conflicto` es el resultado de `leerConflictos`
  * (`null` mantiene el diálogo cerrado); `error` es el de un reintento fallido. Lo usan los cambios de cancha y de
- * horarios, y lo reutilizan los turnos fijos.
+ * horarios, y lo reutilizan los turnos fijos y la agenda: allí `titulo`, `textoConfirmar`, `aclaracion` y `mostrarMensaje` adaptan el
+ * texto y `children` muestra el detalle de la `vista_previa` que acompaña a la confirmación.
  */
-export default function ConfirmarConflicto({ conflicto, error, onConfirmar, onCancelar }) {
+export default function ConfirmarConflicto({
+  conflicto,
+  error,
+  onConfirmar,
+  onCancelar,
+  titulo,
+  textoConfirmar,
+  aclaracion,
+  mostrarMensaje = true,
+  children,
+}) {
   return (
     <ModalConfirmar
       mostrar={Boolean(conflicto)}
-      titulo={t('conflicto.titulo')}
-      textoConfirmar={t('conflicto.aplicar')}
+      titulo={titulo ?? t('conflicto.titulo')}
+      textoConfirmar={textoConfirmar ?? t('conflicto.aplicar')}
       textoCancelar={t('conflicto.noAplicar')}
       onConfirmar={onConfirmar}
       onCancelar={onCancelar}
@@ -23,7 +34,8 @@ export default function ConfirmarConflicto({ conflicto, error, onConfirmar, onCa
       {conflicto && (
         <>
           {error && <Alerta variante="danger">{error.mensaje}</Alerta>}
-          <p>{conflicto.mensaje}</p>
+          {mostrarMensaje && <p>{conflicto.mensaje}</p>}
+          {children}
 
           {conflicto.reservas.length > 0 && (
             <section className="mb-3">
@@ -65,7 +77,9 @@ export default function ConfirmarConflicto({ conflicto, error, onConfirmar, onCa
             </section>
           )}
 
-          <p className="small text-secondary mb-0">{t('conflicto.aclaracion')}</p>
+          {aclaracion !== null && (
+            <p className="small text-secondary mb-0">{aclaracion ?? t('conflicto.aclaracion')}</p>
+          )}
         </>
       )}
     </ModalConfirmar>

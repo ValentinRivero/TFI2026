@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Link, Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { ETIQUETA_ROL, puedeVer } from '../config/catalogos.js';
 import useSesion from '../hooks/useSesion.js';
 import { t } from '../i18n/index.js';
-import Alerta from './Alerta.jsx';
 import Cargando from './Cargando.jsx';
+import PantallaEstado from './PantallaEstado.jsx';
 
 /**
  * Protege una ruta privada. Espera a que se resuelva la sesión inicial, lleva a `/login` guardando la ruta de origen
@@ -30,10 +30,11 @@ export default function ProtectedRoute({ seccion, children }) {
 
   if (seccion && !puedeVer(seccion, rol)) {
     return (
-      <Alerta variante="warning" titulo={t('acceso.sinAcceso')}>
-        <p className="mb-2">{t('acceso.sinAccesoDetalle', { rol: ETIQUETA_ROL[rol] ?? rol ?? '' })}</p>
-        <Link to="/">{t('comun.volverAlInicio')}</Link>
-      </Alerta>
+      <PantallaEstado
+        icono="candado"
+        titulo={t('acceso.sinAcceso')}
+        descripcion={t('acceso.sinAccesoDetalle', { rol: ETIQUETA_ROL[rol] ?? rol ?? '' })}
+      />
     );
   }
   return children;

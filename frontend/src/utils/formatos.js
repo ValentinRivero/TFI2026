@@ -60,7 +60,6 @@ export const formatearHora = (texto) => {
 const primeraMayuscula = (texto) => (texto ? texto.charAt(0).toLocaleUpperCase(locale) + texto.slice(1) : texto);
 
 const formateadorFechaLarga = new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'long' });
-const formateadorFechaCorta = new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric' });
 
 /** `AAAA-MM-DD` como "Miércoles, 18 de noviembre". */
 export const formatearFechaLarga = (texto) => {
@@ -87,8 +86,64 @@ export const formatearDiaCorto = (texto) => {
   return fecha ? primeraMayuscula(formateadorDiaCorto.format(fecha)) : '';
 };
 
-/** `AAAA-MM-DD` como "18/11/2026". */
-export const formatearFechaCorta = (texto) => {
+/**
+ * `AAAA-MM-DD` como `dd/mm/aaaa` ("18/11/2026"). Se arma por partes, sin `Intl`, para que el orden día, mes, año no
+ * dependa del idioma del navegador. Una fecha inexistente da texto vacío.
+ */
+export const aFechaVisible = (texto) => {
   const fecha = parsearFecha(texto);
-  return fecha ? formateadorFechaCorta.format(fecha) : '';
+  return fecha ? `${dosDigitos(fecha.getDate())}/${dosDigitos(fecha.getMonth() + 1)}/${fecha.getFullYear()}` : '';
 };
+
+/** Alias legible de `aFechaVisible` para tablas, tarjetas y avisos: la fecha corta siempre se ve como `dd/mm/aaaa`. */
+export const formatearFechaCorta = (texto) => aFechaVisible(texto);
+
+/**
+ * Máscara del campo de fecha: conserva solo los dígitos (hasta ocho) y agrega las barras, de modo que escribir
+ * `12112026` o pegar `12-11-2026` queda como `12/11/2026`.
+ */
+export const enmascararFecha = (texto) => {
+  const digitos = String(texto ?? '').replace(/\D/g, '').slice(0, 8);
+  if (digitos.length <= 2) return digitos;
+  if (digitos.length <= 4) return `${digitos.slice(0, 2)}/${digitos.slice(2)}`;
+  return `${digitos.slice(0, 2)}/${digitos.slice(2, 4)}/${digitos.slice(4)}`;
+};
+
+/** `dd/mm/aaaa` como `AAAA-MM-DD`, o `null` si está incompleta o no es una fecha de calendario. */
+export const desdeFechaVisible = (texto) => {
+  const partes = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(texto ?? '');
+  if (!partes) return null;
+  const iso = `${partes[3]}-${partes[2]}-${partes[1]}`;
+  return parsearFecha(iso) ? iso : null;
+};
+
+const formateadorFechaHora = new Intl.DateTimeFormat(locale, {
+  day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+});
+
+/** Instante con zona horaria como "18/11/2026, 16:00", en hora local. */
+export const formatearFechaHora = (texto) => {
+  if (typeof texto !== 'string' || texto === '') return '';
+  const instante = new Date(texto);
+  return Number.isNaN(instante.getTime()) ? '' : formateadorFechaHora.format(instante);
+};
+
+/** Días entre dos fechas `AAAA-MM-DD` (0 si son la misma), o `null` si alguna no es válida. Sin pasar por UTC del navegador. */
+export const diasEntre = (desde, hasta) => {
+  const a = parsearFecha(desde);
+  const b = parsearFecha(hasta);
+  if (!a || !b) return null;
+  return Math.round((Date.UTC(b.getFullYear(), b.getMonth(), b.getDate()) - Date.UTC(a.getFullYear(), a.getMonth(), a.getDate())) / 86_400_000);
+};
+
+/** Número entero con separador de miles, por ejemplo `1254` como "1.254". */
+export const formatearEntero = (valor) => (
+  Number.isFinite(Number(valor)) && valor !== null && valor !== '' ? new Intl.NumberFormat(locale).format(Number(valor)) : ''
+);
+
+/** Porcentaje con hasta un decimal, por ejemplo `12.5` como "12,5 %". */
+export const formatearPorcentaje = (valor) => (
+  Number.isFinite(valor)
+    ? `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(valor)} %`
+    : ''
+);

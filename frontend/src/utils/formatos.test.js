@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import {
   aFechaIso,
+  aFechaVisible,
+  desdeFechaVisible,
+  enmascararFecha,
+  diasEntre,
+  formatearEntero,
+  formatearFechaHora,
+  formatearPorcentaje,
   formatearFechaCorta,
   formatearDiaCorto,
   formatearFechaLarga,
@@ -157,5 +164,87 @@ describe('formatearDiaCorto', () => {
 
   test('una fecha inválida da texto vacío', () => {
     expect(formatearDiaCorto('2026-13-40')).toBe('');
+  });
+});
+
+describe('diasEntre', () => {
+  test('cuenta los días entre dos fechas de calendario', () => {
+    expect(diasEntre('2026-11-12', '2026-11-12')).toBe(0);
+    expect(diasEntre('2026-11-01', '2026-11-30')).toBe(29);
+    expect(diasEntre('2026-01-01', '2027-01-01')).toBe(365);
+    expect(diasEntre('2026-11-12', '2026-11-10')).toBe(-2);
+  });
+
+  test('una fecha inexistente da null', () => {
+    expect(diasEntre('2026-02-31', '2026-03-01')).toBeNull();
+    expect(diasEntre('', '2026-03-01')).toBeNull();
+  });
+});
+
+describe('formatearEntero y formatearPorcentaje', () => {
+  test('el entero lleva separador de miles', () => {
+    expect(normalizar(formatearEntero(1254))).toBe('1.254');
+    expect(formatearEntero(0)).toBe('0');
+    expect(formatearEntero('30')).toBe('30');
+  });
+
+  test('un valor ausente o inválido da texto vacío', () => {
+    expect(formatearEntero(null)).toBe('');
+    expect(formatearEntero('')).toBe('');
+    expect(formatearEntero('abc')).toBe('');
+  });
+
+  test('el porcentaje lleva hasta un decimal y el símbolo', () => {
+    expect(normalizar(formatearPorcentaje(50))).toBe('50 %');
+    expect(normalizar(formatearPorcentaje(12.34))).toBe('12,3 %');
+    expect(formatearPorcentaje(null)).toBe('');
+  });
+});
+
+describe('formatearFechaHora', () => {
+  test('muestra día, mes, año y hora en hora local', () => {
+    expect(normalizar(formatearFechaHora('2026-11-24T16:00:00-03:00'))).toMatch(/^\d{2}\/\d{2}\/2026,? \d{2}:\d{2}$/);
+  });
+
+  test('un valor vacío o inválido da texto vacío', () => {
+    expect(formatearFechaHora('')).toBe('');
+    expect(formatearFechaHora('no es una fecha')).toBe('');
+    expect(formatearFechaHora(null)).toBe('');
+  });
+});
+
+describe('fecha visible dd/mm/aaaa', () => {
+  test('la fecha corta siempre se arma como día, mes y año', () => {
+    expect(aFechaVisible('2026-11-12')).toBe('12/11/2026');
+    expect(aFechaVisible('2026-01-05')).toBe('05/01/2026');
+    expect(formatearFechaCorta('2026-12-31')).toBe('31/12/2026');
+  });
+
+  test('una fecha inexistente o vacía da texto vacío', () => {
+    expect(aFechaVisible('2026-02-31')).toBe('');
+    expect(aFechaVisible('')).toBe('');
+    expect(aFechaVisible(null)).toBe('');
+  });
+
+  test('la máscara agrega las barras y descarta lo que no es un dígito', () => {
+    expect(enmascararFecha('1')).toBe('1');
+    expect(enmascararFecha('121')).toBe('12/1');
+    expect(enmascararFecha('12112026')).toBe('12/11/2026');
+    expect(enmascararFecha('12-11-2026')).toBe('12/11/2026');
+    expect(enmascararFecha('12/11/20269999')).toBe('12/11/2026');
+    expect(enmascararFecha('abc')).toBe('');
+    expect(enmascararFecha(null)).toBe('');
+  });
+
+  test('desdeFechaVisible vuelve a AAAA-MM-DD solo con una fecha completa y real', () => {
+    expect(desdeFechaVisible('12/11/2026')).toBe('2026-11-12');
+    expect(desdeFechaVisible('29/02/2028')).toBe('2028-02-29');
+    expect(desdeFechaVisible('29/02/2027')).toBeNull();
+    expect(desdeFechaVisible('12/11/26')).toBeNull();
+    expect(desdeFechaVisible('')).toBeNull();
+  });
+
+  test('ida y vuelta entre el valor de la API y el campo', () => {
+    expect(desdeFechaVisible(aFechaVisible('2026-11-12'))).toBe('2026-11-12');
   });
 });
