@@ -11,6 +11,10 @@ import Privacidad from './pages/Privacidad.jsx';
 import Registro from './pages/Registro.jsx';
 
 const ComplejoDetalle = lazy(() => import('./pages/ComplejoDetalle.jsx'));
+const LayoutPanel = lazy(() => import('./components/LayoutPanel.jsx'));
+const PanelComplejo = lazy(() => import('./pages/PanelComplejo.jsx'));
+const GestionCanchas = lazy(() => import('./pages/GestionCanchas.jsx'));
+const GestionExcepciones = lazy(() => import('./pages/GestionExcepciones.jsx'));
 const MisReservas = lazy(() => import('./pages/MisReservas.jsx'));
 const Perfil = lazy(() => import('./pages/Perfil.jsx'));
 const Provisoria = lazy(() => import('./pages/Provisoria.jsx'));
@@ -39,11 +43,17 @@ function PlantillaPublica() {
   );
 }
 
+function PlantillaPanel() {
+  return (
+    <Layout enlaces={ENLACES} ancho="panel" claveCarga="panel">
+      <Outlet />
+    </Layout>
+  );
+}
+
 // Pantallas privadas todavía provisorias: cada una se reemplaza por su página definitiva en su subfase.
 const PRIVADAS = [
   { ruta: '/notificaciones', seccion: 'notificaciones', titulo: t('navegacion.notificaciones') },
-  { ruta: '/panel', seccion: 'panel', titulo: t('navegacion.panel') },
-  { ruta: '/panel/reportes', seccion: 'reportes', titulo: t('navegacion.reportes') },
   { ruta: '/sistema', seccion: 'sistema', titulo: t('navegacion.sistema') },
 ];
 
@@ -72,6 +82,18 @@ export default function App() {
             />
           ))}
           <Route path="*" element={<NoEncontrada />} />
+        </Route>
+        <Route element={<PlantillaPanel />}>
+          <Route path="/panel" element={<ProtectedRoute seccion="panel"><LayoutPanel /></ProtectedRoute>}>
+            <Route index element={<PanelComplejo />} />
+            <Route path="canchas" element={<GestionCanchas />} />
+            <Route path="excepciones" element={<GestionExcepciones />} />
+            <Route path="agenda" element={<Provisoria titulo={t('navegacion.panelAgenda')} />} />
+            <Route
+              path="reportes"
+              element={<ProtectedRoute seccion="reportes"><Provisoria titulo={t('navegacion.reportes')} /></ProtectedRoute>}
+            />
+          </Route>
         </Route>
       </Routes>
     </Suspense>

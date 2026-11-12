@@ -44,6 +44,9 @@ export const ESTADO_CANCHA = Object.freeze({
   2: entrada('En mantenimiento', aviso),
 });
 
+/** Estados que admite el formulario de una cancha: la baja se hace con la acción de baja y no editando el estado. */
+export const ESTADOS_CANCHA_EDITABLES = Object.freeze([1, 2]);
+
 export const ESTADO_TURNO_FIJO = Object.freeze({
   0: entrada('Baja', neutro),
   1: entrada('Vigente', ok),
@@ -113,6 +116,12 @@ export const TIPO_MOTIVO_EXCEPCION = Object.freeze({
   5: entrada('Corte de servicio', peligro),
   6: entrada('Otro', neutro),
 });
+
+/** Vigencias del listado de excepciones (parámetro `vigencia` de la API); vacío trae vigentes y finalizadas. */
+export const VIGENCIA_EXCEPCION = Object.freeze({ VIGENTES: 'vigentes', FINALIZADAS: 'finalizadas' });
+
+export const ES_DIA_COMPLETO = 1;
+export const ES_FRANJA_HORARIA = 0;
 
 export const TIPO_OCUPACION = Object.freeze({
   1: entrada('Reserva web', info),
@@ -211,6 +220,12 @@ export const ROLES_POR_SECCION = Object.freeze({
   misReservas: [ROL.JUGADOR, ROL.SUPERADMIN],
   reservar: [ROL.JUGADOR, ROL.SUPERADMIN],
   panel: [ROL.OPERADOR, ROL.DUENO, ROL.SUPERADMIN],
+  // Espejo de la matriz de permisos: el operador ve la configuración y las canchas, pero no las edita.
+  configurarComplejo: [ROL.DUENO, ROL.SUPERADMIN],
+  operadoresComplejo: [ROL.DUENO, ROL.SUPERADMIN],
+  administrarCanchas: [ROL.DUENO, ROL.SUPERADMIN],
+  excepciones: [ROL.OPERADOR, ROL.DUENO, ROL.SUPERADMIN],
+  agenda: [ROL.OPERADOR, ROL.DUENO, ROL.SUPERADMIN],
   reportes: [ROL.DUENO, ROL.SUPERADMIN],
   sistema: [ROL.SUPERADMIN],
   perfil: Object.values(ROL),
@@ -218,6 +233,11 @@ export const ROLES_POR_SECCION = Object.freeze({
 });
 
 export const puedeVer = (seccion, rol) => Boolean(rol) && (ROLES_POR_SECCION[seccion] ?? []).includes(rol);
+
+/** Opciones `{ valor, etiqueta }` de un catálogo para un `<select>`, con los códigos como texto y en el orden del catálogo. */
+export const opcionesDe = (catalogo, codigos = Object.keys(catalogo)) => (
+  codigos.map((codigo) => ({ valor: String(codigo), etiqueta: catalogo[codigo]?.etiqueta ?? String(codigo) }))
+);
 
 const DESCONOCIDO = Object.freeze({ etiqueta: 'Desconocido', badge: neutro });
 

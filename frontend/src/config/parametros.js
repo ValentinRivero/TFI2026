@@ -39,6 +39,15 @@ export const PARAMETROS = Object.freeze({
     clima: Object.freeze({ nombre: 'Open-Meteo.com', url: 'https://open-meteo.com/', licencia: 'CC BY 4.0' }),
   }),
   notificaciones: Object.freeze({ sondeoMs: 60_000 }),
+  // `paginasMaximas` acota los selectores que necesitan todos los registros de una colección chica (complejos
+  // administrados, canchas de un complejo, rangos horarios de una cancha). Los demás valores son espejos de
+  // HORAS_CANCELACION_MAXIMAS, LATITUD_MAXIMA y LONGITUD_MAXIMA de Django (core/models.py).
+  panel: Object.freeze({
+    paginasMaximas: 10,
+    horasCancelacionMaximas: 168,
+    latitudMaxima: 90,
+    longitudMaxima: 180,
+  }),
   // Espejo de POLITICA_PRIVACIDAD_VERSION de Django.
   politica: Object.freeze({
     version: '1.0',
@@ -49,7 +58,17 @@ export const PARAMETROS = Object.freeze({
     retencionContactoDias: 30,
   }),
   // Espejo de los largos máximos de los campos de Django (core/models.py).
-  limitesCampos: Object.freeze({ nombre: 120, email: 120, telefono: 30, password: 128, busqueda: 100 }),
+  limitesCampos: Object.freeze({
+    nombre: 120,
+    email: 120,
+    telefono: 30,
+    password: 128,
+    busqueda: 100,
+    direccion: 160,
+    infoSena: 200,
+    nombreCancha: 80,
+    descripcion: 255,
+  }),
   password: Object.freeze({ largoMinimo: 8 }),
   pwa: Object.freeze({ claveBannerCerrado: 'talibre.bannerPwaCerrado' }),
 });

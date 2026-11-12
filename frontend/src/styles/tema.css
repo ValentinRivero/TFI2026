@@ -701,6 +701,17 @@ a {
   height: 2rem;
 }
 
+/* La barra ocupa todo el ancho en todas las pantallas, con márgenes laterales fijos: marca y sesión en los extremos. */
+.barra-superior > .container-fluid {
+  width: 100%;
+  max-width: none;
+  padding-inline: 1.25rem;
+}
+
+.barra-superior .navbar-brand {
+  margin-right: 0;
+}
+
 /*
  * Barra superior. En escritorio (>= lg) tiene tres zonas en una grilla: marca a la izquierda, secciones centradas en
  * una botonera segmentada y sesión a la derecha. En móvil, el menú es un panel flotante anclado bajo el botón.
@@ -899,10 +910,15 @@ a {
 }
 
 @media (max-width: 991.98px) {
+  /* La hamburguesa queda pegada al extremo derecho de la barra. */
+  .barra-superior .barra-hamburguesa {
+    margin-left: auto;
+  }
+
   .barra-superior .menu-principal {
     position: absolute;
     top: calc(100% + 0.25rem);
-    right: 1rem;
+    right: 1.25rem;
     z-index: 1040;
     width: max-content;
     min-width: 220px;
@@ -972,6 +988,124 @@ a {
 
   .panel-admin .casillero {
     min-height: 2.25rem;
+  }
+}
+
+/* Estructura del panel: selector de complejo y subnavegación */
+.selector-complejo {
+  min-width: 14rem;
+  max-width: 22rem;
+}
+
+.subnavegacion-panel {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.subnavegacion-panel .nav-link {
+  white-space: nowrap;
+}
+
+/* Tablas de administración: tabla densa desde lg y bloques apilados con etiqueta por celda en pantallas chicas */
+@media (max-width: 991.98px) {
+  .tabla-apilable thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .tabla-apilable,
+  .tabla-apilable tbody,
+  .tabla-apilable tr,
+  .tabla-apilable td {
+    display: block;
+  }
+
+  .tabla-apilable tr {
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--tema-borde);
+    border-radius: var(--radio);
+    background: var(--tema-superficie);
+  }
+
+  .tabla-apilable tr:last-child {
+    margin-bottom: 0;
+  }
+
+  .tabla-apilable td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.4rem 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    text-align: right;
+  }
+
+  .tabla-apilable td::before {
+    content: attr(data-etiqueta);
+    flex-shrink: 0;
+    font-weight: 600;
+    color: var(--tema-texto-suave);
+    text-align: left;
+  }
+
+  .tabla-apilable td[data-etiqueta='']::before {
+    content: none;
+  }
+
+  .tabla-apilable td[data-etiqueta=''] {
+    justify-content: flex-end;
+    padding-top: 0.6rem;
+  }
+}
+
+/* Editor de horarios: un bloque por día, en columnas cuando hay lugar */
+.grilla-dias {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 992px) {
+  .grilla-dias {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1400px) {
+  .grilla-dias {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.dia-horarios {
+  padding: 0.75rem 1rem;
+  background: var(--tema-superficie);
+  border: 1px solid var(--tema-borde);
+  border-radius: var(--radio);
+}
+
+.rango-campo {
+  flex: 1 1 7.5rem;
+  max-width: 12rem;
+}
+
+/* Formulario de vinculación de operadores */
+.campo-operador {
+  flex: 1 1 16rem;
+  max-width: 28rem;
+}
+
+@media (min-width: 576px) {
+  .boton-alineado-campo {
+    margin-top: 2rem;
   }
 }
 

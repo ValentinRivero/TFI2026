@@ -27,8 +27,10 @@ const SECCIONES_DE_SESION = [
  * que en móvil pasa a un panel flotante anclado bajo el botón del menú, contenido principal y pie. El límite de
  * `Suspense` envuelve solo el contenido: mientras carga una pantalla diferida la barra y el menú siguen en su lugar. `enlaces` suma accesos propios de la pantalla (`{ a, texto }`);
  * `ancho` admite `panel` para los paneles de administración (contenedor fluido y densidad de escritorio).
+ * `claveCarga` fija el límite de carga: por defecto cambia con la ruta; un panel con subvistas propias lo fija para
+ * que su estructura (selector, subnavegación) no se vuelva a montar al pasar de una subvista a otra.
  */
-export default function Layout({ enlaces = [], ancho = 'normal', children }) {
+export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, children }) {
   const esPanel = ancho === 'panel';
   const { autenticado, usuario, rol } = useSesion();
   const navegar = useNavigate();
@@ -81,7 +83,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', children }) {
         onToggle={setMenuAbierto}
         collapseOnSelect
       >
-        <Container fluid={esPanel}>
+        <Container fluid>
           <Navbar.Brand as={Link} to="/" onClick={() => setMenuAbierto(false)}>
             <img src="/icons/logo.svg" alt="" width="32" height="32" />
             {t('marca.nombre')}
@@ -135,7 +137,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', children }) {
 
       <main id="contenido" className={`flex-grow-1 py-4 position-relative${esPanel ? ' panel-admin' : ''}`}>
         {/* `key` crea un límite nuevo por pantalla: así la carga de una ruta diferida muestra el overlay también al navegar. */}
-        <Suspense key={pathname} fallback={<Cargando variante="superpuesto" />}>
+        <Suspense key={claveCarga ?? pathname} fallback={<Cargando variante="superpuesto" />}>
           <Container fluid={esPanel}>{children}</Container>
         </Suspense>
       </main>

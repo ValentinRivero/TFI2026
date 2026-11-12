@@ -90,10 +90,10 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - [x] **6.2.7.** `MisReservas`.
   - [x] **6.2.8.** `Perfil` y baja de la cuenta con vista previa.
 - [ ] **6.3.** Vistas de Administración: `PanelComplejo`, `GestionCanchas`, `GestionExcepciones`, `Agenda` y `Reportes`; `PanelSistema`, `Contratos` y `Auditoria`.
-  - [ ] **6.3.1.** Estructura del panel, selector de complejo y `PanelComplejo`.
-  - [ ] **6.3.2.** Operadores del complejo.
-  - [ ] **6.3.3.** `GestionCanchas` y horarios, con confirmación de conflictos.
-  - [ ] **6.3.4.** `GestionExcepciones`.
+  - [x] **6.3.1.** Estructura del panel, selector de complejo y `PanelComplejo`.
+  - [x] **6.3.2.** Operadores del complejo.
+  - [x] **6.3.3.** `GestionCanchas` y horarios, con confirmación de conflictos.
+  - [x] **6.3.4.** `GestionExcepciones`.
   - [ ] **6.3.5.** `Agenda` del día.
   - [ ] **6.3.6.** Turnos fijos.
   - [ ] **6.3.7.** `Reportes`.
