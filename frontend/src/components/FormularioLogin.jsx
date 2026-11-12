@@ -7,8 +7,11 @@ import Alerta from './Alerta.jsx';
 import BotonAccion from './BotonAccion.jsx';
 import CampoFormulario from './CampoFormulario.jsx';
 
-/** Pantalla de inicio de sesión (presentación): el estado y el envío los maneja `pages/Login.jsx`. */
-export default function FormularioLogin({ valores, onCambiar, onEnviar, enviando, error, aviso }) {
+/**
+ * Pantalla de inicio de sesión (presentación): el estado y el envío los maneja `pages/Login.jsx`.
+ * `estadoRegistro` viaja al enlace de crear cuenta para volver a la ruta de origen también desde ahí.
+ */
+export default function FormularioLogin({ valores, onCambiar, onEnviar, enviando, error, aviso, estadoRegistro }) {
   return (
     <div className="mx-auto" style={{ maxWidth: '28rem' }}>
       <h1 className="h2">{t('login.titulo')}</h1>
@@ -45,7 +48,7 @@ export default function FormularioLogin({ valores, onCambiar, onEnviar, enviando
         </Form>
       </Card>
       <p className="mt-3 mb-0 text-center">
-        {t('login.sinCuenta')} <Link to="/registro">{t('login.crearCuenta')}</Link>
+        {t('login.sinCuenta')} <Link to="/registro" state={estadoRegistro}>{t('login.crearCuenta')}</Link>
       </p>
     </div>
   );

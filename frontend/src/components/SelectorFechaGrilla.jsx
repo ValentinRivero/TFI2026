@@ -26,7 +26,7 @@ export default function SelectorFechaGrilla({ fecha, hoy, onCambiar, children })
         <Button variant="outline-secondary" aria-label={t('grilla.diaSiguiente')} onClick={() => cambiar(sumarDias(fecha, 1))}>
           <Icono nombre="siguiente" tamano={18} />
         </Button>
-        <span className="text-capitalize fw-semibold align-self-center ms-1">{formatearFechaLarga(fecha)}</span>
+        <span className="fw-semibold align-self-center ms-1">{formatearFechaLarga(fecha)}</span>
       </div>
       {children && <div className="mt-2">{children}</div>}
     </div>

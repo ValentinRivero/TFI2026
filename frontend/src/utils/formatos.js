@@ -56,21 +56,35 @@ export const formatearHora = (texto) => {
   return partes ? `${dosDigitos(partes[1])}:${partes[2]}` : '';
 };
 
+/** Solo la primera letra en mayúscula: "jueves, 12 de noviembre" pasa a "Jueves, 12 de noviembre", sin tocar "de". */
+const primeraMayuscula = (texto) => (texto ? texto.charAt(0).toLocaleUpperCase(locale) + texto.slice(1) : texto);
+
 const formateadorFechaLarga = new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'long' });
 const formateadorFechaCorta = new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-/** `AAAA-MM-DD` como "miércoles, 18 de noviembre". */
+/** `AAAA-MM-DD` como "Miércoles, 18 de noviembre". */
 export const formatearFechaLarga = (texto) => {
   const fecha = parsearFecha(texto);
-  return fecha ? formateadorFechaLarga.format(fecha) : '';
+  return fecha ? primeraMayuscula(formateadorFechaLarga.format(fecha)) : '';
+};
+
+const formateadorMomento = new Intl.DateTimeFormat(locale, {
+  weekday: 'short', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hour12: false,
+});
+
+/** Instante con zona horaria (`2026-11-24T16:00:00-03:00`) como "mar 24 de noviembre, 16:00", en hora local. */
+export const formatearMomento = (texto) => {
+  if (typeof texto !== 'string' || texto === '') return '';
+  const instante = new Date(texto);
+  return Number.isNaN(instante.getTime()) ? '' : formateadorMomento.format(instante);
 };
 
 const formateadorDiaCorto = new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric' });
 
-/** `AAAA-MM-DD` como "mié 18". */
+/** `AAAA-MM-DD` como "Mié 18". */
 export const formatearDiaCorto = (texto) => {
   const fecha = parsearFecha(texto);
-  return fecha ? formateadorDiaCorto.format(fecha) : '';
+  return fecha ? primeraMayuscula(formateadorDiaCorto.format(fecha)) : '';
 };
 
 /** `AAAA-MM-DD` como "18/11/2026". */

@@ -6,6 +6,7 @@ import { RUTA_INICIAL_POR_ROL } from '../config/catalogos.js';
 import useSesion from '../hooks/useSesion.js';
 import { t } from '../i18n/index.js';
 import { login } from '../services/authService.js';
+import { rutaDeRetorno } from '../utils/retornoReserva.js';
 
 export default function Login() {
   const { autenticado, cargandoSesion, rol } = useSesion();
@@ -16,7 +17,7 @@ export default function Login() {
 
   if (cargandoSesion) return <Cargando variante="pantalla" />;
   // Con sesión (recién iniciada o previa) se vuelve a la ruta de origen o a la pantalla inicial del rol.
-  if (autenticado) return <Navigate to={ubicacion.state?.desde?.pathname ?? RUTA_INICIAL_POR_ROL[rol] ?? '/'} replace />;
+  if (autenticado) return <Navigate to={rutaDeRetorno(ubicacion.state?.desde) ?? RUTA_INICIAL_POR_ROL[rol] ?? '/'} replace />;
 
   const enviar = async (evento) => {
     evento.preventDefault();
@@ -38,6 +39,7 @@ export default function Login() {
       enviando={enviando}
       error={error}
       aviso={ubicacion.state?.aviso ?? (ubicacion.state?.desde ? t('login.sesionVencida') : null)}
+      estadoRegistro={ubicacion.state?.desde ? { desde: ubicacion.state.desde } : undefined}
     />
   );
 }

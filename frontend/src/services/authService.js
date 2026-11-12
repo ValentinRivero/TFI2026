@@ -3,6 +3,10 @@
  * `sessionStorage`, así un script inyectado no puede leerlo de ahí. El refresh viaja en una cookie HttpOnly que
  * JavaScript no ve. Al recargar la página la sesión se recupera pidiendo un access nuevo con esa cookie.
  *
+ * `cierre` distingue una salida deliberada (cerrar sesión, baja de la cuenta) de una sesión que se pierde sola
+ * (refresh vencido): `{ aviso }` con el texto a mostrar en la portada, o `null`. Las rutas protegidas lo usan para
+ * ir directo a la portada y no pasar por el login.
+ *
  * El estado se publica con `suscribir` y `obtenerEstado` (para `useSyncExternalStore`); cada cambio crea un objeto
  * nuevo, así el snapshot es estable entre cambios.
  */
@@ -15,6 +19,7 @@ const ESTADO_INICIAL = Object.freeze({
   rol: null,
   perfil: null,
   cargandoSesion: true,
+  cierre: null,
 });
 
 let estado = ESTADO_INICIAL;
@@ -34,11 +39,11 @@ export const obtenerEstado = () => estado;
 
 const guardarAccess = (access) => {
   const datos = datosDeAccess(access);
-  publicar({ access, usuarioId: datos?.usuarioId ?? null, rol: datos?.rol ?? null });
+  publicar({ access, usuarioId: datos?.usuarioId ?? null, rol: datos?.rol ?? null, cierre: null });
 };
 
-const limpiarSesion = () => {
-  publicar({ access: null, usuarioId: null, rol: null, perfil: null });
+const limpiarSesion = (cierre = null) => {
+  publicar({ access: null, usuarioId: null, rol: null, perfil: null, cierre });
 };
 
 registrarGestorDeSesion({
@@ -57,6 +62,21 @@ export const actualizarPerfil = async (cambios) => {
   const { data } = await apiDjango.patch('/api/perfil/', cambios);
   publicar({ perfil: data });
   return data;
+};
+
+/** Qué pasaría al dar de baja la cuenta propia: no modifica nada. */
+export const obtenerVistaPreviaBaja = async (signal) => {
+  const { data } = await apiDjango.get('/api/perfil/baja/', { signal });
+  return data;
+};
+
+/**
+ * Baja de la cuenta propia (el servidor anonimiza los datos personales y revoca la sesión). Al terminar se limpia la
+ * sesión en memoria; `aviso` es el texto que verá la persona al llegar a la portada.
+ */
+export const darDeBajaCuenta = async ({ aviso = null } = {}) => {
+  await apiDjango.delete('/api/perfil/');
+  limpiarSesion({ aviso });
 };
 
 /**
@@ -92,7 +112,7 @@ export const logout = async () => {
   } catch {
     // El refresh vence solo; lo importante es que el navegador quede sin sesión.
   } finally {
-    limpiarSesion();
+    limpiarSesion({ aviso: null });
   }
 };
 

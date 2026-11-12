@@ -5,7 +5,8 @@ import BotonAccion from './BotonAccion.jsx';
 
 /**
  * Diálogo de confirmación. `onConfirmar` puede devolver una promesa: mientras se resuelve, el botón queda
- * deshabilitado con `Cargando`. Es la base de las confirmaciones explícitas de la operatoria (conflictos, reaperturas).
+ * deshabilitado con `Cargando`. `confirmarDeshabilitado` lo bloquea mientras no se pueda confirmar (datos sin cargar,
+ * operación impedida). Es la base de las confirmaciones explícitas de la operatoria (conflictos, reaperturas).
  */
 export default function ModalConfirmar({
   mostrar,
@@ -16,6 +17,7 @@ export default function ModalConfirmar({
   textoConfirmar,
   textoCancelar,
   variante = 'primary',
+  confirmarDeshabilitado = false,
 }) {
   return (
     <Modal show={mostrar} onHide={onCancelar} centered backdrop="static">
@@ -25,7 +27,9 @@ export default function ModalConfirmar({
       <Modal.Body>{children}</Modal.Body>
       <Modal.Footer>
         <Button variant="outline-secondary" onClick={onCancelar}>{textoCancelar ?? t('comun.cancelar')}</Button>
-        <BotonAccion variant={variante} onClick={onConfirmar}>{textoConfirmar ?? t('comun.confirmar')}</BotonAccion>
+        <BotonAccion variant={variante} disabled={confirmarDeshabilitado} onClick={onConfirmar}>
+          {textoConfirmar ?? t('comun.confirmar')}
+        </BotonAccion>
       </Modal.Footer>
     </Modal>
   );

@@ -35,7 +35,7 @@ export default function AceptarPolitica() {
 
   const cerrarSesion = async () => {
     await logout();
-    navegar('/');
+    navegar('/', { replace: true });
   };
 
   return (

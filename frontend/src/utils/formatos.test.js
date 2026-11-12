@@ -5,6 +5,7 @@ import {
   formatearDiaCorto,
   formatearFechaLarga,
   formatearHora,
+  formatearMomento,
   formatearPrecio,
   formatearTemperatura,
   parsearFecha,
@@ -91,7 +92,12 @@ describe('formatearHora', () => {
 
 describe('fechas legibles', () => {
   test('fecha larga con el día de la semana', () => {
-    expect(formatearFechaLarga('2026-11-18')).toMatch(/miércoles,? 18 de noviembre/);
+    expect(formatearFechaLarga('2026-11-18')).toMatch(/^Miércoles,? 18 de noviembre$/);
+  });
+
+  test('solo la primera letra va en mayúscula: la preposición y el mes quedan en minúscula', () => {
+    expect(formatearFechaLarga('2026-11-12')).toMatch(/^Jueves,? 12 de noviembre$/);
+    expect(formatearFechaLarga('2026-03-01')).toMatch(/^Domingo,? 1 de marzo$/);
   });
 
   test('fecha corta día/mes/año', () => {
@@ -101,6 +107,20 @@ describe('fechas legibles', () => {
   test('una fecha inválida devuelve texto vacío', () => {
     expect(formatearFechaLarga('2026-02-30')).toBe('');
     expect(formatearFechaCorta('mañana')).toBe('');
+  });
+});
+
+describe('formatearMomento', () => {
+  test('muestra día, mes y hora en hora local', () => {
+    const texto = normalizar(formatearMomento(new Date(2026, 10, 24, 16, 5).toISOString()));
+
+    expect(texto).toMatch(/24 de noviembre/);
+    expect(texto).toContain('16:05');
+  });
+
+  test('un texto que no es un instante da texto vacío', () => {
+    expect(formatearMomento('')).toBe('');
+    expect(formatearMomento('mañana')).toBe('');
   });
 });
 
@@ -132,7 +152,7 @@ describe('formatearTemperatura', () => {
 describe('formatearDiaCorto', () => {
   test('arma día de la semana y número sin correr el día', () => {
     expect(normalizar(formatearDiaCorto('2026-11-18'))).toMatch(/18/);
-    expect(normalizar(formatearDiaCorto('2026-11-18')).toLowerCase()).toContain('mié');
+    expect(normalizar(formatearDiaCorto('2026-11-18'))).toMatch(/^Mié/);
   });
 
   test('una fecha inválida da texto vacío', () => {

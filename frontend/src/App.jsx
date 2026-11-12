@@ -11,6 +11,8 @@ import Privacidad from './pages/Privacidad.jsx';
 import Registro from './pages/Registro.jsx';
 
 const ComplejoDetalle = lazy(() => import('./pages/ComplejoDetalle.jsx'));
+const MisReservas = lazy(() => import('./pages/MisReservas.jsx'));
+const Perfil = lazy(() => import('./pages/Perfil.jsx'));
 const Provisoria = lazy(() => import('./pages/Provisoria.jsx'));
 
 // La guía visual es una herramienta de desarrollo: en el build de producción esta constante es `null` y el
@@ -32,17 +34,13 @@ function NoEncontrada() {
 function PlantillaPublica() {
   return (
     <Layout enlaces={ENLACES}>
-      <Suspense fallback={<Cargando variante="seccion" />}>
-        <Outlet />
-      </Suspense>
+      <Outlet />
     </Layout>
   );
 }
 
 // Pantallas privadas todavía provisorias: cada una se reemplaza por su página definitiva en su subfase.
 const PRIVADAS = [
-  { ruta: '/mis-reservas', seccion: 'misReservas', titulo: t('navegacion.misReservas') },
-  { ruta: '/perfil', seccion: 'perfil', titulo: t('navegacion.perfil') },
   { ruta: '/notificaciones', seccion: 'notificaciones', titulo: t('navegacion.notificaciones') },
   { ruta: '/panel', seccion: 'panel', titulo: t('navegacion.panel') },
   { ruta: '/panel/reportes', seccion: 'reportes', titulo: t('navegacion.reportes') },
@@ -60,6 +58,11 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<Registro />} />
           <Route path="/privacidad" element={<Privacidad />} />
+          <Route
+            path="/mis-reservas"
+            element={<ProtectedRoute seccion="misReservas"><MisReservas /></ProtectedRoute>}
+          />
+          <Route path="/perfil" element={<ProtectedRoute seccion="perfil"><Perfil /></ProtectedRoute>} />
           {GuiaVisual && <Route path="/guia" element={<GuiaVisual />} />}
           {PRIVADAS.map(({ ruta, seccion, titulo }) => (
             <Route

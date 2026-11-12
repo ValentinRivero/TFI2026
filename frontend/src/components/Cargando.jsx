@@ -10,7 +10,19 @@ function Indicador({ chico = false }) {
 }
 
 /**
+ * Indicador de la carga entre pantallas (variante `superpuesto`). Está separado del spinner de botones y secciones
+ * para poder reemplazarlo por una imagen o una animación propia sin tocar el resto: alcanza con cambiar esta función
+ * y las reglas `.cargando-transicion` de tema.css.
+ */
+function IndicadorTransicion() {
+  return <span className="cargando-transicion" aria-hidden="true" />;
+}
+
+/**
  * Estado de carga de toda petición asíncrona.
+ * - `superpuesto`: capa translúcida sobre el área de contenido (debajo de la barra superior) mientras carga una
+ *   pantalla; aparece con una demora corta para que los cambios instantáneos no parpadeen. El contenedor debe tener
+ *   `position: relative`.
  * - `pantalla`: ocupa el espacio de una página (carga de rutas).
  * - `seccion`: reemplaza el contenido de un bloque mientras llegan sus datos.
  * - `boton`: indicador chico dentro de un botón.
@@ -25,6 +37,15 @@ export default function Cargando({ variante = 'seccion', texto, className = '' }
         <Indicador chico />
         {variante === 'inline' ? <span>{leyenda}</span> : <span className="visually-hidden">{leyenda}</span>}
       </span>
+    );
+  }
+
+  if (variante === 'superpuesto') {
+    return (
+      <div role="status" className={`cargando-superpuesto ${className}`.trim()}>
+        <IndicadorTransicion />
+        <span className="visually-hidden">{leyenda}</span>
+      </div>
     );
   }
 

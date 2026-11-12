@@ -1,17 +1,19 @@
 import { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import Cargando from '../components/Cargando.jsx';
 import FormularioRegistro from '../components/FormularioRegistro.jsx';
 import { RUTA_INICIAL_POR_ROL } from '../config/catalogos.js';
 import useSesion from '../hooks/useSesion.js';
 import { t } from '../i18n/index.js';
 import { login, registrar } from '../services/authService.js';
+import { rutaDeRetorno } from '../utils/retornoReserva.js';
 
 const VACIO = { nombre_completo: '', email: '', telefono: '', password: '' };
 
 export default function Registro() {
   const { autenticado, cargandoSesion, rol } = useSesion();
   const navegar = useNavigate();
+  const ubicacion = useLocation();
   const [valores, setValores] = useState(VACIO);
   const [aceptaPolitica, setAceptaPolitica] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -19,7 +21,7 @@ export default function Registro() {
   const [intentoSinAceptar, setIntentoSinAceptar] = useState(false);
 
   if (cargandoSesion) return <Cargando variante="pantalla" />;
-  if (autenticado) return <Navigate to={RUTA_INICIAL_POR_ROL[rol] ?? '/'} replace />;
+  if (autenticado) return <Navigate to={rutaDeRetorno(ubicacion.state?.desde) ?? RUTA_INICIAL_POR_ROL[rol] ?? '/'} replace />;
 
   const enviar = async (evento) => {
     evento.preventDefault();
@@ -45,7 +47,7 @@ export default function Registro() {
     try {
       await login(valores.email.trim(), valores.password);
     } catch {
-      navegar('/login', { replace: true, state: { aviso: t('registro.cuentaCreada') } });
+      navegar('/login', { replace: true, state: { ...ubicacion.state, aviso: t('registro.cuentaCreada') } });
     }
   };
 

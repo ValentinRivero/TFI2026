@@ -1,9 +1,11 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import Alerta from '../components/Alerta.jsx';
 import ClimaCard from '../components/ClimaCard.jsx';
 import EncabezadoCatalogo from '../components/EncabezadoCatalogo.jsx';
 import FiltrosCatalogo from '../components/FiltrosCatalogo.jsx';
 import ListaComplejos from '../components/ListaComplejos.jsx';
+import useAvisoDeNavegacion from '../hooks/useAvisoDeNavegacion.js';
 import useClima from '../hooks/useClima.js';
 import useConsulta from '../hooks/useConsulta.js';
 import useListaIncremental from '../hooks/useListaIncremental.js';
@@ -17,6 +19,7 @@ const LISTA_VACIA = Object.freeze([]);
  * reemplaza la entrada del historial, así "Atrás" vuelve a la pantalla anterior y no filtro por filtro.
  */
 export default function Catalogo() {
+  const { aviso, descartar: descartarAviso } = useAvisoDeNavegacion();
   const [parametros, setParametros] = useSearchParams();
   const consulta = parametros.toString();
   const filtros = useMemo(() => leerFiltros(new URLSearchParams(consulta)), [consulta]);
@@ -48,6 +51,7 @@ export default function Catalogo() {
 
   return (
     <div>
+      {aviso && <Alerta variante="success" onCerrar={descartarAviso}>{aviso}</Alerta>}
       <EncabezadoCatalogo>
         <ClimaCard
           {...clima}

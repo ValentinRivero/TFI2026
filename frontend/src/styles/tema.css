@@ -391,6 +391,27 @@ a {
   box-shadow: none;
 }
 
+/* Tarjeta de cancha elegible: el borde de 2px evita que la elegida se corra al resaltarse */
+.cancha-opcion {
+  --bs-card-border-width: 2px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.cancha-opcion:hover {
+  --bs-card-border-color: #86efac;
+}
+
+.cancha-opcion:focus-visible {
+  outline: 2px solid var(--tema-primario);
+  outline-offset: 2px;
+}
+
+.cancha-opcion.cancha-opcion-activa {
+  --bs-card-border-color: var(--tema-primario);
+  --bs-card-bg: var(--tema-primario-suave);
+}
+
 .superficie {
   background: var(--tema-superficie);
   border: 1px solid var(--tema-borde);
@@ -610,6 +631,37 @@ a {
   border-top-color: var(--tema-primario);
 }
 
+/* Carga entre pantallas: capa sobre el contenido (debajo de la barra superior), con demora de entrada */
+.cargando-superpuesto {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 20vh;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  animation: cargando-aparecer 0.2s ease 150ms forwards;
+}
+
+.cargando-transicion {
+  display: inline-block;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 4px solid var(--tema-borde);
+  border-top-color: var(--tema-primario);
+  border-radius: 50%;
+  animation: cargando-giro 0.8s linear infinite;
+}
+
+@keyframes cargando-aparecer {
+  to {
+    opacity: 1;
+  }
+}
+
 @keyframes cargando-giro {
   to {
     transform: rotate(360deg);
@@ -617,8 +669,13 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cargando-indicador {
+  .cargando-indicador,
+  .cargando-transicion {
     animation-duration: 2.4s;
+  }
+
+  .cargando-superpuesto {
+    animation-duration: 0.01s;
   }
 }
 
@@ -644,69 +701,238 @@ a {
   height: 2rem;
 }
 
-/* Secciones de la barra: bloques separados por líneas finas, con resalte al pasar y en la sección activa */
+/*
+ * Barra superior. En escritorio (>= lg) tiene tres zonas en una grilla: marca a la izquierda, secciones centradas en
+ * una botonera segmentada y sesión a la derecha. En móvil, el menú es un panel flotante anclado bajo el botón.
+ */
 .barra-superior {
   --barra-separador: rgba(255, 255, 255, 0.14);
+  --barra-resalte: rgba(255, 255, 255, 0.1);
+}
+
+.barra-superior .barra-secciones {
+  gap: 0.25rem;
 }
 
 .barra-superior .nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.2;
   color: #cbd5e1;
-  font-weight: 500;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--barra-separador);
-  transition: background-color 0.15s ease, color 0.15s ease;
+  font-weight: 600;
+  border: 1px solid transparent;
+  border-radius: var(--radio);
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
 }
 
 .barra-superior .nav-link:hover,
-.barra-superior .nav-link:focus {
+.barra-superior .nav-link:focus-visible {
   color: #ffffff;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--barra-resalte);
+}
+
+/* El verde es exclusivo del enlace de la ruta actual: foco, toque o clic en uno inactivo nunca lo pintan */
+.barra-superior .nav-link:not(.active):focus {
+  background: transparent;
+  border-color: transparent;
+  color: #cbd5e1;
+}
+
+.barra-superior .nav-link:not(.active):focus-visible,
+.barra-superior .nav-link:not(.active):hover {
+  background: var(--barra-resalte);
+  color: #ffffff;
+}
+
+.barra-superior .nav-link:not(.active):active {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.barra-superior .nav-link:active {
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .barra-superior .nav-link.active {
   color: #ffffff;
   background: var(--tema-primario);
+  border-color: #4ade80;
 }
 
 .barra-superior .nav-link.active:hover {
   background: var(--tema-primario-hover);
 }
 
+.barra-superior .barra-sesion {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.barra-superior .barra-usuario {
+  color: #ffffff;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+/* Botón del menú móvil: verde de marca, con tres barras que se transforman en una X al abrir */
+.barra-superior .barra-hamburguesa {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--toque-min);
+  min-height: var(--toque-min);
+  padding: 0;
+  border: 1px solid #4ade80;
+  border-radius: var(--radio);
+  background: var(--tema-primario);
+  transition: background-color 0.18s ease, transform 0.18s ease;
+}
+
+.barra-superior .barra-hamburguesa:hover {
+  background: var(--tema-primario-hover);
+}
+
+.barra-superior .barra-hamburguesa:active {
+  background: var(--tema-primario-profundo);
+  transform: scale(0.96);
+}
+
+.barra-superior .barra-hamburguesa:focus-visible {
+  box-shadow: none;
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.barra-hamburguesa-icono {
+  position: relative;
+  display: block;
+  width: 1.25rem;
+  height: 0.875rem;
+}
+
+.barra-hamburguesa-icono > span {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  border-radius: 2px;
+  background: #ffffff;
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.barra-hamburguesa-icono > span:nth-child(1) {
+  top: 0;
+}
+
+.barra-hamburguesa-icono > span:nth-child(2) {
+  top: calc(50% - 1px);
+}
+
+.barra-hamburguesa-icono > span:nth-child(3) {
+  bottom: 0;
+}
+
+.barra-hamburguesa[aria-expanded='true'] .barra-hamburguesa-icono > span:nth-child(1) {
+  transform: translateY(6px) rotate(45deg);
+}
+
+.barra-hamburguesa[aria-expanded='true'] .barra-hamburguesa-icono > span:nth-child(2) {
+  opacity: 0;
+  transform: scaleX(0);
+}
+
+.barra-hamburguesa[aria-expanded='true'] .barra-hamburguesa-icono > span:nth-child(3) {
+  transform: translateY(-6px) rotate(-45deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barra-superior .barra-hamburguesa,
+  .barra-hamburguesa-icono > span {
+    transition-duration: 0.01s;
+  }
+}
+
 @media (min-width: 992px) {
+  .barra-superior > .container,
+  .barra-superior > .container-fluid {
+    display: grid;
+    grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .barra-superior .navbar-brand {
+    justify-self: start;
+  }
+
+  /* El botón del menú móvil no existe en escritorio: si ocupara una celda de la grilla empujaría la sesión a otra fila. */
+  .barra-superior .barra-hamburguesa {
+    display: none !important;
+  }
+
+  /* El contenedor del menú no genera caja: sus dos hijos pasan a ser la zona central y la derecha de la grilla. */
+  .navbar.barra-superior .navbar-collapse.menu-principal {
+    display: contents !important;
+  }
+
   .barra-superior .barra-secciones {
-    border-left: 1px solid var(--barra-separador);
+    flex-direction: row;
+    justify-self: center;
+    padding: 0.25rem;
+    border: 1px solid var(--barra-separador);
+    border-radius: calc(var(--radio) + 4px);
+    background: rgba(255, 255, 255, 0.05);
   }
 
   .barra-superior .barra-secciones .nav-link {
-    padding: 0 1rem;
-    min-height: 3.25rem;
-    border-bottom: 0;
-    border-right: 1px solid var(--barra-separador);
+    min-height: 2.5rem;
+    padding: 0.35rem 1.1rem;
   }
 
   .barra-superior .barra-sesion {
-    margin-left: 1rem;
+    justify-self: end;
+    align-items: center;
+    white-space: nowrap;
   }
 }
 
-.barra-superior .navbar-toggler {
-  border-color: #475569;
-  min-width: var(--toque-min);
-  min-height: var(--toque-min);
-}
+@media (max-width: 991.98px) {
+  .barra-superior .menu-principal {
+    position: absolute;
+    top: calc(100% + 0.25rem);
+    right: 1rem;
+    z-index: 1040;
+    width: max-content;
+    min-width: 220px;
+    max-width: calc(100vw - 2rem);
+    padding: 0.5rem;
+    border: 1px solid var(--barra-separador);
+    border-radius: calc(var(--radio) + 4px);
+    background: var(--tema-pizarra-suave);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.4);
+  }
 
-.barra-superior .navbar-toggler-icon {
-  filter: invert(1);
-}
+  .barra-superior .barra-secciones {
+    flex-direction: column;
+  }
 
-.offcanvas.menu-movil {
-  background: var(--tema-pizarra);
-  color: #e2e8f0;
-  border: 0;
-}
+  .barra-superior .barra-secciones .nav-link {
+    min-height: var(--toque-min);
+    padding: 0.5rem 0.9rem;
+  }
 
-.menu-movil .btn-close {
-  filter: invert(1);
+  .barra-superior .barra-sesion {
+    flex-direction: column;
+    margin-top: 0.5rem;
+    padding: 0.75rem 0.5rem 0.25rem;
+    border-top: 1px solid var(--barra-separador);
+  }
+
+  .barra-superior .barra-sesion .btn {
+    min-height: var(--toque-min);
+  }
 }
 
 .pie-pagina {

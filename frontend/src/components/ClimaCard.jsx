@@ -39,7 +39,7 @@ function ActualDelClima({ actual }) {
 function DiaCompacto({ dia }) {
   return (
     <li className="clima-dia-compacto">
-      <span className="small text-secondary text-capitalize">{formatearDiaCorto(dia.fecha)}</span>
+      <span className="small text-secondary">{formatearDiaCorto(dia.fecha)}</span>
       <span className="num">
         {formatearTemperatura(dia.temperatura_max)}
         <span className="text-secondary"> / {formatearTemperatura(dia.temperatura_min)}</span>
@@ -78,7 +78,7 @@ function Detalle({ datos }) {
             {datos.pronostico.map((dia) => (
               <li key={dia.fecha} className="d-flex flex-wrap justify-content-between gap-2 py-1 border-top">
                 <span>
-                  <span className="text-capitalize">{formatearFechaLarga(dia.fecha)}</span>
+                  <span>{formatearFechaLarga(dia.fecha)}</span>
                   <span className="text-secondary"> · {dia.descripcion}</span>
                 </span>
                 <span className="num">

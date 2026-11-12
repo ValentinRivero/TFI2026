@@ -22,6 +22,22 @@ export const ESTADO_RESERVA = Object.freeze({
   7: entrada('Completada', ok),
 });
 
+export const RESERVA_SENADA = 3;
+
+/** Estados desde los que el jugador puede cancelar: pendiente de seña, confirmada y señada o pagada. */
+export const ESTADOS_RESERVA_CANCELABLES = Object.freeze([1, 2, 3]);
+
+/** Vistas de "Mis reservas" (parámetro `vigencia` de la API), con la clave de texto que las rotula. */
+export const VIGENCIA_RESERVA = Object.freeze({
+  PROXIMAS: 'proximas',
+  PASADAS: 'pasadas',
+});
+
+export const PESTANAS_RESERVA = Object.freeze([
+  Object.freeze({ valor: VIGENCIA_RESERVA.PROXIMAS, clave: 'misReservas.proximas' }),
+  Object.freeze({ valor: VIGENCIA_RESERVA.PASADAS, clave: 'misReservas.historial' }),
+]);
+
 export const ESTADO_CANCHA = Object.freeze({
   0: entrada('Baja', neutro),
   1: entrada('Activa', ok),
@@ -193,6 +209,7 @@ export const RUTA_INICIAL_POR_ROL = Object.freeze({
 /** Secciones de la navegación por rol. El control real lo hacen los backends: acá solo se decide qué se muestra. */
 export const ROLES_POR_SECCION = Object.freeze({
   misReservas: [ROL.JUGADOR, ROL.SUPERADMIN],
+  reservar: [ROL.JUGADOR, ROL.SUPERADMIN],
   panel: [ROL.OPERADOR, ROL.DUENO, ROL.SUPERADMIN],
   reportes: [ROL.DUENO, ROL.SUPERADMIN],
   sistema: [ROL.SUPERADMIN],
