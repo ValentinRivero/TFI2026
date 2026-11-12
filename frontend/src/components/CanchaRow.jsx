@@ -15,7 +15,7 @@ export default function CanchaRow({ cancha, puedeAdministrar, onHorarios, onEdit
   const columnas = 'gestionCanchas.columnas';
 
   return (
-    <tr>
+    <tr className={puedeAdministrar ? undefined : 'solo-lectura-datos'}>
       <CeldaTabla etiqueta={t(`${columnas}.nombre`)}>
         <span className="fw-semibold">{cancha.nombre}</span>
       </CeldaTabla>

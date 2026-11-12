@@ -47,7 +47,6 @@ export default function SeccionTurnos({
     <section aria-labelledby="detalle-turnos">
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
         <h2 id="detalle-turnos" className="h4 mb-0">{t('grilla.titulo')}</h2>
-        {enVivo.estado === 'conectado' && <span className="badge badge-ok">{t('grilla.enVivo')}</span>}
         {enVivo.estado === 'reconectando' && <span className="badge badge-aviso">{t('grilla.reconectando')}</span>}
       </div>
 

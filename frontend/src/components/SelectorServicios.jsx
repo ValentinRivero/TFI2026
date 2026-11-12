@@ -8,7 +8,7 @@ import Cargando from './Cargando.jsx';
 
 /**
  * Servicios que ofrece el complejo (presentación): una casilla por servicio del catálogo. Con `soloLectura` se ven
- * las casillas sin poder cambiarlas. El estado lo maneja `useServiciosComplejo`.
+ * atenuadas y deshabilitadas, sin foco ni selección. El estado lo maneja `useServiciosComplejo`.
  */
 export default function SelectorServicios({
   catalogo,
@@ -41,7 +41,7 @@ export default function SelectorServicios({
         <>
           {error && <Alerta variante="danger">{error.mensaje}</Alerta>}
           {guardado && <Alerta variante="success">{t('serviciosComplejo.guardado')}</Alerta>}
-          <fieldset className="row g-2 mb-3" disabled={soloLectura}>
+          <fieldset className={`row g-2 mb-3${soloLectura ? ' solo-lectura' : ''}`} disabled={soloLectura}>
             <legend className="visually-hidden">{t('serviciosComplejo.titulo')}</legend>
             {catalogo.map((servicio) => (
               <div key={servicio.id} className="col-sm-6 col-lg-4">
@@ -50,6 +50,8 @@ export default function SelectorServicios({
                   id={`servicio-${servicio.id}`}
                   label={servicio.nombre}
                   checked={elegidos.includes(servicio.id)}
+                  disabled={soloLectura}
+                  tabIndex={soloLectura ? -1 : undefined}
                   onChange={() => onAlternar(servicio.id)}
                 />
               </div>

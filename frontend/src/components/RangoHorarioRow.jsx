@@ -14,7 +14,8 @@ export default function RangoHorarioRow({ fila, errores = {}, descripcion, soloL
       <Form.Control
         size="sm"
         value={fila[campo]}
-        readOnly={soloLectura}
+        disabled={soloLectura}
+        tabIndex={soloLectura ? -1 : undefined}
         isInvalid={Boolean(errores[campo])}
         aria-label={`${etiqueta} - ${descripcion}`}
         onChange={(evento) => onCambiar(fila.clave, campo, evento.target.value)}

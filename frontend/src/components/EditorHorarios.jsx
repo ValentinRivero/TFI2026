@@ -40,7 +40,7 @@ export default function EditorHorarios({ cancha, editor, soloLectura, onVolver }
           {guardado && <Alerta variante="success">{t('horarios.guardado')}</Alerta>}
           {!soloLectura && <p className="small text-secondary">{t('horarios.ayudaPrecio')}</p>}
 
-          <div className="grilla-dias mb-4">
+          <div className={`grilla-dias mb-4${soloLectura ? ' solo-lectura' : ''}`}>
             {agruparPorDia(filas).map(({ dia, filas: delDia }) => (
               <DiaHorarios
                 key={dia}
