@@ -9,7 +9,8 @@
 # LOGS Y AUDITORÍA
 # ==========================================
 *.log
-security.log
+security.log*
+logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -32,6 +33,7 @@ staticfiles/
 media/
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
 
 # ==========================================
@@ -39,8 +41,13 @@ htmlcov/
 # ==========================================
 node_modules/
 dist/
+dist-ssr/
 build/
 .npm
+.vite/
+.vitest/
+.eslintcache
+*.tsbuildinfo
 coverage/
 
 # ==========================================

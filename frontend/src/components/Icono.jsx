@@ -23,6 +23,8 @@ const TRAZOS = {
   facebook: 'M14 20v-7.5h2.5l.5-3h-3V7.7c0-.9.3-1.5 1.6-1.5H17V3.6c-.3-.1-1.2-.2-2.2-.2C12.5 3.4 11 4.8 11 7.2v2.3H8.5v3H11V20h3z',
   twitter: 'M5 5l14 14M19 5L5 19',
   mapa: 'M9 4L3.5 6v14L9 18l6 2 5.5-2V4L15 6 9 4zM9 4v14M15 6v14',
+  descargar: 'M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14',
+  compartir: 'M12 15V4M8.5 7.5L12 4l3.5 3.5M8 10H6a1 1 0 00-1 1v8a1 1 0 001 1h12a1 1 0 001-1v-8a1 1 0 00-1-1h-2',
 };
 
 export default function Icono({ nombre, tamano = 20, titulo, className = '' }) {

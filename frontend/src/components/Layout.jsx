@@ -6,12 +6,14 @@ import Navbar from 'react-bootstrap/Navbar';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ETIQUETA_ROL, puedeVer } from '../config/catalogos.js';
 import useDesplazado from '../hooks/useDesplazado.js';
+import useInstalacionPwa from '../hooks/useInstalacionPwa.js';
 import useSesion from '../hooks/useSesion.js';
 import { t } from '../i18n/index.js';
 import { enlaceActivo } from '../utils/navegacion.js';
 import { logout } from '../services/authService.js';
 import BotonAccion from './BotonAccion.jsx';
 import Cargando from './Cargando.jsx';
+import BannerInstalarPWA from './BannerInstalarPWA.jsx';
 import PiePagina from './PiePagina.jsx';
 
 // Enlaces de la sesión según la sección y el rol: `puedeVer` decide qué se muestra; los backends deciden qué se permite.
@@ -41,6 +43,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
   const [menuAbierto, setMenuAbierto] = useState(false);
   const barra = useRef(null);
   const desplazado = useDesplazado();
+  const pwa = useInstalacionPwa();
 
   const seccionesVisibles = autenticado ? SECCIONES_DE_SESION.filter(({ seccion }) => puedeVer(seccion, rol)) : [];
   // El enlace activo sale de la ruta actual y es uno solo: no depende del foco ni del historial del navegador.
@@ -147,6 +150,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
       </main>
 
       <PiePagina ancho={ancho} />
+      <BannerInstalarPWA modo={pwa.modo} onInstalar={pwa.instalar} onCerrar={pwa.cerrar} />
     </div>
   );
 }

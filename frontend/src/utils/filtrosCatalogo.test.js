@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest';
-import { FILTROS_VACIOS, aParametros, contarFiltros, hayFiltros, leerFiltros } from './filtrosCatalogo.js';
+import {
+  FILTROS_VACIOS, aParametros, conVista, contarFiltros, hayFiltros, leerFiltros, leerVista,
+} from './filtrosCatalogo.js';
 
 const desde = (consulta) => leerFiltros(new URLSearchParams(consulta));
 
@@ -70,5 +72,26 @@ describe('contarFiltros y hayFiltros', () => {
 
   test('una búsqueda de solo espacios no cuenta', () => {
     expect(contarFiltros({ ...FILTROS_VACIOS, search: '   ' })).toBe(0);
+  });
+});
+
+describe('leerVista y conVista', () => {
+  test('la lista es la vista de origen y solo ?vista=mapa abre el mapa', () => {
+    expect(leerVista(new URLSearchParams(''))).toBe('lista');
+    expect(leerVista(new URLSearchParams('vista=otra'))).toBe('lista');
+    expect(leerVista(new URLSearchParams('vista=mapa'))).toBe('mapa');
+  });
+
+  test('el mapa viaja en la URL junto a los filtros y la lista no escribe nada', () => {
+    const filtros = { ...FILTROS_VACIOS, deporte: '2' };
+
+    expect(conVista(aParametros(filtros), 'mapa').toString()).toBe('deporte=2&vista=mapa');
+    expect(conVista(aParametros(filtros), 'lista').toString()).toBe('deporte=2');
+  });
+
+  test('la vista no altera los filtros leídos', () => {
+    const parametros = conVista(aParametros({ ...FILTROS_VACIOS, search: 'goya' }), 'mapa');
+
+    expect(leerFiltros(parametros)).toEqual({ ...FILTROS_VACIOS, search: 'goya' });
   });
 });

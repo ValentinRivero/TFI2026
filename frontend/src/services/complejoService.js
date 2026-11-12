@@ -15,6 +15,12 @@ export const listarComplejos = async (filtros, pagina, signal) => {
   return data;
 };
 
+/** Puntos del mapa con los mismos filtros del catálogo: lista completa y sin paginar, con tope en el backend. */
+export const listarMarcadores = async (filtros, signal) => {
+  const { data } = await apiDjango.get('/api/complejos/marcadores/', { params: aParametros(filtros), signal });
+  return comoLista(data);
+};
+
 export const obtenerComplejo = async (id, signal) => {
   const { data } = await apiDjango.get(`/api/complejos/${encodeURIComponent(id)}/`, { signal });
   return data;

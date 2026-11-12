@@ -255,6 +255,14 @@ export const ORDENES_CATALOGO = Object.freeze([
   Object.freeze({ valor: '-precio_desde', clave: 'filtros.ordenPrecioDesc' }),
 ]);
 
+/** Vistas del catálogo: la lista de tarjetas (por defecto) y el mapa. `valor` es el que viaja en `?vista=`. */
+export const VISTA_LISTA = 'lista';
+export const VISTA_MAPA = 'mapa';
+export const VISTAS_CATALOGO = Object.freeze([
+  Object.freeze({ valor: VISTA_LISTA, clave: 'catalogo.vistaLista', icono: 'menu' }),
+  Object.freeze({ valor: VISTA_MAPA, clave: 'catalogo.vistaMapa', icono: 'mapa' }),
+]);
+
 export const BLOQUE_LIBRE = 'LIBRE';
 
 /** Estados de un bloque de la grilla, con el nombre del casillero que los dibuja en `tema.css`. */

@@ -11,13 +11,14 @@ export const ENTORNO = Object.freeze({
   urlNode: entorno.VITE_API_NODE_URL ?? 'http://localhost:3000',
   urlWs: entorno.VITE_WS_URL ?? 'ws://localhost:8000',
   desarrollo: entorno.DEV,
+  produccion: entorno.PROD,
 });
 
 export const PARAMETROS = Object.freeze({
   idioma: 'es',
-  // Versión de la aplicación que muestra el pie de página: `0.<fase>.<ítem>` del plan (6.3 -> 0.6.3) hasta el despliegue,
+  // Versión de la aplicación que muestra el pie de página: `0.<fase>.<ítem>` del plan (6.4 -> 0.6.4) hasta el despliegue,
   // cuando pasa a 1.0.0 (CLAUDE.md §8.8).
-  app: Object.freeze({ version: '0.6.3' }),
+  app: Object.freeze({ version: '0.6.4' }),
   formato: Object.freeze({ locale: 'es-AR', moneda: 'ARS' }),
   // Espejo de PAGE_SIZE de Django y del límite por defecto de Node.
   paginacion: Object.freeze({ tamanio: 20, botones: 5 }),
@@ -28,13 +29,58 @@ export const PARAMETROS = Object.freeze({
     jitter: 0.3,
     agruparEventosMs: 1_000,
   }),
+  // El servicio opera solo en Goya: `limites` ([sudoeste, noreste]) y `zoomMinimo` impiden alejarse del área urbana y
+  // periurbana. `zoomEtiquetasVisibles` es el nivel desde el cual el nombre de cada complejo queda siempre visible.
   mapa: Object.freeze({
     centro: [-29.14, -59.26],
     zoom: 13,
-    zoomMinimo: 11,
-    zoomMaximo: 18,
-    teselas: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    atribucion: '© OpenStreetMap contributors',
+    zoomMinimo: 13,
+    zoomMaximo: 19,
+    limites: Object.freeze([Object.freeze([-29.22, -59.34]), Object.freeze([-29.07, -59.18])]),
+    viscosidadLimites: 0.9,
+    zoomEtiquetasVisibles: 15,
+    // Con un solo complejo (o muy juntos) el ajuste de la vista no se acerca más que este nivel.
+    zoomAjusteMaximo: 16,
+    margenAjustePx: 40,
+    anchoPopupPx: 232,
+    capaInicial: 'mapa',
+    // Cada capa es una pila de teselas (la última queda arriba) con las atribuciones que exigen sus proveedores. Todas
+    // se piden sin clave. `zoomNativoMaximo` es el último nivel con datos reales en Goya: más cerca se amplía ese nivel
+    // (con imágenes satelitales, el siguiente muestra "Map data not yet available").
+    capas: Object.freeze({
+      mapa: Object.freeze({
+        valor: 'mapa',
+        clave: 'mapa.capaMapa',
+        teselas: Object.freeze([
+          Object.freeze({
+            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+            zoomNativoMaximo: 19,
+          }),
+        ]),
+        atribuciones: Object.freeze([
+          Object.freeze({ texto: 'Tiles © Esri', url: 'https://www.esri.com/', licencia: 'Esri World Street Map' }),
+          Object.freeze({ texto: '© OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright', licencia: 'ODbL' }),
+        ]),
+      }),
+      satelite: Object.freeze({
+        valor: 'satelite',
+        clave: 'mapa.capaSatelite',
+        teselas: Object.freeze([
+          Object.freeze({
+            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            zoomNativoMaximo: 17,
+          }),
+          Object.freeze({
+            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+            zoomNativoMaximo: 19,
+          }),
+        ]),
+        atribuciones: Object.freeze([
+          Object.freeze({ texto: 'Tiles © Esri', url: 'https://www.esri.com/', licencia: 'Esri World Imagery' }),
+          Object.freeze({ texto: '© OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright', licencia: 'ODbL' }),
+        ]),
+      }),
+    }),
   }),
   catalogo: Object.freeze({ busquedaDemoraMs: 400, serviciosEnTarjeta: 4 }),
   // Fuente del pronóstico: su licencia (CC BY 4.0) exige mostrarla junto al clima.
@@ -88,5 +134,5 @@ export const PARAMETROS = Object.freeze({
   // Espejo de RANGO_MAXIMO_DIAS de Django y de Node (rango máximo de un reporte, en días, ambos extremos incluidos).
   reportes: Object.freeze({ rangoMaximoDias: 366 }),
   password: Object.freeze({ largoMinimo: 8 }),
-  pwa: Object.freeze({ claveBannerCerrado: 'talibre.bannerPwaCerrado' }),
+  pwa: Object.freeze({ claveBannerCerrado: 'talibre.bannerPwaCerrado', rutaServiceWorker: '/sw.js' }),
 });

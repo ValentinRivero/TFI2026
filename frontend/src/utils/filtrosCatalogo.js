@@ -1,4 +1,4 @@
-import { COBERTURA, ORDENES_CATALOGO } from '../config/catalogos.js';
+import { COBERTURA, ORDENES_CATALOGO, VISTA_LISTA, VISTA_MAPA } from '../config/catalogos.js';
 import { PARAMETROS } from '../config/parametros.js';
 
 export const FILTROS_VACIOS = Object.freeze({
@@ -49,3 +49,12 @@ export const contarFiltros = (filtros) => (
 
 /** Hay algo para limpiar: algún filtro o un orden distinto del de origen. */
 export const hayFiltros = (filtros) => contarFiltros(filtros) > 0 || Boolean(filtros.ordering);
+
+/** Vista elegida en la URL: el mapa solo si lo pide `?vista=mapa`; cualquier otro valor es la lista. */
+export const leerVista = (parametros) => (parametros.get('vista') === VISTA_MAPA ? VISTA_MAPA : VISTA_LISTA);
+
+/** Parámetros de la URL con la vista agregada; la lista es la vista de origen y no se escribe. */
+export const conVista = (parametros, vista) => {
+  if (vista === VISTA_MAPA) parametros.set('vista', VISTA_MAPA);
+  return parametros;
+};
