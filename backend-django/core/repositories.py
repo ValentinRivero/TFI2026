@@ -1,8 +1,11 @@
-from datetime import date
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 
 from django.db.models import (
     Case,
     CharField,
+    Count,
+    DecimalField,
     Exists,
     ExpressionWrapper,
     F,
@@ -12,6 +15,7 @@ from django.db.models import (
     Prefetch,
     Q,
     Subquery,
+    Sum,
     Value,
     When,
 )
@@ -51,6 +55,16 @@ ESTADOS_RESERVA_OCUPANTES = (
 # Reservas que todavía se van a jugar y pueden necesitar una decisión del complejo o del titular.
 ESTADOS_RESERVA_A_RESOLVER = (EstadoReserva.PENDIENTE, EstadoReserva.CONFIRMADA, EstadoReserva.SENADA)
 ESTADOS_TURNO_FIJO_ACTIVOS = (EstadoTurnoFijo.VIGENTE, EstadoTurnoFijo.PAUSADO)
+ESTADOS_RESERVA_RECAUDADOS = (EstadoReserva.CONFIRMADA, EstadoReserva.SENADA, EstadoReserva.COMPLETADA)
+CONTEOS_POR_ESTADO = {
+    'pendientes': EstadoReserva.PENDIENTE,
+    'confirmadas': EstadoReserva.CONFIRMADA,
+    'senadas': EstadoReserva.SENADA,
+    'canceladas_jugador': EstadoReserva.CANCELADA_JUGADOR,
+    'canceladas_complejo': EstadoReserva.CANCELADA_COMPLEJO,
+    'ausentes': EstadoReserva.AUSENTE,
+    'completadas': EstadoReserva.COMPLETADA,
+}
 
 
 def _minutos_del_dia(campo):
@@ -309,6 +323,11 @@ class CatalogoRepository:
     def servicios_activos():
         return Servicio.objects.filter(estado=EstadoRegistro.ACTIVO).order_by('nombre')
 
+    @staticmethod
+    def existe_deporte(deporte_id):
+        # Incluye los dados de baja: sus reservas siguen formando parte del historial de los reportes.
+        return Deporte.objects.filter(id=deporte_id).exists()
+
 
 class ComplejoServicioRepository:
     @staticmethod
@@ -341,6 +360,11 @@ class CanchaRepository:
     @staticmethod
     def bloquear(cancha_id):
         return Cancha.objects.select_for_update(of=('self',)).get(id=cancha_id)
+
+    @staticmethod
+    def pertenece_a_complejo(cancha_id, complejo_id):
+        # Incluye las dadas de baja: sus reservas siguen formando parte del historial de los reportes.
+        return Cancha.objects.filter(id=cancha_id, complejo_id=complejo_id).exists()
 
     @staticmethod
     def existe_nombre(complejo_id, nombre, excluir_id=None):
@@ -454,6 +478,15 @@ class ExcepcionHorariaRepository:
             ExcepcionHoraria.objects.filter(
                 complejo_id=complejo_id, estado=EstadoRegistro.ACTIVO, fecha_inicio__lte=fecha, fecha_fin__gte=fecha,
             ).values('cancha_id', 'es_dia_completo', 'hora_inicio', 'hora_fin', 'tipo_motivo')
+        )
+
+    @staticmethod
+    def activas_en_rango(complejo_id, desde, hasta):
+        """Excepciones activas del complejo que tocan algún día del rango, sin texto libre."""
+        return list(
+            ExcepcionHoraria.objects.filter(
+                complejo_id=complejo_id, estado=EstadoRegistro.ACTIVO, fecha_inicio__lte=hasta, fecha_fin__gte=desde,
+            ).values('cancha_id', 'fecha_inicio', 'fecha_fin', 'es_dia_completo', 'hora_inicio', 'hora_fin')
         )
 
     @staticmethod
@@ -849,3 +882,87 @@ class AuditoriaRepository:
             .filter(filtros)
             .order_by('-fecha_creacion', '-id')
         )
+
+
+class ReporteRepository:
+    _MONTO = DecimalField(max_digits=14, decimal_places=2)
+
+    @staticmethod
+    def _rango_del_criterio(criterio, desde, hasta):
+        if criterio == 'fecha_turno':
+            return {'fecha_turno__range': (desde, hasta)}
+        # Límites en hora local y semiabiertos en lugar de `__date`, para que la consulta use el índice del campo.
+        zona = timezone.get_current_timezone()
+        return {
+            f'{criterio}__gte': datetime.combine(desde, time.min, tzinfo=zona),
+            f'{criterio}__lt': datetime.combine(hasta + timedelta(days=1), time.min, tzinfo=zona),
+        }
+
+    @staticmethod
+    def reservas(filtros):
+        reservas = Reserva.objects.filter(
+            cancha__complejo_id=filtros['complejo'],
+            **ReporteRepository._rango_del_criterio(
+                filtros['criterio'], filtros['fecha_desde'], filtros['fecha_hasta'],
+            ),
+        )
+        if filtros['cancha_id'] is not None:
+            reservas = reservas.filter(cancha_id=filtros['cancha_id'])
+        if filtros['deporte_id'] is not None:
+            reservas = reservas.filter(cancha__deporte_id=filtros['deporte_id'])
+        return reservas
+
+    @staticmethod
+    def canchas(filtros):
+        canchas = Cancha.objects.filter(complejo_id=filtros['complejo'])
+        if filtros['cancha_id'] is not None:
+            canchas = canchas.filter(id=filtros['cancha_id'])
+        if filtros['deporte_id'] is not None:
+            canchas = canchas.filter(deporte_id=filtros['deporte_id'])
+        return list(
+            canchas.order_by('nombre', 'id').values('id', 'nombre', 'estado', 'duracion_turno_min', 'deporte__estado')
+        )
+
+    @staticmethod
+    def horarios_activos(cancha_ids):
+        return list(
+            HorarioApertura.objects.filter(cancha_id__in=cancha_ids, estado=EstadoRegistro.ACTIVO)
+            .values('cancha_id', 'dia_semana', 'hora_apertura', 'hora_cierre')
+        )
+
+    @staticmethod
+    def reservas_ocupantes(filtros):
+        return list(
+            ReporteRepository.reservas(filtros).filter(estado__in=ESTADOS_RESERVA_OCUPANTES)
+            .values('cancha_id', 'fecha_turno', 'hora_inicio', 'hora_fin')
+        )
+
+    @staticmethod
+    def ranking_horarios(filtros, limite):
+        """Horarios de inicio con más reservas ocupantes, sumando todas las canchas; a igual cantidad, el más temprano."""
+        return list(
+            ReporteRepository.reservas(filtros).filter(estado__in=ESTADOS_RESERVA_OCUPANTES)
+            .values('hora_inicio')
+            .annotate(reservas=Count('id'))
+            .order_by('-reservas', 'hora_inicio')[:limite]
+        )
+
+    @staticmethod
+    def resumen(filtros):
+        """Recaudación y conteo por estado en un único `aggregate` sobre las reservas filtradas."""
+        cero = Value(Decimal('0.00'), output_field=ReporteRepository._MONTO)
+
+        def suma(condicion):
+            return Coalesce(Sum('precio_acordado', filter=condicion, output_field=ReporteRepository._MONTO), cero)
+
+        totales = ReporteRepository.reservas(filtros).aggregate(
+            recaudacion_total=suma(Q(estado__in=ESTADOS_RESERVA_RECAUDADOS)),
+            recaudacion_senada=suma(Q(estado=EstadoReserva.SENADA)),
+            **{clave: Count('id', filter=Q(estado=estado)) for clave, estado in CONTEOS_POR_ESTADO.items()},
+        )
+        conteos = {clave: totales[clave] for clave in CONTEOS_POR_ESTADO}
+        conteos['canceladas_total'] = conteos['canceladas_jugador'] + conteos['canceladas_complejo']
+        return {
+            'recaudacion': {'total': totales['recaudacion_total'], 'senada': totales['recaudacion_senada']},
+            'conteos': conteos,
+        }

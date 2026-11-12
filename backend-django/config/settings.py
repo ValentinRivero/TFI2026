@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'django_filters',
+    'graphene_django',
     'channels',
     'core',
 ]
@@ -169,6 +170,7 @@ REST_FRAMEWORK = {
         'registro': os.environ.get('THROTTLE_REGISTRO', '10/hour'),
         'reservas': '20/hour',
         'grilla': '300/minute',
+        'graphql': os.environ.get('THROTTLE_GRAPHQL', '120/minute'),
     },
     'EXCEPTION_HANDLER': 'core.exceptions.custom_exception_handler',
 }
@@ -177,6 +179,10 @@ if DEBUG:
     REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'] += ('rest_framework.renderers.BrowsableAPIRenderer',)
     # JWT queda primero para que una petición sin credenciales reciba 401 y no 403.
     REST_FRAMEWORK['DEFAULT_AUTHENTICATION_CLASSES'] += ('rest_framework.authentication.SessionAuthentication',)
+
+GRAPHENE = {
+    'SCHEMA': 'config.schema.schema',
+}
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(os.environ.get('JWT_ACCESS_MINUTOS', '30'))),
@@ -202,6 +208,11 @@ CORS_ALLOWED_ORIGINS = _env_lista(
 CSRF_TRUSTED_ORIGINS = _env_lista('CSRF_TRUSTED_ORIGINS', ','.join(CORS_ALLOWED_ORIGINS))
 # La cookie HttpOnly del refresh solo viaja en peticiones cross-origin con credenciales habilitadas.
 CORS_ALLOW_CREDENTIALS = True
+
+# backend-node recibe los avisos de servidor por su ruta interna, autenticada con una clave compartida. Sin estas
+# variables (o con una clave de menos de 32 caracteres) los avisos quedan en el log y nada falla.
+NODE_API_URL = os.environ.get('NODE_API_URL', '').strip()
+INTERNAL_API_KEY = os.environ.get('INTERNAL_API_KEY', '').strip()
 
 REDIS_URL = os.environ.get('REDIS_URL', '').strip()
 

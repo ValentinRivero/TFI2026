@@ -74,3 +74,32 @@ jobs:
 
       - name: Ejecutar pruebas de concurrencia sobre PostgreSQL
         run: pytest core/tests/test_concurrencia.py --ds=config.settings_concurrencia -v -rs
+
+    
+  # La suite de Node simula Django, Open-Meteo y MongoDB: no necesita servicios ni secretos, cada test fija su
+  # propia configuración y corre en orden aleatorio para detectar dependencias entre tests.
+  node:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend-node
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: backend-node/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Auditar dependencias de producción
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Verificar sintaxis del punto de entrada
+        run: node --check server.js
+
+      - name: Ejecutar tests con cobertura
+        run: npm run test:cobertura

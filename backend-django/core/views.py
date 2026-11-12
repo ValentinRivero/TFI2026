@@ -37,6 +37,7 @@ from .serializers import (
     FechaTurnoFijoSerializer,
     FiltroAuditoriaSerializer,
     FiltroGrillaSerializer,
+    FiltroReporteSerializer,
     GrillaSerializer,
     HorarioAperturaSerializer,
     LogAuditoriaSerializer,
@@ -68,6 +69,7 @@ from .services import (
     HorarioAperturaService,
     OperadorService,
     RbacService,
+    ReporteService,
     ReservaService,
     SesionService,
     TurnoFijoService,
@@ -335,6 +337,7 @@ class ComplejoViewSet(AccionesPublicasMixin, mixins.ListModelMixin, mixins.Retri
     permission_classes = [TienePermisoRBAC, AdministraComplejo]
     permisos_requeridos = {
         'administrados': ('ver_panel_complejo',),
+        'acceso': ('ver_panel_complejo',),
         'partial_update': ('configurar_complejo',),
         'servicios': ('configurar_complejo',),
         'operadores': ('ver_operadores',),
@@ -393,6 +396,14 @@ class ComplejoViewSet(AccionesPublicasMixin, mixins.ListModelMixin, mixins.Retri
     @action(detail=False, methods=['get'])
     def administrados(self, request):
         return self._respuesta_paginada(self.get_queryset(), ComplejoAdminSerializer)
+
+    @action(detail=True, methods=['get'])
+    def acceso(self, request, pk=None):
+        """
+        Confirma a backend-node, que reenvía el token del usuario, que este administra el complejo. Aplica la misma
+        regla que el resto del panel en una consulta, en lugar de recorrer las páginas de `administrados`.
+        """
+        return Response({'complejo': self.get_object().id})
 
     @action(detail=True, methods=['put'])
     def servicios(self, request, pk=None):
@@ -715,6 +726,16 @@ class TurnoFijoViewSet(AccesoComplejoMixin, viewsets.ModelViewSet):
             entrada.validated_data['accion'],
         )
         return Response(ReservaAgendaSerializer(reserva).data, status=status.HTTP_201_CREATED)
+
+
+class ReporteDashboardView(APIView):
+    permission_classes = [TienePermisoRBAC]
+    permisos_requeridos = {'GET': ('ver_reportes',)}
+
+    def get(self, request):
+        filtros = FiltroReporteSerializer(data=request.query_params)
+        filtros.is_valid(raise_exception=True)
+        return Response(ReporteService.dashboard(request.user, filtros.validated_data))
 
 
 class ContratoViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):

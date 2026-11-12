@@ -41,6 +41,7 @@ node_modules/
 dist/
 build/
 .npm
+coverage/
 
 # ==========================================
 # ENTORNOS DE DESARROLLO Y SISTEMA

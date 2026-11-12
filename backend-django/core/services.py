@@ -20,6 +20,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from . import node_client
 from .exceptions import ConflictoConConfirmacion, ConflictoNegocio, ServicioNoDisponible
 from .models import (
     AlcanceExcepcion,
@@ -46,6 +47,7 @@ from .repositories import (
     GrillaRepository,
     HorarioAperturaRepository,
     PermisoRepository,
+    ReporteRepository,
     ReservaRepository,
     RolRepository,
     SesionRepository,
@@ -1404,6 +1406,50 @@ class ReservaService:
         )
 
     @staticmethod
+    def _turno(reserva):
+        return (
+            f'{reserva.cancha.nombre}, el {reserva.fecha_turno:%d/%m/%Y} '
+            f'de {reserva.hora_inicio:%H:%M} a {reserva.hora_fin:%H:%M}'
+        )
+
+    @staticmethod
+    def _avisar_reserva_realizada(reserva):
+        """
+        Una reserva web registra el evento "reserva realizada" en backend-node y avisa al panel del complejo. El
+        mensaje identifica el turno, no al jugador: su id viaja solo en el evento, que el panel no expone.
+        """
+        AvisoComplejoService.programar(
+            reserva.cancha.complejo_id, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_NORMAL,
+            f'Nueva reserva web id {reserva.pk}: {ReservaService._turno(reserva)}. Pendiente de seña.',
+            {'reserva': reserva.pk},
+            evento={
+                'tipo_evento': TIPO_EVENTO_RESERVA_REALIZADA,
+                'usuario_id': reserva.usuario_id,
+                'metadata': {
+                    'reserva_id': reserva.pk, 'cancha_id': reserva.cancha_id,
+                    'fecha_turno': reserva.fecha_turno.isoformat(), 'hora_inicio': f'{reserva.hora_inicio:%H:%M}',
+                },
+            },
+        )
+
+    @staticmethod
+    def _avisar_cancelacion_al_titular(reserva):
+        """
+        El titular de una reserva cancelada por el complejo recibe un aviso urgente en su bandeja propia. Una reserva
+        manual no tiene cuenta a la que avisar, y una cuenta dada de baja ya no tiene bandeja.
+        """
+        usuario = reserva.usuario
+        if usuario is None or usuario.estado == EstadoUsuario.BAJA:
+            return
+        AvisoComplejoService.programar(
+            None, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_URGENTE,
+            f'{reserva.cancha.complejo.nombre} canceló tu reserva id {reserva.pk} ({ReservaService._turno(reserva)}). '
+            'Si habías pagado una seña, comunicate con el complejo.',
+            {'reserva': reserva.pk},
+            usuario_id=usuario.pk,
+        )
+
+    @staticmethod
     def _guardar(operacion):
         try:
             with transaction.atomic():
@@ -1463,6 +1509,9 @@ class ReservaService:
                 precio_acordado=precio, estado=EstadoReserva.PENDIENTE, **cliente,
             ))
             ReservaService._difundir(reserva)
+            # El personal no se avisa a sí mismo de una reserva que acaba de cargar.
+            if not manual:
+                ReservaService._avisar_reserva_realizada(reserva)
 
         ReservaService._auditar(TipoEventoAuditoria.RESERVA_CREADA, 'Alta de reserva', reserva, actor, ip_origen)
         return reserva
@@ -1525,6 +1574,7 @@ class ReservaService:
                 raise NotFound()
             ReservaService._validar_cancelable(reserva)
             cambio = ReservaService._cancelar(reserva, EstadoReserva.CANCELADA_COMPLEJO)
+            ReservaService._avisar_cancelacion_al_titular(reserva)
 
         ReservaService._auditar(
             TipoEventoAuditoria.RESERVA_CANCELADA, 'Cancelación de reserva por el complejo',
@@ -1781,7 +1831,7 @@ class TurnoFijoService:
             AvisoComplejoService.programar(
                 excepcion.complejo_id, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_URGENTE,
                 f'La excepción id {excepcion.pk} deja {_plural(cantidad, "fecha", "fechas")} de turnos fijos en espera '
-                f'(turnos fijos {afectados}). Indicá desde la agenda si cada fecha se mantiene o se cancela.',
+                f'(turnos fijos {_lista_de_ids(afectados)}). Indicá desde la agenda si cada fecha se mantiene o se cancela.',
                 {'excepcion': excepcion.pk, 'turnos_fijos': afectados},
             )
 
@@ -2073,24 +2123,50 @@ class ConflictoOperatoriaService:
 
 
 CATEGORIA_AVISO_RESERVAS = 1
+# Tipo de la colección `eventos` de backend-node que solo emite Django: las visitas y consultas llegan del frontend.
+TIPO_EVENTO_RESERVA_REALIZADA = 3
 PRIORIDAD_AVISO_NORMAL = 1
 PRIORIDAD_AVISO_URGENTE = 2
 
 logger_avisos = logging.getLogger('core.avisos')
 
 
+MAXIMO_MENSAJE_AVISO = 280
+MAXIMO_IDS_EN_AVISO = 10
+CAMPOS_DEL_AVISO_PARA_NODE = ('complejo_id', 'usuario_id', 'categoria', 'prioridad', 'mensaje', 'evento')
+
+
+def _lista_de_ids(ids):
+    """Ids para el texto de un aviso: los primeros diez y la cantidad restante, para no superar el largo de Node."""
+    if len(ids) <= MAXIMO_IDS_EN_AVISO:
+        return str(list(ids))
+    visibles = ', '.join(str(identificador) for identificador in ids[:MAXIMO_IDS_EN_AVISO])
+    return f'[{visibles}, …] y {len(ids) - MAXIMO_IDS_EN_AVISO} más'
+
+
+def _destino(aviso):
+    if aviso.get('complejo_id') is not None:
+        return f'el complejo {aviso["complejo_id"]}'
+    return f'el usuario {aviso["usuario_id"]}'
+
+
 class AvisoComplejoService:
     """
-    Avisos para el panel de un complejo, con la categoría y la prioridad de la colección `notificaciones` de
-    backend-node. Se entregan después del commit y nunca revierten la operación que los originó. El mensaje no
-    lleva datos personales: solo cantidades e ids de reservas o turnos.
+    Avisos de servidor con la categoría y la prioridad de la colección `notificaciones` de backend-node: para el
+    panel de un complejo o, con `usuario_id`, para la bandeja propia de un usuario. Pueden llevar el evento que los
+    originó (una reserva realizada). Se entregan después del commit y nunca revierten la operación que los originó.
+    El mensaje no lleva datos personales: solo cantidades e ids de reservas o turnos.
     """
 
     @staticmethod
-    def programar(complejo_id, categoria, prioridad, mensaje, referencias=None):
+    def programar(complejo_id, categoria, prioridad, mensaje, referencias=None, *, usuario_id=None, evento=None):
+        if complejo_id is None and usuario_id is None:
+            raise ValueError('Un aviso necesita un complejo o un usuario destinatario.')
+        if len(mensaje) > MAXIMO_MENSAJE_AVISO:
+            mensaje = f'{mensaje[:MAXIMO_MENSAJE_AVISO - 1]}…'
         aviso = {
-            'complejo_id': complejo_id, 'categoria': categoria, 'prioridad': prioridad, 'mensaje': mensaje,
-            'referencias': referencias or {},
+            'complejo_id': complejo_id, 'usuario_id': usuario_id, 'categoria': categoria, 'prioridad': prioridad,
+            'mensaje': mensaje, 'referencias': referencias or {}, 'evento': evento,
         }
         # robust: una falla al entregar se registra y no convierte en error una operación ya confirmada.
         transaction.on_commit(lambda: AvisoComplejoService.entregar(aviso), robust=True)
@@ -2098,14 +2174,22 @@ class AvisoComplejoService:
     @staticmethod
     def entregar(aviso):
         """
-        Punto único de entrega. La ruta interna de backend-node se conecta en el punto 5.7; hasta entonces el aviso
-        queda registrado en el log del servidor.
+        Un único intento por la ruta interna de backend-node, con tiempo máximo. Si no se entrega, el aviso completo
+        queda en el log (`core.avisos`) para reenviarlo a mano: no tiene datos personales y la clave no se registra.
         """
-        logger_avisos.warning(
-            'Aviso para el complejo %s sin entregar (la mensajería de backend-node aún no está conectada): '
-            'categoría %s, prioridad %s. %s',
-            aviso['complejo_id'], aviso['categoria'], aviso['prioridad'], aviso['mensaje'],
-        )
+        datos = {campo: aviso[campo] for campo in CAMPOS_DEL_AVISO_PARA_NODE if aviso.get(campo) is not None}
+        try:
+            node_client.enviar_notificacion(datos)
+        except node_client.NodeNoConfigurado:
+            logger_avisos.warning(
+                'Aviso para %s sin entregar (backend-node no está configurado): categoría %s, prioridad %s. %s',
+                _destino(aviso), aviso['categoria'], aviso['prioridad'], aviso['mensaje'],
+            )
+        except node_client.NodeNoDisponible as error:
+            logger_avisos.error(
+                'Aviso para %s sin entregar: backend-node %s. Categoría %s, prioridad %s. %s',
+                _destino(aviso), error, aviso['categoria'], aviso['prioridad'], aviso['mensaje'],
+            )
 
 
 DIAS_DE_CONSERVACION_DE_CONTACTO = 30
@@ -2180,13 +2264,13 @@ class BajaDeCuentaService:
             AvisoComplejoService.programar(
                 complejo_id, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_URGENTE,
                 f'Un titular dio de baja su cuenta y conserva {_plural(len(ids), "reserva señada", "reservas señadas")} '
-                f'(ids {ids}). Resolvé la seña desde la agenda: mantenerla, reprogramarla o cancelarla y devolverla.',
+                f'(ids {_lista_de_ids(ids)}). Resolvé la seña desde la agenda: mantenerla, reprogramarla o cancelarla y devolverla.',
                 {'reservas': ids},
             )
         for complejo_id, ids in turnos_por_complejo.items():
             AvisoComplejoService.programar(
                 complejo_id, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_NORMAL,
-                f'Se dieron de baja {_plural(len(ids), "turno fijo", "turnos fijos")} (ids {ids}) porque su titular '
+                f'Se dieron de baja {_plural(len(ids), "turno fijo", "turnos fijos")} (ids {_lista_de_ids(ids)}) porque su titular '
                 'cerró la cuenta. El horario quedó libre en la grilla.',
                 {'turnos_fijos': ids},
             )
@@ -2202,3 +2286,150 @@ class BajaDeCuentaService:
         """Plazo máximo de conservación: 30 días después del turno, aunque la reserva siga sin resolverse."""
         limite = timezone.localdate() - timedelta(days=DIAS_DE_CONSERVACION_DE_CONTACTO)
         return ReservaRepository.limpiar_contactos_de_bajas_hasta(limite)
+
+
+def _minutos(hora):
+    return hora.hour * 60 + hora.minute
+
+
+def _minutos_de_la_union(intervalos):
+    """Minutos cubiertos por intervalos [inicio, fin) que pueden superponerse, contando una sola vez cada minuto."""
+    total, fin_cubierto = 0, None
+    for inicio, fin in sorted((_minutos(inicio), _minutos(fin)) for inicio, fin in intervalos):
+        if fin_cubierto is not None and inicio < fin_cubierto:
+            inicio = fin_cubierto
+        if fin > inicio:
+            total += fin - inicio
+            fin_cubierto = fin
+    return total
+
+
+MAXIMO_DIAS_REPORTE = 366
+MAXIMO_HORARIOS_RANKING = 10
+CRITERIO_REPORTE_POR_DEFECTO = 'fecha_turno'
+CRITERIOS_REPORTE = ('fecha_turno', 'fecha_creacion', 'fecha_modificacion')
+MENSAJE_CANCHA_AJENA_REPORTE = 'La cancha no pertenece al complejo.'
+
+
+class ReporteService:
+    """Dashboard comercial de un complejo, calculado sobre un rango de fechas acotado."""
+
+    @staticmethod
+    def validar_filtros(usuario, filtros):
+        complejo_id = filtros['complejo']
+        if not AccesoComplejoService.puede_administrar(usuario, complejo_id):
+            raise NotFound()
+
+        desde, hasta = filtros['fecha_desde'], filtros['fecha_hasta']
+        if (hasta - desde).days >= MAXIMO_DIAS_REPORTE:
+            raise ValidationError({
+                'fecha_hasta': f'El rango del reporte abarca como máximo {MAXIMO_DIAS_REPORTE} días.',
+            })
+
+        cancha_id = filtros.get('cancha_id')
+        # Mismo mensaje para una cancha ajena o inexistente, para no confirmar ids de otros complejos.
+        if cancha_id is not None and not CanchaRepository.pertenece_a_complejo(cancha_id, complejo_id):
+            raise ValidationError({'cancha_id': MENSAJE_CANCHA_AJENA_REPORTE})
+
+        deporte_id = filtros.get('deporte_id')
+        if deporte_id is not None and not CatalogoRepository.existe_deporte(deporte_id):
+            raise ValidationError({'deporte_id': 'El deporte indicado no existe.'})
+
+        return {
+            'complejo': complejo_id,
+            'fecha_desde': desde,
+            'fecha_hasta': hasta,
+            'criterio': filtros.get('criterio') or CRITERIO_REPORTE_POR_DEFECTO,
+            'cancha_id': cancha_id,
+            'deporte_id': deporte_id,
+        }
+
+    @staticmethod
+    def _minutos_ofertables(bloques, excepciones, ocupados):
+        """
+        Turnos de la grilla que ninguna excepción cierra, unidos a los turnos tomados. Una reserva ocupa su horario
+        aunque después se haya cargado un cierre o cambiado la grilla: ese tiempo se ofreció, y así el porcentaje
+        nunca supera el 100 %.
+        """
+        abiertos = [
+            (inicio, fin) for inicio, fin in bloques
+            if not any(_excepcion_cubre(excepcion, inicio, fin) for excepcion in excepciones)
+        ]
+        return _minutos_de_la_union(abiertos + ocupados)
+
+    @staticmethod
+    def _fila_de_ocupacion(cancha, dias, horarios, excepciones, reservas):
+        fila = {'cancha_id': cancha['id'], 'cancha': cancha['nombre']}
+        ocupados = sum(
+            _minutos(fin) - _minutos(inicio) for dia in dias for inicio, fin in reservas[(cancha['id'], dia)]
+        )
+        if cancha['estado'] != EstadoCancha.ACTIVA or cancha['deporte__estado'] != EstadoRegistro.ACTIVO:
+            if not ocupados:
+                return None
+            return {**fila, 'minutos_ofertables': None, 'minutos_ocupados': ocupados, 'porcentaje': None}
+
+        bloques_por_dia_semana = {
+            dia_semana: [
+                bloque
+                for horario in horarios[(cancha['id'], dia_semana)]
+                for bloque in GrillaService.generar_bloques(
+                    horario['hora_apertura'], horario['hora_cierre'], cancha['duracion_turno_min'],
+                )
+            ]
+            for dia_semana in DiaSemana.values
+        }
+        excepciones = [excepcion for excepcion in excepciones if excepcion['cancha_id'] in (None, cancha['id'])]
+        ofertables = sum(
+            ReporteService._minutos_ofertables(
+                bloques_por_dia_semana[dia.weekday()],
+                [excepcion for excepcion in excepciones if excepcion['fecha_inicio'] <= dia <= excepcion['fecha_fin']],
+                reservas[(cancha['id'], dia)],
+            )
+            for dia in dias
+        )
+        return {
+            **fila, 'minutos_ofertables': ofertables, 'minutos_ocupados': ocupados,
+            'porcentaje': round(ocupados * 100 / ofertables, 2) if ofertables else None,
+        }
+
+    @staticmethod
+    def ocupacion(filtros):
+        """
+        Minutos ocupados sobre minutos ofertables por cancha, día por día. Solo con el criterio de fecha de turno:
+        con los otros el rango no describe días de juego. La oferta usa los horarios vigentes, porque no se guarda
+        su historial; por eso una cancha inactiva no tiene oferta y aparece solo si tuvo reservas.
+        """
+        if filtros['criterio'] != CRITERIO_REPORTE_POR_DEFECTO:
+            return None
+
+        canchas = ReporteRepository.canchas(filtros)
+        horarios = defaultdict(list)
+        for horario in ReporteRepository.horarios_activos([cancha['id'] for cancha in canchas]):
+            horarios[(horario['cancha_id'], horario['dia_semana'])].append(horario)
+        reservas = defaultdict(list)
+        for reserva in ReporteRepository.reservas_ocupantes(filtros):
+            reservas[(reserva['cancha_id'], reserva['fecha_turno'])].append((reserva['hora_inicio'], reserva['hora_fin']))
+        excepciones = ExcepcionHorariaRepository.activas_en_rango(
+            filtros['complejo'], filtros['fecha_desde'], filtros['fecha_hasta'],
+        )
+        dias = [
+            filtros['fecha_desde'] + timedelta(days=numero)
+            for numero in range((filtros['fecha_hasta'] - filtros['fecha_desde']).days + 1)
+        ]
+
+        filas = (
+            ReporteService._fila_de_ocupacion(cancha, dias, horarios, excepciones, reservas) for cancha in canchas
+        )
+        return [fila for fila in filas if fila is not None]
+
+    @staticmethod
+    def dashboard(usuario, filtros):
+        filtros = ReporteService.validar_filtros(usuario, filtros)
+        resumen = ReporteRepository.resumen(filtros)
+        return {
+            'filtros': filtros,
+            'recaudacion': {clave: f'{monto:.2f}' for clave, monto in resumen['recaudacion'].items()},
+            'conteos': resumen['conteos'],
+            'ocupacion': ReporteService.ocupacion(filtros),
+            'ranking_horarios': ReporteRepository.ranking_horarios(filtros, MAXIMO_HORARIOS_RANKING),
+        }

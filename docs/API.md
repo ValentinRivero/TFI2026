@@ -148,6 +148,7 @@ Filtros de `GET /api/complejos/`: `deporte` (id), `cobertura` (`1` descubierta, 
 | Método y ruta | Acceso | Uso |
 |---|---|---|
 | `GET /api/complejos/administrados/` | Operador | Complejos que el usuario puede administrar |
+| `GET /api/complejos/<id>/acceso/` | Operador | Confirma que el usuario administra el complejo: `{ "complejo": id }`. Un complejo ajeno, inexistente o dado de baja responde `404`. Lo usa el servicio complementario para autorizar las rutas de los paneles |
 | `PATCH /api/complejos/<id>/` | Dueño | `nombre`, `direccion`, `latitud`, `longitud`, `telefono_contacto`, `horas_limite_cancelacion`, `info_sena` |
 | `PUT /api/complejos/<id>/servicios/` | Dueño | `{ "servicios": [ids] }`: deja activos exactamente esos servicios |
 | `GET /api/complejos/<id>/operadores/` | Dueño | Operadores del complejo |
@@ -267,6 +268,173 @@ Si el cambio deja reservas por jugar (pendientes, confirmadas o señadas) o turn
 - Un turno fijo vigente ocupa su horario en cada fecha de su vigencia. Para operar una fecha puntual (señarla, completarla o cancelarla) se registra con `fechas/` y se gestiona desde la agenda; cancelarla libera solo ese día. La fecha debe ser de ese día de la semana y estar dentro de la vigencia; si ya se registró, responde `409`.
 - La baja no cancela las fechas ya registradas en la agenda.
 - `conflicto_operatoria`: igual que en la agenda, marca los turnos fijos vigentes o pausados que un cambio de operatoria dejó fuera de la grilla.
+
+### Reportes
+
+| Método y ruta | Acceso | Uso |
+|---|---|---|
+| `GET /api/reportes/dashboard/` | Dueño | Dashboard de un complejo en un rango de fechas: `complejo`, `fecha_desde` y `fecha_hasta` (`AAAA-MM-DD`, obligatorios), `criterio` y, opcionales, `cancha_id` y `deporte_id` |
+
+- `criterio` indica qué fecha de la reserva se compara con el rango: `fecha_turno` (por defecto, el día que se juega), `fecha_creacion` (el día que se registró) o `fecha_modificacion` (el último cambio, por ejemplo una cancelación).
+- El rango incluye ambos extremos, `fecha_hasta` no puede ser anterior a `fecha_desde` y abarca como máximo 366 días; si no, responde `400`.
+- `cancha_id` debe ser una cancha del complejo, incluidas las que están en mantenimiento o dadas de baja, que conservan su historial; si no, responde `400`. `deporte_id` debe ser un deporte existente. Ambos filtros se combinan.
+- Se consulta también con el contrato pendiente o suspendido. Un complejo dado de baja o ajeno responde `404`; el operador no accede a los reportes (`403`).
+- Con `fecha_creacion` y `fecha_modificacion`, los días se cuentan en hora de Argentina: una reserva registrada el 30/11 a las 23:30 entra en noviembre.
+- La respuesta incluye `filtros` con los valores aplicados, ya normalizados, y las métricas del rango:
+
+```json
+{
+  "filtros": {
+    "complejo": 4, "fecha_desde": "2026-11-01", "fecha_hasta": "2026-11-30",
+    "criterio": "fecha_turno", "cancha_id": null, "deporte_id": null
+  },
+  "recaudacion": { "total": "1254000.00", "senada": "190000.00" },
+  "conteos": {
+    "pendientes": 3, "confirmadas": 12, "senadas": 5,
+    "canceladas_jugador": 4, "canceladas_complejo": 1, "canceladas_total": 5,
+    "ausentes": 2, "completadas": 30
+  },
+  "ocupacion": [
+    { "cancha_id": 7, "cancha": "Cancha 1", "minutos_ofertables": 1200, "minutos_ocupados": 600, "porcentaje": 50.0 }
+  ],
+  "ranking_horarios": [
+    { "hora_inicio": "20:00:00", "reservas": 18 },
+    { "hora_inicio": "21:00:00", "reservas": 15 }
+  ]
+}
+```
+
+- `recaudacion.total` suma `precio_acordado` de las reservas confirmadas, señadas y completadas (`2`, `3` y `7`); `recaudacion.senada`, solo las señadas, que también forman parte del total. Los montos van como texto con dos decimales, igual que los precios del resto de la API, y un rango sin reservas devuelve `"0.00"`. Las reservas manuales y las fechas registradas de turnos fijos cuentan igual que las web.
+- `conteos` trae la cantidad de reservas de cada estado en el rango, con las canceladas por el jugador (`4`) y por el complejo (`5`) por separado y su suma en `canceladas_total`. Un rango vacío devuelve ceros. Con `criterio=fecha_modificacion`, por ejemplo, responde cuántas reservas se cancelaron en el período, aunque el turno fuera para más adelante.
+- `ocupacion` trae una fila por cancha del complejo (con los filtros de cancha y deporte), ordenadas por nombre:
+  - **Oferta:** `minutos_ofertables` suma, día por día, los turnos completos que ofrecería la grilla según los horarios de apertura vigentes y la duración del turno, menos los que cierra una excepción activa. Un turno tomado cuenta como ofrecido aunque después se haya cargado un cierre o cambiado el horario.
+  - **Ocupado:** `minutos_ocupados` suma la duración de las reservas pendientes, confirmadas, señadas y completadas. Las fechas de turnos fijos cuentan solo si se registraron en la agenda.
+  - **Porcentaje:** `porcentaje` es ocupado sobre ofertable, con dos decimales y nunca mayor que 100. Es `null` si la cancha no tiene oferta en el rango.
+  - **Canchas sin oferta vigente:** una cancha en mantenimiento, dada de baja o de un deporte dado de baja figura solo si tuvo reservas en el rango, con `minutos_ofertables` y `porcentaje` en `null`.
+  - **Criterio:** con `criterio` distinto de `fecha_turno`, `ocupacion` es `null`, porque el rango no describe días de juego.
+- `ranking_horarios` trae hasta 10 horarios de inicio, con la cantidad de reservas pendientes, confirmadas, señadas y completadas de cada uno, sumando todas las canchas filtradas. Ordena de mayor a menor y, a igual cantidad, por el horario más temprano. Respeta el `criterio` y un rango sin reservas devuelve `[]`.
+
+## GraphQL
+
+| Método y ruta | Acceso | Uso |
+|---|---|---|
+| `POST /graphql/` | Público; cada campo aplica sus permisos | `{ "query", "variables" }` en JSON |
+
+- Usa el mismo access token que REST en `Authorization: Bearer <access>`. Igual que en las rutas públicas de REST, un token inválido o vencido no impide consultar los campos públicos.
+- Solo admite POST: GET responde `405`.
+- Cada operación admite como máximo 5 campos de primer nivel, contando alias y fragmentos, y la profundidad de anidamiento está limitada; si se excede, responde `400` sin ejecutar nada. La introspección del esquema está deshabilitada en producción.
+- El endpoint tiene su propio límite de solicitudes por cuenta (o por IP sin sesión), además de los de cada operación; al superarlo responde `429` con el encabezado `Retry-After`.
+- Los errores de un campo responden HTTP 200 con `data` en `null` para ese campo y la lista `errors`; cada error lleva el código HTTP equivalente en `extensions.codigo` (`400`, `401`, `403`, `404`, `429`) y, en los de validación, el detalle por campo en `extensions.detalle`. Una consulta mal formada o con campos inexistentes responde `400`.
+
+### `catalogoComplejos`
+
+Mismos complejos, filtros, orden y paginación que `GET /api/complejos/`. Argumentos opcionales: `deporte`, `cobertura`, `servicio` (lista de ids, se exigen todos), `search`, `ordering` y `page`.
+
+```graphql
+query {
+  catalogoComplejos(deporte: 2, ordering: "precio_desde") {
+    count
+    results { id nombre direccion latitud longitud precioDesde servicios { id nombre } deportes { id nombre } }
+  }
+}
+```
+
+Cada complejo expone `id`, `nombre`, `direccion`, `latitud`, `longitud`, `telefonoContacto`, `horasLimiteCancelacion`, `infoSena`, `precioDesde`, `servicios` y `deportes`. Los decimales llegan como texto, igual que en REST.
+
+### `misReservas`
+
+Mismas reservas, filtros, orden, paginación y permisos que `GET /api/reservas/mias/`: requiere sesión de jugador (o superadmin). Argumentos opcionales: `estado`, `vigencia` (`proximas` o `pasadas`), `fechaDesde` y `fechaHasta` (`AAAA-MM-DD`), `ordering` y `page`.
+
+```graphql
+query {
+  misReservas(vigencia: "proximas") {
+    count
+    results { id complejo { nombre } cancha { nombre } fechaTurno horaInicio estado estadoNombre cancelableHasta }
+  }
+}
+```
+
+- Cada reserva expone los campos de REST en camelCase: `id`, `complejo`, `cancha`, `deporte`, `fechaTurno`, `horaInicio`, `horaFin`, `precioAcordado`, `tipoOcupacion`, `tipoOcupacionNombre`, `estado`, `estadoNombre`, `cancelableHasta` y `fechaCreacion`. Fechas y horas llegan como texto con el mismo formato que REST.
+- Sin token, o con un token inválido o vencido, el campo responde `null` con un error `401` y el mismo mensaje que REST; los campos públicos de la misma consulta se resuelven igual. Dueños y operadores reciben `403`.
+
+### `crearReserva` (mutation)
+
+Mismo alta que `POST /api/reservas/`: mismas reglas de turno, anticipación y disponibilidad, mismos errores, mismo límite de altas por cuenta (compartido con REST) y misma auditoría. Argumentos obligatorios: `cancha` (id), `fechaTurno` (`AAAA-MM-DD`) y `horaInicio` (`HH:MM`).
+
+```graphql
+mutation {
+  crearReserva(cancha: 3, fechaTurno: "2026-11-24", horaInicio: "20:00") {
+    reserva { id fechaTurno horaInicio horaFin precioAcordado estado estadoNombre cancelableHasta }
+  }
+}
+```
+
+- Devuelve la reserva creada con los mismos campos que `misReservas`.
+- Errores en `extensions.codigo`: `400` (turno inválido, pasado, fuera de la anticipación o complejo no habilitado), `401`, `403`, `409` (turno ocupado, turno fijo o excepción, con el mismo mensaje que REST) y `429`.
+
+## Servicio complementario (Node)
+
+Servicio de actividad y notificaciones, con su propia URL base. Sus errores siguen la forma `{ "error": true, "mensaje": "..." }`; los de validación suman `detalles`.
+
+| Método y ruta | Acceso | Uso |
+|---|---|---|
+| `GET /api/salud` | Público | Estado del servicio: `{ "estado": "ok" }` |
+| `POST /api/actividad` | Público, con sesión opcional | Registra una visita al complejo (`tipo_evento: 1`) o una consulta de su grilla (`2`): `{ "tipo_evento", "complejo_id", "metadata" }`. Responde `201` con `{ "id" }` |
+| `GET /api/actividad?complejo_id=` | Panel del complejo | Actividad registrada del complejo, de la más reciente a la más antigua: `id`, `tipo_evento`, `complejo_id`, `metadata`, `fecha_creacion` |
+| `GET /api/actividad/notificaciones?complejo_id=` | Panel del complejo | Avisos generales del complejo: `id`, `complejo_id`, `categoria`, `prioridad`, `mensaje`, `estado`, `evento` (`{ "id", "tipo_evento", "complejo_id", "fecha_creacion" }` o `null`), `fecha_creacion` |
+| `GET /api/actividad/notificaciones/mias` | Cualquier usuario autenticado | Notificaciones dirigidas a la cuenta del token, con la misma forma |
+| `GET /api/reportes-aux/visitas?complejo_id=&fecha_desde=&fecha_hasta=` | Panel del complejo | Visitas al perfil y consultas de la grilla, en total y por día |
+| `GET /api/externa/clima/<complejo_id>` | Público | Clima actual y pronóstico de tres días en la ubicación del complejo |
+| `PATCH /api/actividad/notificaciones/<id>` | Titular, o panel del complejo para sus avisos generales | `{ "estado" }`: `1` no leída, `2` leída. Responde la notificación actualizada |
+
+- Una ruta inexistente responde `404`, un JSON mal formado `400` y un cuerpo demasiado grande `413`.
+- Las rutas privadas usan el mismo access token que Django, en `Authorization: Bearer <access>`. Sin token responde `401` con "Debés iniciar sesión para acceder a este recurso."; con un token inválido, vencido o que no sea de acceso (por ejemplo, un refresh), `401` con "El token es inválido o expiró.", los mismos mensajes que la API principal.
+- Las rutas del panel admiten solo roles de complejo (`DUENO_COMPLEJO`, `OPERADOR_COMPLEJO`) o `SUPERADMIN`; otro rol, o una cuenta con el rol desactivado, recibe `403` con "No tenés permiso para realizar esta acción.".
+- `POST /api/actividad`:
+  - **Usuario:** si el pedido trae un access token válido, el evento se asocia a esa cuenta; sin token, o con uno inválido o vencido, se registra como anónimo. El usuario sale siempre del token: un `usuario_id` en el cuerpo se ignora.
+  - **Tipos:** no acepta "reserva realizada" (`3`); ese evento lo emite la API principal al confirmar una reserva.
+  - **`metadata`:** opcional, un objeto de hasta 2 KB, sin claves que empiecen con `$` ni contengan `.`.
+  - **Errores:** `404` si el complejo no existe o no está habilitado. Tiene su propio límite de solicitudes por IP, más estricto que el general.
+- **Listas:** paginadas de a 20, con la misma forma que la API principal: `{ "count", "next", "previous", "results" }`, con `?page=` y `?limit=` (hasta 50). `next` y `previous` son rutas relativas a este servicio. Una página posterior a la última responde `404` con "Página inválida.".
+- **Panel del complejo:** roles de complejo o `SUPERADMIN`, con acceso al complejo confirmado por la API principal; un complejo ajeno responde `404`. Ninguna de estas respuestas incluye el usuario que generó un evento.
+- **Bandeja propia:** la cuenta sale siempre del token; `usuario_id` u otros parámetros no permiten leer las de otra cuenta. Funciona también con el rol desactivado. Ahí llegan, por ejemplo, los avisos urgentes de una reserva cancelada por el complejo.
+- **Avisos del sistema:** la API principal genera avisos sin que el cliente intervenga: una reserva web nueva avisa al panel de su complejo, con el evento `tipo_evento: 3` resuelto, y una cancelación hecha por el complejo avisa al titular de la reserva.
+- **Cambio de estado:** una notificación de otra cuenta, el aviso de un complejo que no se administra, una inexistente o una dada de baja responden igual, `404` con "No se encontró la notificación.". La baja (`0`) no se hace por esta vía.
+- **Visitas:** `fecha_desde` y `fecha_hasta` son obligatorias, en formato `AAAA-MM-DD`, con ambos extremos incluidos y como máximo 366 días, con las mismas reglas y mensajes que el dashboard de la API principal. Los días se cuentan en hora de Argentina y los que no tuvieron actividad aparecen en cero. Solo informa cantidades, nunca quién visitó:
+
+```json
+{
+  "filtros": { "complejo_id": 4, "fecha_desde": "2026-11-01", "fecha_hasta": "2026-11-03" },
+  "totales": { "visitas": 7, "consultas_grilla": 3 },
+  "por_dia": [
+    { "fecha": "2026-11-01", "visitas": 5, "consultas_grilla": 3 },
+    { "fecha": "2026-11-02", "visitas": 0, "consultas_grilla": 0 },
+    { "fecha": "2026-11-03", "visitas": 2, "consultas_grilla": 0 }
+  ]
+}
+```
+
+- **Clima:** solo para complejos publicados; otro id responde `404` con "No se encontró el complejo.". Las fechas están en hora de Argentina, la temperatura en °C, el viento en km/h y la lluvia en mm; `probabilidad_lluvia` (%) puede ser `null` si el proveedor no la tiene. Se guarda 15 minutos por complejo, el intervalo en que el proveedor actualiza el clima actual. Los datos son de Open-Meteo, con licencia CC BY 4.0: la vista que los muestra debe citar la fuente que viaja en `fuente`.
+
+```json
+{
+  "complejo": { "id": 1, "nombre": "Complejo El Yacaré" },
+  "actual": {
+    "fecha_hora": "2026-11-10T15:00", "temperatura": 27.4, "codigo_clima": 2,
+    "descripcion": "Parcialmente nublado", "viento_kmh": 12.6, "precipitacion_mm": 0, "es_de_dia": true
+  },
+  "pronostico": [
+    { "fecha": "2026-11-10", "codigo_clima": 2, "descripcion": "Parcialmente nublado",
+      "temperatura_max": 29.1, "temperatura_min": 18.2, "probabilidad_lluvia": 10 }
+  ],
+  "fuente": "Open-Meteo.com"
+}
+```
+
+- Un parámetro de consulta repetido (por ejemplo `?complejo_id=4&complejo_id=5`) responde `400` con "Enviá un solo valor.".
+- Si un servicio del que depende (la API principal o el proveedor del clima) no responde, falla o tarda demasiado, responde `502` con "Un servicio necesario no está disponible. Intentá nuevamente en unos minutos.". En las rutas del panel, un `401`, `403` o `404` de la API principal llega igual, con su mismo mensaje.
+- Un dato inválido responde `400` con `"mensaje": "Datos inválidos."` y `detalles`, una lista de `{ "campo", "mensaje" }` con un error por campo (los anidados con su ruta, por ejemplo `metadata.cancha_id`). La respuesta nunca repite el valor enviado.
+- Solo atiende pedidos de navegador desde los orígenes del frontend (CORS con lista blanca, sin cookies). Tiene un límite de solicitudes por IP: el cupo restante viaja en los encabezados `RateLimit` y `RateLimit-Policy`, y al superarlo responde `429` con `Retry-After`.
 
 ## Sistema
 

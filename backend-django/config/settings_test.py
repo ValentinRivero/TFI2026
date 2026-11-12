@@ -31,3 +31,7 @@ PASSWORD_HASHERS = [
 LOGGING = copy.deepcopy(LOGGING_BASE)
 LOGGING['handlers']['archivo_seguridad'] = {'class': 'logging.NullHandler'}
 LOGGING['handlers']['consola'] = {'class': 'logging.NullHandler'}
+
+# Los tests nunca entregan avisos a un backend-node real, aunque el .env local lo tenga configurado.
+NODE_API_URL = ''
+INTERNAL_API_KEY = ''

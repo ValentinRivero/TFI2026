@@ -27,6 +27,7 @@ from .repositories import CanchaRepository, CatalogoRepository, ComplejoReposito
 from .services import (
     ACCION_CANCELAR_FECHA,
     ACCION_MANTENER_FECHA,
+    CRITERIOS_REPORTE,
     ConflictoOperatoriaService,
     ReservaService,
     TurnoFijoService,
@@ -132,6 +133,20 @@ class FiltroAuditoriaSerializer(serializers.Serializer):
     def validate(self, attrs):
         desde, hasta = attrs.get('fecha_desde'), attrs.get('fecha_hasta')
         if desde and hasta and desde > hasta:
+            raise serializers.ValidationError({'fecha_hasta': 'Debe ser igual o posterior a fecha_desde.'})
+        return attrs
+
+
+class FiltroReporteSerializer(serializers.Serializer):
+    complejo = serializers.IntegerField(min_value=1)
+    fecha_desde = serializers.DateField(error_messages={'invalid': 'Usá el formato AAAA-MM-DD.'})
+    fecha_hasta = serializers.DateField(error_messages={'invalid': 'Usá el formato AAAA-MM-DD.'})
+    criterio = serializers.ChoiceField(choices=CRITERIOS_REPORTE, required=False)
+    cancha_id = serializers.IntegerField(min_value=1, required=False)
+    deporte_id = serializers.IntegerField(min_value=1, required=False)
+
+    def validate(self, attrs):
+        if attrs['fecha_desde'] > attrs['fecha_hasta']:
             raise serializers.ValidationError({'fecha_hasta': 'Debe ser igual o posterior a fecha_desde.'})
         return attrs
 

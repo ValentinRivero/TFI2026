@@ -34,13 +34,38 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - [x] **4.9.** Ajustes de la operatoria de agenda y turnos fijos: reapertura de una reserva cancelada por error, cambio de horario de un turno fijo a otro turno libre (ambos solo por el personal del complejo y con confirmación explícita), y fechas de turnos fijos alcanzadas por una excepción en espera de una decisión del complejo, con aviso, en lugar de rechazar el alta.
 
 ## Fase 5: Reportes, GraphQL y Servicio Complementario Node.js
-- [ ] **5.1.** Endpoint y lógica agregada del Dashboard y Reportes estadísticos filtrables por rangos de fechas (`fecha_turno`, `fecha_creacion`, `fecha_modificacion`), cancha y estado (`CU-12`).
-- [ ] **5.2.** GraphQL mínimo en `/graphql/` (`core/schema.py`, `core/graphql_views.py`, `config/schema.py`) reutilizando los servicios y permisos de la API REST.
-- [ ] **5.3.** Base y seguridad de `backend-node`: ES Modules, `app.js`, `server.js`, un router por módulo, Morgan, Helmet, CORS con lista blanca y middlewares `auth`, `rol`, `rateLimit` y `validarCampos`, validando el JWT de Django.
-- [ ] **5.4.** Persistencia en MongoDB Atlas con Mongoose: `conectarDB`, modelos `Evento` y `Notificacion`, baja lógica y `populate`.
-- [ ] **5.5.** Integración Server-to-Server: `djangoClient.service.js` y clima del complejo con Open-Meteo, con manejo de errores 502.
-- [ ] **5.6.** Pruebas de Node con Jest y Supertest (caminos felices y tristes, sin base real) y job de Node en CI.
-- [ ] **5.7.** Notificaciones con destinatario (usuario o complejo), categoría y prioridad (normal o urgente), emitidas también por Django mediante una ruta interna de Node autenticada entre servicios.
+- [x] **5.1.** Endpoint y lógica agregada del Dashboard y Reportes estadísticos filtrables por rangos de fechas (`fecha_turno`, `fecha_creacion`, `fecha_modificacion`), cancha y deporte (`CU-12`).
+  - [x] **5.1.1.** Endpoint `GET /api/reportes/dashboard/` con validación de filtros: rango de hasta 366 días, criterio temporal, cancha del complejo y deporte existente; acceso por `ver_reportes` con 404 ante un complejo ajeno o dado de baja.
+  - [x] **5.1.2.** Recaudación confirmada o completada (estados `2`, `3` y `7`) y recaudación señada (estado `3`), con ceros en un rango vacío.
+  - [x] **5.1.3.** Conteo por estado, con canceladas por el jugador y por el complejo separadas y su subtotal.
+  - [x] **5.1.4.** Porcentaje de ocupación por cancha: minutos de reservas ocupantes sobre minutos ofertables (horarios de apertura menos excepciones), solo con el criterio `fecha_turno`.
+  - [x] **5.1.5.** Ranking de los horarios más solicitados.
+  - [x] **5.1.6.** Cantidad de consultas constante y cierre del punto.
+- [x] **5.2.** GraphQL mínimo en `/graphql/` (`core/schema.py`, `core/graphql_views.py`, `config/schema.py`) reutilizando los servicios y permisos de la API REST.
+  - [x] **5.2.1.** Endpoint `POST /graphql/` con `JWTGraphQLView` (JWT del encabezado, sin sesión ni CSRF, GraphiQL solo con `DEBUG`) y query pública `catalogoComplejos`, que ejecuta el mismo ViewSet que REST.
+  - [x] **5.2.2.** Query `misReservas` con los permisos y filtros del listado de reservas del jugador.
+  - [x] **5.2.3.** Mutation `crearReserva` con las mismas validaciones, bloqueos y errores que el alta por REST.
+  - [x] **5.2.4.** Profundidad máxima de consulta, límite de campos de primer nivel, introspección apagada fuera de desarrollo y limitador propio del endpoint.
+- [x] **5.3.** Base y seguridad de `backend-node`: ES Modules, `app.js`, `server.js`, un router por módulo, Morgan, Helmet, CORS con lista blanca y middlewares `auth`, `rol`, `rateLimit` y `validarCampos`, validando el JWT de Django.
+  - [x] **5.3.1.** Proyecto en ES Modules sobre Node 24, `app.js` separado de `server.js`, ruta pública `GET /api/salud`, formato de errores del servicio y pruebas con Jest y Supertest.
+  - [x] **5.3.2.** Helmet, CORS con lista blanca, Morgan y limitador global (`rateLimit.middleware.js`).
+  - [x] **5.3.3.** `auth.middleware.js`: validación del JWT emitido por Django con la clave compartida (401 sin token, vencido o con firma inválida).
+  - [x] **5.3.4.** `rol.middleware.js` y `validarCampos.middleware.js` (403 por rol y 400 con el detalle de validación).
+- [x] **5.4.** Persistencia en MongoDB Atlas con Mongoose: `conectarDB`, modelos `Evento` y `Notificacion`, baja lógica y `populate`.
+  - [x] **5.4.1.** `conectarDB` (sin credenciales en los logs, filtros saneados contra inyección NoSQL), arranque condicionado a la conexión, plugin de baja lógica que bloquea todo borrado físico y modelo `Evento` con `metadata` validada.
+  - [x] **5.4.2.** Modelo `Notificacion` con referencia a `Evento` resuelta por `populate`, categorías, prioridad y destinatario obligatorio.
+- [x] **5.5.** Integración Server-to-Server: `djangoClient.service.js` y clima del complejo con Open-Meteo, con manejo de errores 502.
+  - [x] **5.5.1.** Django: `GET /api/complejos/<id>/acceso/` para que `backend-node` verifique, reenviando el token del usuario, que administra el complejo (404 si es ajeno).
+  - [x] **5.5.2.** `djangoClient.service.js`: cliente HTTP hacia Django con tiempo máximo, reenvío del token y 502 ante fallas.
+  - [x] **5.5.3.** `POST /api/actividad`: registro público de visitas y consultas de grilla (tipos 1 y 2) con sesión opcional, limitador estricto y verificación del complejo en Django; "reserva realizada" (tipo 3) queda reservado a Django (5.7).
+  - [x] **5.5.4.** Rutas del panel: actividad y bandeja de notificaciones del complejo paginadas de a 20, y cambio de estado, con acceso verificado en Django; bandeja propia de cualquier usuario autenticado, filtrada siempre por el `usuario_id` del token.
+  - [x] **5.5.5.** `GET /api/reportes-aux/visitas`: visitas por día del complejo para el dashboard.
+  - [x] **5.5.6.** `GET /api/externa/clima/:complejoId`: pronóstico con Open-Meteo a partir de las coordenadas del complejo, con 404 y 502.
+- [x] **5.6.** Pruebas de Node con Jest y Supertest (caminos felices y tristes, sin base real) y job de Node en CI.
+- [x] **5.7.** Notificaciones con destinatario (usuario o complejo), categoría y prioridad (normal o urgente), emitidas también por Django mediante una ruta interna de Node autenticada entre servicios.
+  - [x] **5.7.1.** Ruta interna de Node para avisos de Django, con clave compartida entre servicios, limitador propio y registro opcional del evento "reserva realizada".
+  - [x] **5.7.2.** Entrega real de `AvisoComplejoService` desde Django, con destinatario complejo o usuario, tiempo máximo y registro en el log ante una falla.
+  - [x] **5.7.3.** Eventos y avisos de servidor: reserva realizada (evento tipo 3 y aviso al complejo) y cancelación por el complejo (aviso al jugador).
 
 ## Fase 6: Frontend React, PWA y Mapa Interactivo
 - [ ] **6.1.** Base React con Vite: capas `services/`, `components/` y `pages/`, `App.jsx` con React Router y `ProtectedRoute`, instancias de Axios con interceptores para ambos backends, `Login`, `Registro` y job de frontend en CI.
@@ -73,7 +98,7 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - El admin registra las 14 tablas sin borrado físico: solo ofrece la baja lógica, y `logs_auditoria` es de solo lectura.
 - El operador ya no tiene `configurar_complejo`: los parámetros comerciales (`info_sena`, `horas_limite_cancelacion`) los editan solo el dueño y el superadmin. Al re-ejecutarse, `seed_inicial` sincroniza `roles_permisos`: las asignaciones que ya no corresponden quedan con `estado = 0` y las vigentes se reactivan. Las consultas de permisos de la Fase 2 deben filtrar asignaciones activas.
 - CORS y CSRF apuntan por defecto a Vite (`localhost:5173`). Los `.env` locales se actualizan por fuera del repositorio.
-- `.github/workflows/ci.yml` corre `makemigrations --check` y `pytest --cov=core` en cada push y pull request a `main`.
+- `.github/workflows/ci.yml` corre `makemigrations --check` y `pytest --cov=core` en cada push y pull request a `main`. Desde la Fase 5 suma el job `node`: `npm ci`, auditoría de dependencias de producción, verificación de sintaxis de `server.js` y `npm run test:cobertura`, que falla por debajo del 95% de cobertura.
 
 ## Notas de la Fase 2
 - Todos los errores de la API responden `{"error": true, "detail": ...}`; `detail` es un texto o un objeto por campo.
@@ -191,7 +216,7 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - Los turnos fijos vigentes y pausados del titular pasan a baja lógica.
   - El historial y las reservas de otros no se tocan.
   - Cada cancelación y el resumen de la baja se auditan sin datos personales.
-- **Avisos al complejo** (`AvisoComplejoService`): uno urgente por las señadas conservadas y uno normal por los turnos fijos dados de baja, con ids y sin datos personales. Se entregan en `on_commit` con `robust=True`, así una falla no revierte la baja. Hasta que el punto 5.7 conecte la ruta interna de `backend-node`, quedan en el log del servidor (`core.avisos`).
+- **Avisos al complejo** (`AvisoComplejoService`): uno urgente por las señadas conservadas y uno normal por los turnos fijos dados de baja, con ids y sin datos personales. Se entregan en `on_commit` con `robust=True`, así una falla no revierte la baja. Desde el punto 5.7.2 se entregan a la ruta interna de `backend-node`; si no se pueden entregar, quedan en el log del servidor (`core.avisos`).
 - **Contacto conservado de la seña:**
   - **Agenda:** muestra la copia y nunca la cuenta anonimizada. Sin copia, el cliente figura como "Titular dado de baja".
   - **Borrado al resolver:** la copia se borra cuando la reserva se resuelve (completada, ausente o cancelada por el complejo).
