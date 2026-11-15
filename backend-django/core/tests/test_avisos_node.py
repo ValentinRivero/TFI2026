@@ -164,8 +164,8 @@ class TestFallasDeEntrega:
         assert registro_de_avisos.records[0].levelname == 'ERROR'
         assert 'sin entregar' in registro_de_avisos.text
 
-    def test_no_espera_a_node_mas_que_el_tiempo_maximo(self, node, registro_de_avisos, monkeypatch):
-        monkeypatch.setattr(node_client, 'TIEMPO_MAXIMO_SEGUNDOS', 0.2)
+    def test_no_espera_a_node_mas_que_el_tiempo_maximo(self, node, registro_de_avisos, settings):
+        settings.NODE_TIMEOUT_SEGUNDOS = 0.2
         node.demora = 1
 
         inicio = time.monotonic()

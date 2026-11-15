@@ -103,3 +103,33 @@ jobs:
 
       - name: Ejecutar tests con cobertura
         run: npm run test:cobertura
+
+  # El frontend no necesita servicios ni secretos para compilar: las URLs de los backends se resuelven en el navegador.
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Auditar dependencias de producción
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Verificar el código
+        run: npm run lint
+
+      - name: Ejecutar tests
+        run: npm test
+
+      - name: Compilar
+        run: npm run build

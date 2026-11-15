@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 
 import { crearOpcionesCors } from './src/config/cors.js';
+import { obtenerParametros } from './src/config/parametros.js';
 import { manejarErrores, rutaNoEncontrada } from './src/middlewares/errores.middleware.js';
 import { crearLimitadorGlobal } from './src/middlewares/rateLimit.middleware.js';
 import actividadRoutes from './src/routes/actividad.routes.js';
@@ -12,10 +13,12 @@ import internoRoutes from './src/routes/interno.routes.js';
 import reporteAuxRoutes from './src/routes/reporteAux.routes.js';
 import saludRoutes from './src/routes/salud.routes.js';
 
+const { numProxies, bodyMaximoBytes } = obtenerParametros();
+
 const app = express();
 
 // Saltos de proxy de confianza (nginx): sin esto, el limitador vería a todos los clientes con la IP del proxy.
-app.set('trust proxy', Number(process.env.NUM_PROXIES) || 0);
+app.set('trust proxy', numProxies);
 
 app.use(helmet());
 app.use(cors(crearOpcionesCors()));
@@ -24,7 +27,7 @@ if (process.env.NODE_ENV !== 'test') {
 }
 app.use(crearLimitadorGlobal());
 // Los eventos y notificaciones son livianos: un cuerpo mayor es un error del cliente o un intento de abuso.
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({ limit: bodyMaximoBytes }));
 
 app.use('/api/salud', saludRoutes);
 app.use('/api/actividad', actividadRoutes);

@@ -646,15 +646,15 @@ class TestCacheDeGrilla:
         assert _estados(cuerpo['canchas'][0]['bloques'])['11:00'] == 'NO_DISPONIBLE'
         assert _estados(cuerpo['canchas'][0]['bloques'])['12:00'] == 'LIBRE'
 
-    def test_se_guarda_con_un_tiempo_de_vida_corto(self, cliente, complejo, cancha_abierta, lunes):
-        from core.services import SEGUNDOS_DE_VIDA_DE_LA_GRILLA
+    def test_se_guarda_con_un_tiempo_de_vida_corto(self, cliente, complejo, cancha_abierta, lunes, settings):
+        settings.GRILLA_CACHE_SEGUNDOS = 45
 
         with mock.patch('core.services.cache.set', wraps=cache.set) as guardar:
             _grilla(cliente, complejo, lunes)
 
         ((clave, _, tiempo_de_vida), _) = guardar.call_args
         assert clave.startswith(f'grilla:{complejo.id}:{lunes.isoformat()}:v')
-        assert tiempo_de_vida == SEGUNDOS_DE_VIDA_DE_LA_GRILLA <= 60
+        assert tiempo_de_vida == 45
 
     def test_si_la_cache_falla_la_grilla_se_calcula_igual(self, cliente, complejo, cancha_abierta, lunes):
         caida = mock.MagicMock()

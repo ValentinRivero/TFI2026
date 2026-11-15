@@ -2,8 +2,9 @@ import 'dotenv/config';
 
 import app from './app.js';
 import { conectarDB } from './src/config/db.js';
+import { obtenerParametros } from './src/config/parametros.js';
 
-const puerto = Number(process.env.PORT) || 3000;
+const { puerto } = obtenerParametros();
 
 try {
   await conectarDB();

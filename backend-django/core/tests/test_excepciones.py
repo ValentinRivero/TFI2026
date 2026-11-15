@@ -16,7 +16,7 @@ from core.models import (
     TipoEventoAuditoria,
     TipoMotivoExcepcion,
 )
-from core.services import MAXIMO_DIAS_EXCEPCION, DifusionGrillaService, ExcepcionHorariaService
+from core.services import DifusionGrillaService, ExcepcionHorariaService
 
 URL = '/api/excepciones/'
 
@@ -257,12 +257,12 @@ class TestAltaDeExcepciones:
         assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
         assert 'fecha_inicio' in respuesta.json()['detail']
 
-    def test_el_rango_tiene_un_maximo_de_dias(self, dueno, complejo, cliente_de):
+    def test_el_rango_tiene_un_maximo_de_dias(self, dueno, complejo, cliente_de, settings):
         cliente = cliente_de(dueno)
         limite = _dia_completo(complejo, fecha_inicio=_dias(1).isoformat(),
-                               fecha_fin=_dias(MAXIMO_DIAS_EXCEPCION).isoformat())
+                               fecha_fin=_dias(settings.RANGO_MAXIMO_DIAS).isoformat())
         excedido = _dia_completo(complejo, fecha_inicio=_dias(1).isoformat(),
-                                 fecha_fin=_dias(MAXIMO_DIAS_EXCEPCION + 1).isoformat())
+                                 fecha_fin=_dias(settings.RANGO_MAXIMO_DIAS + 1).isoformat())
 
         assert cliente.post(URL, limite, format='json').status_code == status.HTTP_201_CREATED
         assert cliente.post(URL, excedido, format='json').status_code == status.HTTP_400_BAD_REQUEST

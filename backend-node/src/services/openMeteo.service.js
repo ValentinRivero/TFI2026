@@ -1,8 +1,7 @@
+import { LIMITES, obtenerParametros } from '../config/parametros.js';
 import { ErrorServicioExterno } from '../middlewares/errores.middleware.js';
 
-const URL_PRONOSTICO = 'https://api.open-meteo.com/v1/forecast';
-const TIEMPO_MAXIMO_MS = 5_000;
-const DIAS_DE_PRONOSTICO = 3;
+const DIAS_DE_PRONOSTICO = LIMITES.diasDePronostico;
 // Las fechas del pronóstico salen en hora de Argentina, igual que la grilla y los reportes.
 const ZONA_HORARIA = 'America/Argentina/Buenos_Aires';
 
@@ -89,11 +88,12 @@ export const obtenerPronostico = async ({ latitud, longitud }) => {
     forecast_days: DIAS_DE_PRONOSTICO,
   });
 
+  const { clima, http } = obtenerParametros();
   let respuesta;
   try {
-    respuesta = await fetch(`${URL_PRONOSTICO}?${parametros}`, {
+    respuesta = await fetch(`${clima.url}?${parametros}`, {
       headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(TIEMPO_MAXIMO_MS),
+      signal: AbortSignal.timeout(http.timeoutClimaMs),
       redirect: 'error',
     });
   } catch (error) {

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { query } from 'express-validator';
 
+import { obtenerParametros } from '../config/parametros.js';
 import { obtenerVisitas } from '../controllers/reporteAux.controller.js';
 import { autenticar } from '../middlewares/auth.middleware.js';
 import { permitirRoles, ROLES, ROLES_DE_COMPLEJO } from '../middlewares/rol.middleware.js';
@@ -9,7 +10,7 @@ import { diasEntre, esFecha } from '../utils/fechas.js';
 import { complejoEnConsulta } from '../utils/validaciones.js';
 
 // Mismo tope y mismos mensajes que el dashboard de Django, que muestra estas métricas junto a las de reservas.
-const MAXIMO_DIAS = 366;
+const { rangoMaximoDias: MAXIMO_DIAS } = obtenerParametros();
 const FORMATO = 'Usá el formato AAAA-MM-DD.';
 
 const router = Router();

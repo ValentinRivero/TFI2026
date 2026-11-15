@@ -1,5 +1,6 @@
 import { matchedData } from 'express-validator';
 
+import { obtenerParametros } from '../config/parametros.js';
 import { ErrorHttp } from '../middlewares/errores.middleware.js';
 import { obtenerComplejoPublico } from '../services/djangoClient.service.js';
 import { obtenerPronostico } from '../services/openMeteo.service.js';
@@ -7,7 +8,8 @@ import { crearCacheTemporal } from '../utils/cacheTemporal.js';
 
 // Open-Meteo actualiza el clima actual cada 15 minutos: antes no hay datos nuevos que pedir. La caché además evita
 // que una ruta pública multiplique las consultas a Django y al proveedor.
-export const cacheDeClima = crearCacheTemporal({ duracionMs: 15 * 60 * 1000, maximo: 500 });
+const { ttlMs, cacheMaximo } = obtenerParametros().clima;
+export const cacheDeClima = crearCacheTemporal({ duracionMs: ttlMs, maximo: cacheMaximo });
 
 // Open-Meteo publica sus datos con licencia CC BY 4.0: el frontend muestra la fuente junto al clima.
 const FUENTE = 'Open-Meteo.com';

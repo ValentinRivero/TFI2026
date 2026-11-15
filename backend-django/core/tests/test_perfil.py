@@ -93,10 +93,17 @@ class TestEdicion:
         assert jugador.estado == EstadoRegistro.ACTIVO
 
     def test_sanitiza_el_nombre(self, jugador, cliente_de):
-        cliente_de(jugador).patch(URL, {'nombre_completo': '<img src=x onerror=alert(1)>Ana & Cía'}, format='json')
+        cliente_de(jugador).patch(URL, {'nombre_completo': '<img src=x onerror=alert(1)>Ana Cía'}, format='json')
 
         jugador.refresh_from_db()
-        assert jugador.nombre_completo == 'Ana & Cía'
+        assert jugador.nombre_completo == 'Ana Cía'
+
+    @pytest.mark.parametrize('nombre', ['Ana 2', 'Ana 😀', 'A', 'Ana & Cía', 'Ana_Cía'])
+    def test_rechaza_nombres_con_digitos_simbolos_o_emojis(self, jugador, cliente_de, nombre):
+        respuesta = cliente_de(jugador).patch(URL, {'nombre_completo': nombre}, format='json')
+
+        assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'nombre_completo' in respuesta.json()['detail']
 
     @pytest.mark.parametrize('datos, campo', [
         ({'nombre_completo': '<b></b>'}, 'nombre_completo'),

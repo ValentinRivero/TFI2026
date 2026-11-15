@@ -1,8 +1,9 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 
+import { LIMITES } from '../config/parametros.js';
 import { ErrorHttp } from './errores.middleware.js';
 
-const LARGO_MINIMO_DE_CLAVE = 32;
+const LARGO_MINIMO_DE_CLAVE = LIMITES.largoMinimoClaveInterna;
 
 // Se comparan los resúmenes y no las claves: tienen siempre el mismo largo, así `timingSafeEqual` no falla ni
 // revela por el tiempo de respuesta cuántos caracteres coinciden o cuán larga es la clave.
