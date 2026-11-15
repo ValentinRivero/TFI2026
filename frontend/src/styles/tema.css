@@ -45,6 +45,9 @@
   --tema-borde: #e2e8e5;
   --tema-pizarra: #0f172a;
   --tema-pizarra-suave: #1e293b;
+  --hero-texto: #f1f5f9;
+  --hero-texto-suave: #cbd5e1;
+  --hero-acento: #86efac;
   --tema-texto: #1e293b;
   --tema-texto-suave: #475569;
 
@@ -1530,6 +1533,214 @@ a {
   justify-content: flex-end;
   gap: 0.5rem;
   margin-bottom: 1rem;
+}
+
+/* Portada del catálogo: presentación sobre pizarra con líneas de cancha de fondo, guía de uso y tarjeta para complejos */
+.hero-presentacion {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--tema-pizarra-suave);
+  border-bottom: 4px solid var(--tema-primario);
+  border-radius: var(--radio);
+  background: var(--tema-pizarra);
+  color: var(--hero-texto);
+}
+
+.hero-cancha {
+  position: absolute;
+  top: 50%;
+  right: -4%;
+  width: min(62%, 38rem);
+  height: auto;
+  transform: translateY(-50%);
+  fill: none;
+  stroke: var(--hero-acento);
+  stroke-width: 2;
+  opacity: 0.14;
+  pointer-events: none;
+}
+
+.hero-contenido {
+  position: relative;
+  max-width: 44rem;
+  padding: 1.75rem 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .hero-contenido {
+    padding: 2.75rem 2.5rem;
+  }
+}
+
+.hero-titulo {
+  margin-bottom: 1rem;
+  font-family: var(--fuente-titulos);
+  font-size: clamp(2.1rem, 6vw, 3.5rem);
+  font-weight: 700;
+  line-height: 1.05;
+  color: #ffffff;
+}
+
+.hero-bajada {
+  margin-bottom: 1.5rem;
+  font-size: 1.05rem;
+  color: var(--hero-texto-suave);
+}
+
+.hero-valores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  padding: 0;
+}
+
+.hero-pildora {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  color: var(--hero-texto);
+  font-size: 0.875rem;
+}
+
+.hero-pildora svg {
+  color: var(--hero-acento);
+}
+
+/* El clima conserva su componente: dentro del hero solo se adapta a la superficie oscura */
+.hero-clima {
+  --bs-body-color: var(--hero-texto);
+  --bs-secondary-color: var(--hero-texto-suave);
+  --bs-secondary-rgb: 203, 213, 225;
+  --bs-border-color: rgba(255, 255, 255, 0.18);
+  max-width: 100%;
+  color: var(--hero-texto);
+}
+
+.hero-clima .superficie {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: var(--tema-pizarra-suave);
+}
+
+.hero-clima .clima-dia-compacto {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: var(--tema-pizarra);
+}
+
+.hero-clima a {
+  color: var(--hero-acento);
+}
+
+.hero-clima .btn-outline-secondary {
+  --bs-btn-color: var(--hero-texto);
+  --bs-btn-border-color: rgba(255, 255, 255, 0.4);
+  --bs-btn-hover-color: var(--tema-pizarra);
+  --bs-btn-hover-bg: var(--hero-texto);
+  --bs-btn-hover-border-color: var(--hero-texto);
+}
+
+.bloque-resultados {
+  scroll-margin-top: 5rem;
+  outline: none;
+}
+
+.paso-card {
+  border-top: 3px solid var(--tema-primario);
+}
+
+.paso-icono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  background: var(--tema-primario-suave);
+  color: var(--tema-primario);
+}
+
+.paso-numero {
+  font-family: var(--fuente-titulos);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tema-texto-suave);
+}
+
+.banner-complejos {
+  border-left: 4px solid var(--tema-primario);
+}
+
+/* Desplegable nativo (details): el control es el resumen, con una flecha que gira al abrir */
+.banner-complejos-resumen {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: var(--toque-min);
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.banner-complejos-resumen::-webkit-details-marker {
+  display: none;
+}
+
+.banner-complejos-resumen:focus-visible {
+  outline: 2px solid var(--tema-primario);
+  outline-offset: -2px;
+}
+
+.banner-complejos-flecha {
+  flex-shrink: 0;
+  color: var(--tema-primario);
+  transition: transform 0.2s ease;
+}
+
+.banner-complejos[open] .banner-complejos-flecha {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .banner-complejos-flecha {
+    transition: none;
+  }
+}
+
+.banner-complejos-cuerpo {
+  padding: 0 1.5rem 1.5rem;
+}
+
+.banner-complejos-etiqueta {
+  margin: 0;
+  font-family: var(--fuente-titulos);
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tema-primario);
+}
+
+.banner-complejos-lista {
+  display: grid;
+  gap: 0.5rem 1.5rem;
+}
+
+.banner-complejos-lista li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+@media (min-width: 768px) {
+  .banner-complejos-lista {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* Mapa de complejos: el contenedor crea su propio contexto de apilado para que los controles de Leaflet no pasen por encima de la barra, los menús ni los modales */

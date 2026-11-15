@@ -58,3 +58,6 @@ export const conVista = (parametros, vista) => {
   if (vista === VISTA_MAPA) parametros.set('vista', VISTA_MAPA);
   return parametros;
 };
+
+/** La guía de uso de la portada solo se muestra sin filtros activos y en la vista de lista: quien ya busca ve los resultados primero. */
+export const mostrarGuiaDeUso = (filtros, vista) => vista !== VISTA_MAPA && !hayFiltros(filtros);

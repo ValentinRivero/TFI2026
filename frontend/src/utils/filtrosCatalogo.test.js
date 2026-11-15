@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
-  FILTROS_VACIOS, aParametros, conVista, contarFiltros, hayFiltros, leerFiltros, leerVista,
+  FILTROS_VACIOS, aParametros, conVista, contarFiltros, hayFiltros, leerFiltros, leerVista, mostrarGuiaDeUso,
 } from './filtrosCatalogo.js';
 
 const desde = (consulta) => leerFiltros(new URLSearchParams(consulta));
@@ -93,5 +93,29 @@ describe('leerVista y conVista', () => {
     const parametros = conVista(aParametros({ ...FILTROS_VACIOS, search: 'goya' }), 'mapa');
 
     expect(leerFiltros(parametros)).toEqual({ ...FILTROS_VACIOS, search: 'goya' });
+  });
+});
+
+describe('mostrarGuiaDeUso', () => {
+  test('sin filtros y en la lista se muestra', () => {
+    expect(mostrarGuiaDeUso(FILTROS_VACIOS, 'lista')).toBe(true);
+  });
+
+  test('en el mapa se oculta aunque no haya filtros', () => {
+    expect(mostrarGuiaDeUso(FILTROS_VACIOS, 'mapa')).toBe(false);
+  });
+
+  test.each([
+    ['un deporte', { deporte: '2' }],
+    ['una cobertura', { cobertura: '1' }],
+    ['un servicio', { servicios: ['4'] }],
+    ['una búsqueda', { search: 'yacaré' }],
+    ['un orden', { ordering: '-precio_desde' }],
+  ])('con %s se oculta', (_nombre, cambios) => {
+    expect(mostrarGuiaDeUso({ ...FILTROS_VACIOS, ...cambios }, 'lista')).toBe(false);
+  });
+
+  test('una búsqueda de solo espacios no cuenta como filtro', () => {
+    expect(mostrarGuiaDeUso({ ...FILTROS_VACIOS, search: '   ' }, 'lista')).toBe(true);
   });
 });
