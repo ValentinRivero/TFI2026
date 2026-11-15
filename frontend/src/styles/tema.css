@@ -139,6 +139,8 @@ body {
   color: var(--tema-texto);
   font-family: var(--fuente-cuerpo);
   -webkit-font-smoothing: antialiased;
+  /* Una palabra más larga que su línea (un email, un nombre sin espacios) se corta en lugar de salirse de la pantalla */
+  overflow-wrap: break-word;
 }
 
 .display-1,
@@ -1235,6 +1237,13 @@ a {
     background: transparent;
     box-shadow: none;
     text-align: right;
+    /* Un texto sin espacios (un email largo) se corta en varias líneas en lugar de ensanchar la fila */
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .tabla-apilable td > * {
+    min-width: 0;
   }
 
   .tabla-apilable td::before {
@@ -1546,13 +1555,13 @@ a {
   color: var(--hero-texto);
 }
 
+/* Anclada arriba y con alto propio (por la proporción del ancho): no se mueve cuando el hero crece al cargar el clima */
 .hero-cancha {
   position: absolute;
-  top: 50%;
+  top: 2rem;
   right: -4%;
   width: min(62%, 38rem);
   height: auto;
-  transform: translateY(-50%);
   fill: none;
   stroke: var(--hero-acento);
   stroke-width: 2;
