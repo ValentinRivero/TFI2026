@@ -9,9 +9,10 @@ import CampoFormulario from './CampoFormulario.jsx';
 
 /**
  * Pantalla de inicio de sesión (presentación): el estado y el envío los maneja `pages/Login.jsx`.
- * `estadoRegistro` viaja al enlace de crear cuenta para volver a la ruta de origen también desde ahí.
+ * `estadoRegistro` viaja al enlace de crear cuenta para volver a la ruta de origen también desde ahí. `errores` son los
+ * avisos de validación del propio formulario (por campo) y `error` el del último envío al servidor.
  */
-export default function FormularioLogin({ valores, onCambiar, onEnviar, enviando, error, aviso, estadoRegistro }) {
+export default function FormularioLogin({ valores, errores = {}, onCambiar, onEnviar, enviando, error, aviso, estadoRegistro }) {
   return (
     <div className="mx-auto" style={{ maxWidth: '28rem' }}>
       <h1 className="h2">{t('login.titulo')}</h1>
@@ -25,11 +26,14 @@ export default function FormularioLogin({ valores, onCambiar, onEnviar, enviando
             etiqueta={t('login.email')}
             type="email"
             autoComplete="email"
+            autoCapitalize="none"
+            spellCheck={false}
             inputMode="email"
             required
             maxLength={PARAMETROS.limitesCampos.email}
             valor={valores.email}
             onCambiar={(valor) => onCambiar('email', valor)}
+            error={errores.email}
           />
           <CampoFormulario
             id="login-password"
@@ -41,6 +45,7 @@ export default function FormularioLogin({ valores, onCambiar, onEnviar, enviando
             className="mb-4"
             valor={valores.password}
             onCambiar={(valor) => onCambiar('password', valor)}
+            error={errores.password}
           />
           <BotonAccion type="submit" className="w-100" cargando={enviando} textoCargando={t('login.ingresando')}>
             {t('login.enviar')}

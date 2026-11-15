@@ -7,6 +7,7 @@ import useSesion from '../hooks/useSesion.js';
 import { t } from '../i18n/index.js';
 import { login, registrar } from '../services/authService.js';
 import { rutaDeRetorno } from '../utils/retornoReserva.js';
+import { validarRegistro } from '../utils/validacionesCuenta.js';
 
 const VACIO = { nombre_completo: '', email: '', telefono: '', password: '' };
 
@@ -18,6 +19,7 @@ export default function Registro() {
   const [aceptaPolitica, setAceptaPolitica] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState(null);
+  const [errores, setErrores] = useState({});
   const [intentoSinAceptar, setIntentoSinAceptar] = useState(false);
 
   if (cargandoSesion) return <Cargando variante="pantalla" />;
@@ -26,10 +28,10 @@ export default function Registro() {
   const enviar = async (evento) => {
     evento.preventDefault();
     setError(null);
-    if (!aceptaPolitica) {
-      setIntentoSinAceptar(true);
-      return;
-    }
+    const invalidos = validarRegistro(valores);
+    setErrores(invalidos);
+    if (!aceptaPolitica) setIntentoSinAceptar(true);
+    if (!aceptaPolitica || Object.keys(invalidos).length > 0) return;
     setEnviando(true);
     try {
       await registrar({
@@ -54,7 +56,11 @@ export default function Registro() {
   return (
     <FormularioRegistro
       valores={valores}
-      onCambiar={(campo, valor) => setValores((actuales) => ({ ...actuales, [campo]: valor }))}
+      errores={errores}
+      onCambiar={(campo, valor) => {
+        setValores((actuales) => ({ ...actuales, [campo]: valor }));
+        setErrores(({ [campo]: _corregido, ...resto }) => resto);
+      }}
       aceptaPolitica={aceptaPolitica}
       onAceptarPolitica={setAceptaPolitica}
       intentoSinAceptar={intentoSinAceptar}

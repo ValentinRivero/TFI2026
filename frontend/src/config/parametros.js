@@ -135,5 +135,8 @@ export const PARAMETROS = Object.freeze({
   // Espejo de RANGO_MAXIMO_DIAS de Django y de Node (rango máximo de un reporte, en días, ambos extremos incluidos).
   reportes: Object.freeze({ rangoMaximoDias: 366 }),
   password: Object.freeze({ largoMinimo: 8 }),
+  // Espejo de LARGO_MINIMO_NOMBRE, LARGO_MINIMO_EMAIL y SIMBOLOS_PASSWORD de Django (core/models.py): reglas de los campos
+  // de cuenta. El largo mínimo de la contraseña es `password.largoMinimo` y los máximos están en `limitesCampos`.
+  cuenta: Object.freeze({ nombreLargoMinimo: 2, emailLargoMinimo: 6, passwordSimbolos: '!@#$%^&*()_+-=.,:;?/' }),
   pwa: Object.freeze({ claveBannerCerrado: 'talibre.bannerPwaCerrado', rutaServiceWorker: '/sw.js' }),
 });

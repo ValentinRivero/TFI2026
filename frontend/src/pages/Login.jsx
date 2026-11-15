@@ -7,6 +7,7 @@ import useSesion from '../hooks/useSesion.js';
 import { t } from '../i18n/index.js';
 import { login } from '../services/authService.js';
 import { rutaDeRetorno } from '../utils/retornoReserva.js';
+import { validarLogin } from '../utils/validacionesCuenta.js';
 
 export default function Login() {
   const { autenticado, cargandoSesion, rol } = useSesion();
@@ -14,6 +15,7 @@ export default function Login() {
   const [valores, setValores] = useState({ email: '', password: '' });
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState(null);
+  const [errores, setErrores] = useState({});
 
   if (cargandoSesion) return <Cargando variante="pantalla" />;
   // Con sesión (recién iniciada o previa) se vuelve a la ruta de origen o a la pantalla inicial del rol.
@@ -22,6 +24,9 @@ export default function Login() {
   const enviar = async (evento) => {
     evento.preventDefault();
     setError(null);
+    const invalidos = validarLogin(valores);
+    setErrores(invalidos);
+    if (Object.keys(invalidos).length > 0) return;
     setEnviando(true);
     try {
       await login(valores.email.trim(), valores.password);
@@ -34,7 +39,11 @@ export default function Login() {
   return (
     <FormularioLogin
       valores={valores}
-      onCambiar={(campo, valor) => setValores((actuales) => ({ ...actuales, [campo]: valor }))}
+      errores={errores}
+      onCambiar={(campo, valor) => {
+        setValores((actuales) => ({ ...actuales, [campo]: valor }));
+        setErrores(({ [campo]: _corregido, ...resto }) => resto);
+      }}
       onEnviar={enviar}
       enviando={enviando}
       error={error}

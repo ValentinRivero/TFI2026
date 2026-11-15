@@ -1,5 +1,6 @@
 import html
 import re
+import unicodedata
 from decimal import Decimal
 
 import nh3
@@ -11,6 +12,7 @@ from .models import (
     LARGO_DIRECCION,
     LARGO_EMAIL,
     LARGO_INFO_SENA,
+    LARGO_MINIMO_NOMBRE,
     LARGO_NOMBRE,
     LARGO_NOMBRE_CANCHA,
     LARGO_TELEFONO,
@@ -49,6 +51,12 @@ MAXIMO_PASADAS_SANITIZACION = 5
 PATRON_TELEFONO = re.compile(rf'^\+?[0-9\s()-]{{6,{LARGO_TELEFONO}}}$')
 MENSAJE_TELEFONO = 'Ingresá un teléfono válido: solo números, espacios, guiones, paréntesis y un + inicial.'
 MENSAJE_SIN_CAMPOS = 'Indicá al menos uno de los campos editables.'
+# Nombre de persona: letras de cualquier idioma, espacios, apóstrofes, guiones y puntos ("María José", "O'Brien", "Jr.").
+PATRON_NOMBRE_PERSONA = re.compile(r"^(?:[^\W\d_]|[ '’.\-])+$")
+MENSAJE_NOMBRE_PERSONA = (
+    'Ingresá un nombre válido: solo letras, espacios, apóstrofes, guiones y puntos, '
+    f'entre {LARGO_MINIMO_NOMBRE} y {LARGO_NOMBRE} caracteres.'
+)
 
 
 def limpiar_texto(valor):
@@ -74,12 +82,26 @@ def validar_telefono(valor):
     return valor
 
 
+def validar_nombre_persona(valor):
+    """Normaliza (acentos compuestos y espacios repetidos) y exige un nombre de persona sin dígitos, símbolos ni emojis."""
+    valor = ' '.join(unicodedata.normalize('NFC', valor).split())
+    letras = sum(caracter.isalpha() for caracter in valor)
+    if letras < LARGO_MINIMO_NOMBRE or not valor[:1].isalpha() or not PATRON_NOMBRE_PERSONA.match(valor):
+        raise serializers.ValidationError(MENSAJE_NOMBRE_PERSONA)
+    return valor
+
+
 class TextoLimpioField(serializers.CharField):
     def to_internal_value(self, data):
         valor = limpiar_texto(super().to_internal_value(data))
         if valor == '' and not self.allow_blank:
             self.fail('blank')
         return valor
+
+
+class NombrePersonaField(TextoLimpioField):
+    def to_internal_value(self, data):
+        return validar_nombre_persona(super().to_internal_value(data))
 
 
 class TelefonoField(TextoLimpioField):

@@ -7,14 +7,16 @@ import Alerta from './Alerta.jsx';
 import BotonAccion from './BotonAccion.jsx';
 import CampoFormulario from './CampoFormulario.jsx';
 
-const { limitesCampos, password: reglasPassword } = PARAMETROS;
+const { limitesCampos, password: reglasPassword, cuenta } = PARAMETROS;
 
 /**
  * Pantalla de registro (presentación): el estado y el envío los maneja `pages/Registro.jsx`. La casilla de la
- * política nunca viene marcada: el consentimiento tiene que ser expreso.
+ * política nunca viene marcada: el consentimiento tiene que ser expreso. `errores` son los avisos de validación del
+ * propio formulario (por campo) y `error` el del último envío al servidor.
  */
 export default function FormularioRegistro({
   valores,
+  errores = {},
   onCambiar,
   aceptaPolitica,
   onAceptarPolitica,
@@ -23,7 +25,7 @@ export default function FormularioRegistro({
   enviando,
   error,
 }) {
-  const campos = error?.campos ?? {};
+  const campos = { ...(error?.campos ?? {}), ...errores };
   const campo = (nombre, id, etiqueta, propiedades = {}) => (
     <CampoFormulario
       id={`registro-${id}`}
@@ -43,10 +45,20 @@ export default function FormularioRegistro({
         <Form onSubmit={onEnviar} noValidate>
           {error && <Alerta variante="danger">{error.mensaje}</Alerta>}
           {campo('nombre_completo', 'nombre', t('registro.nombre'), {
-            autoComplete: 'name', required: true, maxLength: limitesCampos.nombre,
+            autoComplete: 'name',
+            autoCapitalize: 'words',
+            required: true,
+            maxLength: limitesCampos.nombre,
+            ayuda: t('registro.ayudaNombre'),
           })}
           {campo('email', 'email', t('registro.email'), {
-            type: 'email', autoComplete: 'email', inputMode: 'email', required: true, maxLength: limitesCampos.email,
+            type: 'email',
+            autoComplete: 'email',
+            autoCapitalize: 'none',
+            spellCheck: false,
+            inputMode: 'email',
+            required: true,
+            maxLength: limitesCampos.email,
           })}
           {campo('telefono', 'telefono', t('registro.telefono'), {
             type: 'tel', autoComplete: 'tel', inputMode: 'tel', maxLength: limitesCampos.telefono,
@@ -58,7 +70,11 @@ export default function FormularioRegistro({
             required: true,
             minLength: reglasPassword.largoMinimo,
             maxLength: limitesCampos.password,
-            ayuda: t('registro.ayudaPassword', { largo: reglasPassword.largoMinimo }),
+            ayuda: t('registro.ayudaPassword', {
+              minimo: reglasPassword.largoMinimo,
+              maximo: limitesCampos.password,
+              simbolos: cuenta.passwordSimbolos,
+            }),
           })}
           <Form.Group className="mb-4" controlId="registro-politica">
             <Form.Check

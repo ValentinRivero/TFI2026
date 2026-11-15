@@ -2,7 +2,16 @@ import pytest
 from django.conf import settings
 from rest_framework import status
 
-from core.models import EstadoRegistro, LogAuditoria, Rol, TipoEventoAuditoria, Usuario
+from core.models import (
+    LARGO_EMAIL,
+    LARGO_NOMBRE,
+    SIMBOLOS_PASSWORD,
+    EstadoRegistro,
+    LogAuditoria,
+    Rol,
+    TipoEventoAuditoria,
+    Usuario,
+)
 
 pytestmark = pytest.mark.usefixtures('rbac')
 
@@ -118,10 +127,94 @@ def test_sanitiza_etiquetas_html_del_nombre(cliente):
     assert Usuario.objects.get(email='fabricio@talibre.test').nombre_completo == 'Juan Pérez'
 
 
-def test_conserva_el_ampersand_sin_escaparlo(cliente):
-    cliente.post(URL, _datos(nombre_completo='Pérez & Hijos'), format='json')
+class TestReglasDelNombre:
+    @pytest.mark.parametrize('nombre', [
+        'María José Pérez', "Nicolás O'Brien", 'Ana-Lucía Gómez', 'Juan Pérez Jr.', 'Ñandú Ríos', 'Li Wei', 'Zoë Müller',
+    ])
+    def test_acepta_nombres_de_persona(self, cliente, nombre):
+        respuesta = cliente.post(URL, _datos(nombre_completo=nombre), format='json')
 
-    assert Usuario.objects.get(email='fabricio@talibre.test').nombre_completo == 'Pérez & Hijos'
+        assert respuesta.status_code == status.HTTP_201_CREATED
+        assert Usuario.objects.get(email='fabricio@talibre.test').nombre_completo == nombre
+
+    @pytest.mark.parametrize('nombre', [
+        'Fabricio 2', '1234', 'Fabri💥cio', 'A', '  ', '-Fabricio', "'Fabricio", 'Fabricio_Medina',
+        'Pérez & Hijos', 'fabricio@medina', 'Fabricio (Fabri)', 'x' * (LARGO_NOMBRE + 1),
+    ])
+    def test_rechaza_digitos_simbolos_emojis_y_largos_fuera_de_rango(self, cliente, nombre):
+        respuesta = cliente.post(URL, _datos(nombre_completo=nombre), format='json')
+
+        assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'nombre_completo' in respuesta.json()['detail']
+        assert not Usuario.objects.filter(email='fabricio@talibre.test').exists()
+
+    def test_normaliza_espacios_repetidos_y_acentos_compuestos(self, cliente):
+        cliente.post(URL, _datos(nombre_completo='  María    José   Pérez '), format='json')
+
+        assert Usuario.objects.get(email='fabricio@talibre.test').nombre_completo == 'María José Pérez'
+
+    def test_el_nombre_sigue_sin_etiquetas_html(self, cliente):
+        cliente.post(URL, _datos(nombre_completo='<b>Fabricio</b> <i>Medina</i>'), format='json')
+
+        assert Usuario.objects.get(email='fabricio@talibre.test').nombre_completo == 'Fabricio Medina'
+
+
+class TestReglasDelEmail:
+    @pytest.mark.parametrize('email', ['a@b.co', 'fabricio.medina+reservas@talibre.test', 'FABRICIO@Talibre.Test'])
+    def test_acepta_correos_validos(self, cliente, email):
+        respuesta = cliente.post(URL, _datos(email=email), format='json')
+
+        assert respuesta.status_code == status.HTTP_201_CREATED
+        assert Usuario.objects.get(email=email.lower())
+
+    @pytest.mark.parametrize('email', [
+        'a@b.c', 'a@b', 'fabricio@localhost', 'fabricio', '@talibre.test', 'fabricio@', 'fabricio medina@talibre.test',
+        'fabricio😀@talibre.test', 'fabricio@talibre..test', '',
+    ])
+    def test_rechaza_correos_inválidos_o_demasiado_cortos(self, cliente, email):
+        respuesta = cliente.post(URL, _datos(email=email), format='json')
+
+        assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'email' in respuesta.json()['detail']
+
+    def test_rechaza_un_correo_de_mas_de_120_caracteres(self, cliente):
+        respuesta = cliente.post(URL, _datos(email='a' * LARGO_EMAIL + '@talibre.test'), format='json')
+
+        assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'email' in respuesta.json()['detail']
+
+
+class TestReglasDeLaContrasena:
+    def test_acepta_letras_numeros_y_todos_los_simbolos_permitidos(self, cliente):
+        password = 'Pelota' + SIMBOLOS_PASSWORD + '9'
+
+        respuesta = cliente.post(URL, _datos(password=password), format='json')
+
+        assert respuesta.status_code == status.HTTP_201_CREATED
+        assert Usuario.objects.get(email='fabricio@talibre.test').check_password(password)
+
+    @pytest.mark.parametrize('password', [
+        'Pelota Arco 2026', 'Contraseña2026', 'ClaveSegura😀', 'Clavé-Segura1', 'Pelota|Arco2026', 'Pelota"Arco2026',
+        "Pelota'Arco2026", 'Pelota~Arco2026', 'Pelota	Arco2026', ' PelotaArco2026',
+    ])
+    def test_rechaza_espacios_tildes_emojis_y_simbolos_no_permitidos(self, cliente, password):
+        respuesta = cliente.post(URL, _datos(password=password), format='json')
+
+        assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'password' in respuesta.json()['detail']
+        assert SIMBOLOS_PASSWORD in respuesta.json()['detail']['password'][0]
+        assert not Usuario.objects.filter(email='fabricio@talibre.test').exists()
+
+    def test_rechaza_una_contrasena_de_mas_de_128_caracteres(self, cliente):
+        respuesta = cliente.post(URL, _datos(password='Aa1' * 43), format='json')
+
+        assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'password' in respuesta.json()['detail']
+
+    def test_la_contrasena_rechazada_no_queda_en_la_auditoria(self, cliente):
+        cliente.post(URL, _datos(password='Pelota Arco 2026'), format='json')
+
+        assert not LogAuditoria.objects.filter(detalle__contains='Pelota').exists()
 
 
 def test_no_reconstruye_etiquetas_codificadas(cliente):

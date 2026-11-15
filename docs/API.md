@@ -33,7 +33,7 @@ Referencia de los endpoints vigentes del backend principal. Todas las rutas cuel
 | Método y ruta | Acceso | Uso |
 |---|---|---|
 | `GET /api/health/` | Público | Estado del servicio |
-| `POST /api/registro/` | Público | Alta de jugador: `nombre_completo`, `email`, `password`, `telefono` (opcional) y `acepta_politica_privacidad: true` |
+| `POST /api/registro/` | Público | Alta de jugador: `nombre_completo` (2 a 120 caracteres: letras, espacios, apóstrofes, guiones y puntos), `email` (6 a 120 caracteres, con formato válido), `password` (8 a 128 caracteres: letras sin tildes ni ñ, números y los símbolos `!@#$%^&*()_+-=.,:;?/`, sin espacios), `telefono` (opcional: números, espacios, guiones, paréntesis y un `+` inicial) y `acepta_politica_privacidad: true`. Un valor fuera de estas reglas responde `400` con el detalle por campo |
 | `POST /api/token/` | Público | Inicio de sesión con `email` y `password`; devuelve `{ access }` y la cookie de sesión |
 | `POST /api/token/refresh/` | Cookie de sesión | Nuevo `{ access }` |
 | `POST /api/token/logout/` | Cookie de sesión | Cierra la sesión (`204`) |

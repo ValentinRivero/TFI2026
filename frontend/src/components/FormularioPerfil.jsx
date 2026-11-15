@@ -34,7 +34,9 @@ export default function FormularioPerfil({ email, valores, onCambiar, onEnviar, 
           etiqueta={t('perfil.nombre')}
           autoComplete="name"
           required
+          autoCapitalize="words"
           maxLength={limitesCampos.nombre}
+          ayuda={t('registro.ayudaNombre')}
           valor={valores.nombre_completo}
           onCambiar={(valor) => onCambiar('nombre_completo', valor)}
           error={campos.nombre_completo}

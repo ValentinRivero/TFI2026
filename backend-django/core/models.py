@@ -13,6 +13,9 @@ LARGO_NOMBRE_CANCHA = 80
 LARGO_TEXTO_LIBRE = 255  # observaciones y descripciones
 LARGO_ACCION_AUDITORIA = 120
 LARGO_MAXIMO_PASSWORD = 128  # solo se aplica en la API; la base guarda el hash
+LARGO_MINIMO_NOMBRE = 2  # letras de un nombre de persona; solo se aplica en la API
+LARGO_MINIMO_EMAIL = 6  # a@b.co: el menor correo posible; solo se aplica en la API
+SIMBOLOS_PASSWORD = '!@#$%^&*()_+-=.,:;?/'  # junto con letras ASCII y números; solo se aplica en la API
 LATITUD_MAXIMA = 90
 LONGITUD_MAXIMA = 180
 HORAS_CANCELACION_DEFECTO = 4
