@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
 
 /**
- * Filtros que se aplican apenas cambian (selectores y fechas). `cambiar(campo, valor)` actualiza uno y `limpiar`
- * vuelve a los valores iniciales.
+ * Filtros que se aplican apenas cambian (selectores y fechas). `cambiar(campo, valor)` actualiza uno, `combinar(cambios)`
+ * actualiza varios a la vez (una sola consulta) y `limpiar` vuelve a los valores iniciales.
  */
 export default function useFiltros(iniciales) {
   const [filtros, setFiltros] = useState(iniciales);
@@ -11,5 +11,9 @@ export default function useFiltros(iniciales) {
     setFiltros((actuales) => ({ ...actuales, [campo]: valor }));
   }, []);
 
-  return { filtros, cambiar, limpiar: () => setFiltros(iniciales) };
+  const combinar = useCallback((cambios) => {
+    setFiltros((actuales) => ({ ...actuales, ...cambios }));
+  }, []);
+
+  return { filtros, cambiar, combinar, limpiar: () => setFiltros(iniciales) };
 }

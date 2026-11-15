@@ -88,8 +88,8 @@ export default function CampoFecha({
             onCambiar(evento.target.value);
           }}
         />
-        <Form.Control.Feedback type="invalid">{error}</Form.Control.Feedback>
       </InputGroup>
+      {error && <Form.Control.Feedback type="invalid" className="d-block">{error}</Form.Control.Feedback>}
       {ayuda && <Form.Text muted>{ayuda}</Form.Text>}
     </Form.Group>
   );

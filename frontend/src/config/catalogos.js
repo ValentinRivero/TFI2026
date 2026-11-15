@@ -192,6 +192,13 @@ export const PESTANAS_AGENDA = Object.freeze([
   Object.freeze({ valor: VISTA_AGENDA.TURNOS_FIJOS, clave: 'agenda.pestanaTurnosFijos' }),
 ]);
 
+/** Períodos rápidos del rango de fechas de la agenda: terminan hoy e incluyen hoy (`dias` = 7 es de hoy a seis días atrás). */
+export const PERIODOS_AGENDA = Object.freeze([
+  Object.freeze({ valor: 'semana', clave: 'agenda.periodoSemana', dias: 7 }),
+  Object.freeze({ valor: 'mes', clave: 'agenda.periodoMes', dias: 30 }),
+  Object.freeze({ valor: 'trimestre', clave: 'agenda.periodoTrimestre', dias: 90 }),
+]);
+
 export const ES_DIA_COMPLETO = 1;
 export const ES_FRANJA_HORARIA = 0;
 

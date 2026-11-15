@@ -11,7 +11,7 @@ import TablaAgenda from './TablaAgenda.jsx';
 import VistaPreviaCambio from './VistaPreviaCambio.jsx';
 
 /**
- * Pestaña "Reservas del día" de la agenda (presentación): avisos, alta manual, filtros, tabla paginada y los diálogos
+ * Pestaña "Reservas" de la agenda (presentación): avisos, alta manual, filtros, tabla paginada y los diálogos
  * de cancelación y reapertura. `agenda` es lo que devuelve `useAgenda` y `canchas`, `[{ id, nombre }]` del complejo.
  */
 export default function SeccionReservasAgenda({ agenda, canchas }) {
@@ -33,8 +33,12 @@ export default function SeccionReservasAgenda({ agenda, canchas }) {
 
       <FiltrosAgenda
         filtros={agenda.filtros}
+        errores={agenda.erroresFiltros}
+        periodo={agenda.periodo}
         canchas={canchas}
         onCambiar={agenda.cambiarFiltro}
+        onAlternarRango={agenda.alternarRango}
+        onElegirPeriodo={agenda.elegirPeriodo}
         onLimpiar={agenda.limpiarFiltros}
       />
       <TablaAgenda
