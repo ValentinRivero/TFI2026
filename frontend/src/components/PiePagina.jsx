@@ -78,6 +78,7 @@ export default function PiePagina() {
           <span>{t('pie.derechos', { anio })}</span>
           <span className="num">{t('pie.version', { version: app.version })}</span>
         </Container>
+        <p className="pie-pagina-aviso" role="note">{t('pie.aviso')}</p>
       </div>
     </footer>
   );

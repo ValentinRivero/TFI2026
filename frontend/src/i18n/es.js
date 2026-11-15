@@ -79,6 +79,7 @@ const es = {
     contacto: 'Contacto',
     correo: 'Escribinos',
     derechos: '© %anio% TaLibre. Todos los derechos reservados.',
+    aviso: 'TaLibre es un proyecto de trabajo final de la carrera Tecnicatura Universitaria en Programación (TUP) de la UTN FRRe, no un servicio real. Por eso no tiene utilidad práctica ni usa datos de complejos reales de la ciudad.',
   },
   sesion: {
     comoRol: '%nombre% (%rol%)',
