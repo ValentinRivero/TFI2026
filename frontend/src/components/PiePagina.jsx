@@ -14,14 +14,14 @@ const redesPublicadas = pie.redes.filter(({ url }) => typeof url === 'string' &&
 /**
  * Pie de página (presentación): marca y ubicación, redes (con su usuario) y política de privacidad con su versión
  * vigente (junto al contacto, para no alargar el pie), contacto por correo y la versión de la aplicación. Las redes y el correo se leen de `config/parametros.js`. Se apila en pantallas
- * chicas y pasa a tres columnas desde `md`. `ancho` es el de `Layout` (`panel` usa el contenedor fluido).
+ * chicas y pasa a tres columnas desde `md`. Siempre usa el contenedor centrado, también en los paneles de administración (que sí usan ancho completo), para que se vea igual en todas las pantallas.
  */
-export default function PiePagina({ ancho = 'normal' }) {
+export default function PiePagina() {
   const anio = new Date().getFullYear();
 
   return (
     <footer className="pie-pagina" aria-label={t('pie.etiqueta')}>
-      <Container fluid={ancho === 'panel'} className="py-4">
+      <Container className="py-4">
         <Row className="g-4">
           <Col xs={12} md={4} lg={4}>
             <span className="pie-pagina-marca">
@@ -74,7 +74,7 @@ export default function PiePagina({ ancho = 'normal' }) {
         </Row>
       </Container>
       <div className="pie-pagina-legal">
-        <Container fluid={ancho === 'panel'} className="py-3 small d-flex flex-wrap justify-content-between gap-2">
+        <Container className="py-3 small d-flex flex-wrap justify-content-between gap-2">
           <span>{t('pie.derechos', { anio })}</span>
           <span className="num">{t('pie.version', { version: app.version })}</span>
         </Container>
