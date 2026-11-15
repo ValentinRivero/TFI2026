@@ -48,6 +48,7 @@
   --hero-texto: #f1f5f9;
   --hero-texto-suave: #cbd5e1;
   --hero-acento: #86efac;
+  --pie-aviso: #f87171;
   --tema-texto: #1e293b;
   --tema-texto-suave: #475569;
 
@@ -1130,6 +1131,16 @@ a {
 
 .pie-pagina-nota {
   color: #94a3b8;
+}
+
+/* Aclaración al pie de todo: centrada, chica y en rojo claro para que se lea sobre la pizarra */
+.pie-pagina-aviso {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 0 1rem 1rem;
+  font-size: 0.75rem;
+  text-align: center;
+  color: var(--pie-aviso);
 }
 
 .pie-pagina-legal {

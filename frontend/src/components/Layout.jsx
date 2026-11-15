@@ -164,7 +164,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
         </Suspense>
       </main>
 
-      <PiePagina ancho={ancho} />
+      <PiePagina />
       <BannerInstalarPWA modo={pwa.modo} onInstalar={pwa.instalar} onCerrar={pwa.cerrar} />
     </div>
   );
