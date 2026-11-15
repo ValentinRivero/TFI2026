@@ -141,7 +141,7 @@ describe('Modelo Notificacion', () => {
 });
 
 describe('Notificacion.bandeja', () => {
-  const VIGENTES = { $in: [ESTADOS_NOTIFICACION.NO_LEIDA, ESTADOS_NOTIFICACION.LEIDA] };
+  const VIGENTES = mongoose.trusted({ $in: [ESTADOS_NOTIFICACION.NO_LEIDA, ESTADOS_NOTIFICACION.LEIDA] });
 
   test('la del complejo trae sus avisos generales, sin los dirigidos a un usuario puntual', () => {
     expect(Notificacion.bandeja({ complejo_id: 4 }).getFilter()).toEqual({
@@ -200,5 +200,37 @@ describe('Notificacion.bandeja', () => {
       expect(Notificacion.filtroDeBandeja({ complejo_id: 4 }, criterios))
         .toEqual(Notificacion.bandeja({ complejo_id: 4 }, { criterios }).getFilter());
     });
+  });
+});
+
+// Con `sanitizeFilter` activo (config/db.js) Mongoose trata cualquier operador como valor literal, salvo los marcados
+// con `mongoose.trusted`. Estas pruebas castean la consulta como lo hace `exec()`, sin necesidad de una base real.
+describe('Consultas de notificaciones con sanitizeFilter activo', () => {
+  const sanitizacionPrevia = mongoose.get('sanitizeFilter');
+
+  beforeAll(() => mongoose.set('sanitizeFilter', true));
+  afterAll(() => mongoose.set('sanitizeFilter', sanitizacionPrevia));
+
+  const errorAlCastear = (consulta) => {
+    consulta._castConditions();
+    return consulta.error();
+  };
+
+  test.each([
+    ['la bandeja del complejo sin filtrar por estado (Todas)', () => Notificacion.bandeja({ complejo_id: 4 })],
+    ['la bandeja personal sin filtrar por estado (Todas)', () => Notificacion.bandeja({ usuario_id: 12 })],
+    ['el total de la bandeja sin filtrar por estado', () => Notificacion.countDocuments(Notificacion.filtroDeBandeja({ complejo_id: 4 }))],
+    ['la bandeja filtrada por no leídas', () => Notificacion.bandeja({ complejo_id: 4 }, { criterios: { estado: 1 } })],
+    ['la bandeja filtrada por leídas', () => Notificacion.bandeja({ usuario_id: 12 }, { criterios: { estado: 2 } })],
+    ['la búsqueda de una notificación vigente por id', () => Notificacion.vigentePorId('6af8953c6391980c346f2035')],
+  ])('castea sin error %s', (_descripcion, armar) => {
+    expect(errorAlCastear(armar())).toBeFalsy();
+  });
+
+  test('sin filtro de estado la consulta sigue acotada a los dos estados vigentes y excluye la baja', () => {
+    const consulta = Notificacion.bandeja({ complejo_id: 4 });
+    consulta._castConditions();
+
+    expect(consulta.getFilter().estado).toEqual(mongoose.trusted({ $in: [1, 2] }));
   });
 });

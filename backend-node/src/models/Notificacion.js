@@ -62,6 +62,10 @@ const notificacionSchema = new mongoose.Schema(
 
 const VIGENTES = [ESTADOS_NOTIFICACION.NO_LEIDA, ESTADOS_NOTIFICACION.LEIDA];
 
+// `sanitizeFilter` (config/db.js) vuelve literal cualquier operador; este lo arma el servidor, no el cliente, así que
+// se marca como confiable. Sin eso `$in` se castea como un número y la consulta falla.
+const soloVigentes = () => mongoose.trusted({ $in: [...VIGENTES] });
+
 /**
  * Filtro de la bandeja de un destinatario. La de un complejo trae solo sus avisos generales: los dirigidos a un
  * usuario puntual los ve únicamente ese usuario. Sin destinatario se rechaza, para no listar las de todos.
@@ -81,7 +85,7 @@ notificacionSchema.statics.filtroDeBandeja = function filtroDeBandeja(
   return {
     ...(complejoId ? { complejo_id: complejoId } : {}),
     usuario_id: usuarioId ?? null,
-    estado: estado ?? { $in: VIGENTES },
+    estado: estado ?? soloVigentes(),
     ...(categoria === undefined ? {} : { categoria }),
     ...(prioridad === undefined ? {} : { prioridad }),
   };
@@ -104,7 +108,7 @@ notificacionSchema.statics.bandeja = function bandeja(
 
 /** Una notificación vigente por id, con el mismo `populate` que la bandeja. */
 notificacionSchema.statics.vigentePorId = function vigentePorId(id) {
-  return this.findOne({ _id: id, estado: { $in: VIGENTES } })
+  return this.findOne({ _id: id, estado: soloVigentes() })
     .populate({ path: 'evento', select: CAMPOS_DEL_EVENTO, match: { estado: ESTADOS_EVENTO.ACTIVO } });
 };
 

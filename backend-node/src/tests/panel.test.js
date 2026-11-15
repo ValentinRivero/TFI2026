@@ -9,6 +9,9 @@ import Evento, { TIPOS_EVENTO } from '../models/Evento.js';
 import Notificacion, { CATEGORIAS_NOTIFICACION, ESTADOS_NOTIFICACION } from '../models/Notificacion.js';
 import { ROLES } from '../middlewares/rol.middleware.js';
 
+// Los estados vigentes se filtran con un operador marcado como confiable: sin la marca, `sanitizeFilter` lo anula.
+const vigentes = () => mongoose.trusted({ $in: [1, 2] });
+
 const CLAVE = 'clave-compartida-de-prueba-con-largo-suficiente-0123456789';
 const COMPLEJO_PROPIO = 4;
 const COMPLEJO_AJENO = 9;
@@ -187,7 +190,7 @@ describe('GET /api/actividad/notificaciones (bandeja del complejo)', () => {
     expect(respuesta.body.count).toBe(21);
     expect(respuesta.body.next).toBe('/api/actividad/notificaciones?complejo_id=4&page=2&limit=20');
     expect(consultasDe('Notificacion', 'find')[0].filtro).toEqual(
-      { complejo_id: 4, usuario_id: null, estado: { $in: [1, 2] } },
+      { complejo_id: 4, usuario_id: null, estado: vigentes() },
     );
     expect(consultasDe('Notificacion', 'find')[0].opciones).toMatchObject({ skip: 0, limit: 20 });
     expect(consultasDe('Notificacion', 'countDocuments')[0].filtro).toEqual(consultasDe('Notificacion', 'find')[0].filtro);
@@ -243,7 +246,7 @@ describe('GET /api/actividad/notificaciones/mias (bandeja propia de cualquier us
     const respuesta = await request(app).get('/api/actividad/notificaciones/mias').set(como(rol, 7));
 
     expect(respuesta.status).toBe(200);
-    expect(consultasDe('Notificacion', 'find')[0].filtro).toEqual({ usuario_id: 7, estado: { $in: [1, 2] } });
+    expect(consultasDe('Notificacion', 'find')[0].filtro).toEqual({ usuario_id: 7, estado: vigentes() });
   });
 
   test('también una cuenta con el rol desactivado', async () => {
@@ -257,7 +260,7 @@ describe('GET /api/actividad/notificaciones/mias (bandeja propia de cualquier us
 
     await request(app).get('/api/actividad/notificaciones/mias?usuario_id=99&complejo_id=4').set(como(ROLES.JUGADOR, 7));
 
-    expect(consultasDe('Notificacion', 'find')[0].filtro).toEqual({ usuario_id: 7, estado: { $in: [1, 2] } });
+    expect(consultasDe('Notificacion', 'find')[0].filtro).toEqual({ usuario_id: 7, estado: vigentes() });
   });
 
   test('no consulta a Django: no hay complejo que verificar', async () => {
@@ -299,7 +302,7 @@ describe('Filtros de las bandejas de notificaciones', () => {
     test('sin filtros rige el criterio de siempre: no leídas y leídas', async () => {
       await pedir(ruta, rol);
 
-      expect(filtroEnviado()).toEqual({ ...destinatario, usuario_id: destinatario.usuario_id ?? null, estado: { $in: [1, 2] } });
+      expect(filtroEnviado()).toEqual({ ...destinatario, usuario_id: destinatario.usuario_id ?? null, estado: vigentes() });
     });
 
     test.each([
@@ -310,7 +313,7 @@ describe('Filtros de las bandejas de notificaciones', () => {
     ])('%s acota la consulta y el conteo', async (parametro, esperado) => {
       await pedir(ruta, rol, parametro);
 
-      const base = { ...destinatario, usuario_id: destinatario.usuario_id ?? null, estado: { $in: [1, 2] } };
+      const base = { ...destinatario, usuario_id: destinatario.usuario_id ?? null, estado: vigentes() };
       expect(filtroEnviado()).toEqual({ ...base, ...esperado });
       expect(consultasDe('Notificacion', 'countDocuments')[0].filtro).toEqual(filtroEnviado());
     });
@@ -374,7 +377,7 @@ describe('Filtros de las bandejas de notificaciones', () => {
 
     await pedir('/api/actividad/notificaciones/mias?', ROLES.JUGADOR, 'usuario_id=99&categoria=1');
 
-    expect(filtroEnviado()).toEqual({ usuario_id: 7, estado: { $in: [1, 2] }, categoria: 1 });
+    expect(filtroEnviado()).toEqual({ usuario_id: 7, estado: vigentes(), categoria: 1 });
   });
 
   test('la bandeja del complejo sigue mostrando solo avisos generales aunque se filtre', async () => {
@@ -423,7 +426,7 @@ describe('PATCH /api/actividad/notificaciones/:id', () => {
 
     await marcar(como(ROLES.JUGADOR, 7));
 
-    expect(consultasDe('Notificacion', 'findOne')[0].filtro).toEqual({ _id: ID, estado: { $in: [1, 2] } });
+    expect(consultasDe('Notificacion', 'findOne')[0].filtro).toEqual({ _id: ID, estado: vigentes() });
   });
 
   test('el personal del complejo marca un aviso general del complejo, con acceso verificado en Django', async () => {
