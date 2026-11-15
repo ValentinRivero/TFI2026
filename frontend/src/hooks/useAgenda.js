@@ -9,8 +9,13 @@ import {
   reabrirReserva,
 } from '../services/reservaService.js';
 import {
+  cambiosAlAlternarRango,
   cuerpoReservaManual,
+  fechaInicialDeAlta,
   filtrosAgendaIniciales,
+  periodoActivo,
+  rangoDelPeriodo,
+  validarFiltrosAgenda,
   validarReservaManual,
   VALORES_RESERVA_MANUAL_INICIALES,
 } from '../utils/agenda.js';
@@ -25,21 +30,29 @@ import useListaPaginada from './useListaPaginada.js';
 const ESTADO_REAPERTURA_INICIAL = String(ESTADOS_REAPERTURA[0]);
 
 /**
- * Agenda operativa del complejo activo: lista paginada de reservas con filtros (día, cancha, estado y conflictos de
- * operatoria), alta manual (telefónica o presencial), cambio de estado, cancelación por el complejo y reapertura de
+ * Agenda operativa del complejo activo: lista paginada de reservas con filtros (día o rango de fechas con períodos
+ * rápidos, cancha, estado y conflictos de operatoria), alta manual (telefónica o presencial), cambio de estado, cancelación por el complejo y reapertura de
  * una cancelada. El horario del alta se elige en la mini-grilla real de la cancha y el día (`bloques`), mantenida al
  * día en vivo. La reapertura valida el turno en el servidor y pide una confirmación explícita (`409` con
  * `requiere_confirmacion`) antes de volver a ocupar el casillero.
  */
 export default function useAgenda(complejoId, { habilitado = true } = {}) {
   const hoy = aFechaIso(new Date());
-  const { filtros, cambiar: cambiarFiltro, limpiar: limpiarFiltros } = useFiltros(filtrosAgendaIniciales(hoy));
+  const { filtros, cambiar: cambiarFiltro, combinar, limpiar: limpiarFiltros } = useFiltros(filtrosAgendaIniciales(hoy));
+  const erroresFiltros = validarFiltrosAgenda(filtros);
+  const consultable = habilitado && Object.keys(erroresFiltros).length === 0;
   const lista = useListaPaginada(
-    async (pagina, signal) => (habilitado
+    async (pagina, signal) => (consultable
       ? listarAgenda(complejoId, filtros, pagina, signal)
       : { count: 0, results: [] }),
-    [complejoId, filtros, habilitado],
+    [complejoId, filtros, consultable],
   );
+
+  const alternarRango = (activo) => combinar(cambiosAlAlternarRango(filtros, activo, hoy));
+  const elegirPeriodo = (periodo) => {
+    const rango = rangoDelPeriodo(periodo, hoy);
+    if (rango) combinar(rango);
+  };
 
   const [aviso, setAviso] = useState(null);
   const [errorAccion, setErrorAccion] = useState(null);
@@ -60,7 +73,7 @@ export default function useAgenda(complejoId, { habilitado = true } = {}) {
   const abrirAlta = () => {
     alta.limpiar();
     setIntentado(false);
-    setValores({ ...VALORES_RESERVA_MANUAL_INICIALES, fecha_turno: filtros.fecha || hoy });
+    setValores({ ...VALORES_RESERVA_MANUAL_INICIALES, fecha_turno: fechaInicialDeAlta(filtros, hoy) });
     setAltaAbierta(true);
   };
 
@@ -170,7 +183,11 @@ export default function useAgenda(complejoId, { habilitado = true } = {}) {
   return {
     lista,
     filtros,
+    erroresFiltros,
+    periodo: periodoActivo(filtros, hoy),
     cambiarFiltro,
+    alternarRango,
+    elegirPeriodo,
     limpiarFiltros,
     aviso,
     descartarAviso: () => setAviso(null),
