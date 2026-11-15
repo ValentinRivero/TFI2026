@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Outlet, Route, Routes } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import AceptarPolitica from './components/AceptarPolitica.jsx';
 import Cargando from './components/Cargando.jsx';
 import Layout from './components/Layout.jsx';
@@ -19,6 +19,7 @@ const GestionCanchas = lazy(() => import('./pages/GestionCanchas.jsx'));
 const GestionExcepciones = lazy(() => import('./pages/GestionExcepciones.jsx'));
 const Agenda = lazy(() => import('./pages/Agenda.jsx'));
 const Reportes = lazy(() => import('./pages/Reportes.jsx'));
+const RegistroComplejo = lazy(() => import('./pages/RegistroComplejo.jsx'));
 const LayoutSistema = lazy(() => import('./components/LayoutSistema.jsx'));
 const PanelSistema = lazy(() => import('./pages/PanelSistema.jsx'));
 const Contratos = lazy(() => import('./pages/Contratos.jsx'));
@@ -26,7 +27,6 @@ const Auditoria = lazy(() => import('./pages/Auditoria.jsx'));
 const MisReservas = lazy(() => import('./pages/MisReservas.jsx'));
 const Perfil = lazy(() => import('./pages/Perfil.jsx'));
 const Notificaciones = lazy(() => import('./pages/Notificaciones.jsx'));
-const NotificacionesComplejo = lazy(() => import('./pages/NotificacionesComplejo.jsx'));
 
 // La guía visual es una herramienta de desarrollo: en el build de producción esta constante es `null` y el
 // bloque de la guía no se incluye. No figura en la navegación: en desarrollo se abre escribiendo `/guia`.
@@ -84,6 +84,7 @@ export default function App() {
           <Route path="*" element={<NoEncontrada />} />
         </Route>
         <Route element={<PlantillaPanel />}>
+          <Route path="/panel/notificaciones" element={<Navigate to="/panel/registro" replace />} />
           <Route path="/panel" element={<ProtectedRoute seccion="panel"><LayoutPanel /></ProtectedRoute>}>
             <Route index element={<PanelComplejo />} />
             <Route path="canchas" element={<GestionCanchas />} />
@@ -91,8 +92,8 @@ export default function App() {
             <Route path="agenda" element={<ProtectedRoute seccion="agenda"><Agenda /></ProtectedRoute>} />
             <Route path="reportes" element={<ProtectedRoute seccion="reportes"><Reportes /></ProtectedRoute>} />
             <Route
-              path="notificaciones"
-              element={<ProtectedRoute seccion="notificacionesComplejo"><NotificacionesComplejo /></ProtectedRoute>}
+              path="registro"
+              element={<ProtectedRoute seccion="registroComplejo"><RegistroComplejo /></ProtectedRoute>}
             />
           </Route>
           <Route path="/sistema" element={<ProtectedRoute seccion="sistema"><LayoutSistema /></ProtectedRoute>}>

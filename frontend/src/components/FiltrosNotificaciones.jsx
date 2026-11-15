@@ -14,12 +14,14 @@ const OPCIONES_PRIORIDAD = opcionesDe(PRIORIDAD_NOTIFICACION);
 const OPCIONES_CATEGORIA = opcionesDe(CATEGORIA_NOTIFICACION);
 
 /**
- * Filtros de una bandeja de notificaciones. `campos` elige cuáles se ofrecen (`estado`, `prioridad`, `categoria`);
- * `onCambiar(campo, valor)` avisa cada cambio y `onLimpiar` vuelve a los valores por defecto.
+ * Filtros de una bandeja de notificaciones. `campos` elige cuáles se ofrecen (`estado`, `prioridad`, `categoria` y
+ * `complejo`, que además necesita la lista `complejos` con `{ id, nombre }`); `onCambiar(campo, valor)` avisa cada
+ * cambio y `onLimpiar` vuelve a los valores por defecto.
  */
 export default function FiltrosNotificaciones({
   filtros,
   campos = ['estado', 'prioridad', 'categoria'],
+  complejos = [],
   hayFiltros,
   onCambiar,
   onLimpiar,
@@ -71,6 +73,19 @@ export default function FiltrosNotificaciones({
             onCambiar={(valor) => onCambiar('categoria', valor)}
             placeholder={t('notificaciones.todasLasCategorias')}
             opciones={OPCIONES_CATEGORIA}
+            className="mb-0"
+          />
+        </Col>
+      )}
+      {campos.includes('complejo') && (
+        <Col sm={6} lg={3}>
+          <CampoSelect
+            id="filtro-notificacion-complejo"
+            etiqueta={t('notificaciones.complejo')}
+            valor={filtros.complejo}
+            onCambiar={(valor) => onCambiar('complejo', valor)}
+            placeholder={t('notificaciones.todosLosComplejos')}
+            opciones={complejos.map(({ id, nombre }) => ({ valor: String(id), etiqueta: nombre }))}
             className="mb-0"
           />
         </Col>

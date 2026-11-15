@@ -1,7 +1,7 @@
 """
-Cliente HTTP de backend-node para los avisos que emite Django por la ruta interna de notificaciones. Usa la
-biblioteca estándar: es un único POST con tiempo máximo, sin redirecciones y autenticado con la clave compartida
-entre servicios. La URL y la clave salen de la configuración, nunca del pedido de un usuario.
+Cliente HTTP de backend-node para las rutas internas: el aviso de notificaciones (POST) y el estado del servicio
+(GET). Usa la biblioteca estándar: un único pedido con tiempo máximo, sin redirecciones y autenticado con la clave
+compartida entre servicios. La URL y la clave salen de la configuración, nunca del pedido de un usuario.
 """
 import json
 import urllib.error
@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 from django.conf import settings
 
 RUTA_NOTIFICACIONES = '/api/interno/notificaciones'
+RUTA_ESTADO = '/api/interno/estado'
 LARGO_MINIMO_DE_CLAVE = 32
 
 
@@ -31,7 +32,7 @@ class _SinRedirecciones(urllib.request.HTTPRedirectHandler):
 _abridor = urllib.request.build_opener(_SinRedirecciones)
 
 
-def _url_de_notificaciones():
+def _url_interna(ruta):
     base = (settings.NODE_API_URL or '').strip().rstrip('/')
     clave = settings.INTERNAL_API_KEY or ''
     partes = urlsplit(base)
@@ -39,16 +40,10 @@ def _url_de_notificaciones():
         raise NodeNoConfigurado()
     if base.endswith('/api'):
         base = base[:-len('/api')]
-    return f'{base}{RUTA_NOTIFICACIONES}', clave
+    return f'{base}{ruta}', clave
 
 
-def _enviar(url, clave, datos):
-    pedido = urllib.request.Request(
-        url,
-        data=json.dumps(datos).encode('utf-8'),
-        method='POST',
-        headers={'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Internal-Key': clave},
-    )
+def _pedir(pedido):
     try:
         with _abridor.open(pedido, timeout=settings.NODE_TIMEOUT_SEGUNDOS) as respuesta:
             return json.loads(respuesta.read())
@@ -60,7 +55,28 @@ def _enviar(url, clave, datos):
         raise NodeNoDisponible('devolvió una respuesta que no es JSON') from error
 
 
+def _enviar(url, clave, datos):
+    return _pedir(urllib.request.Request(
+        url,
+        data=json.dumps(datos).encode('utf-8'),
+        method='POST',
+        headers={'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Internal-Key': clave},
+    ))
+
+
+def _consultar(url, clave):
+    return _pedir(urllib.request.Request(
+        url, method='GET', headers={'Accept': 'application/json', 'X-Internal-Key': clave},
+    ))
+
+
 def enviar_notificacion(datos):
-    """Entrega un aviso a backend-node y devuelve su respuesta (`{id, evento}`)."""
-    url, clave = _url_de_notificaciones()
+    """Entrega un aviso a backend-node y devuelve su respuesta (`{id, ids, evento, omitidas}`)."""
+    url, clave = _url_interna(RUTA_NOTIFICACIONES)
     return _enviar(url, clave, datos)
+
+
+def consultar_estado():
+    """Estado de backend-node (memoria, latencia de MongoDB, actividad y fallas recientes) para el reporte de sistema."""
+    url, clave = _url_interna(RUTA_ESTADO)
+    return _consultar(url, clave)

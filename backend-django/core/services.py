@@ -4,6 +4,8 @@ import hashlib
 import ipaddress
 import logging
 import re
+import threading
+import time as time_module
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 
@@ -12,7 +14,7 @@ from channels.layers import get_channel_layer
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.db import DatabaseError, IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, connection, transaction
 from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed, NotFound, PermissionDenied, ValidationError
 from rest_framework.settings import api_settings as drf_settings
@@ -62,6 +64,27 @@ ROL_SUPERADMIN = 'SUPERADMIN'
 ROL_DUENO = 'DUENO_COMPLEJO'
 ROL_OPERADOR = 'OPERADOR_COMPLEJO'
 ROL_JUGADOR = 'JUGADOR'
+
+CATEGORIA_AVISO_RESERVAS = 1
+CATEGORIA_AVISO_CUENTAS = 2
+CATEGORIA_AVISO_OPERATORIA = 3
+CATEGORIA_AVISO_SISTEMA = 4
+# Tipo de la colección `eventos` de backend-node que solo emite Django: las visitas y consultas llegan del frontend.
+TIPO_EVENTO_RESERVA_REALIZADA = 3
+PRIORIDAD_AVISO_NORMAL = 1
+PRIORIDAD_AVISO_URGENTE = 2
+
+# Permisos que definen quién ve cada tipo de aviso: el operativo llega a quien opera la agenda o las excepciones, y el
+# comercial o de titularidad, solo a quien administra el complejo.
+PERMISO_AVISO_AGENDA = 'ver_agenda'
+PERMISO_AVISO_EXCEPCIONES = 'ver_excepciones'
+PERMISO_AVISO_CONFIGURACION = 'configurar_complejo'
+PERMISO_AVISO_PRECIOS = 'administrar_precios'
+PERMISO_AVISO_OPERADORES = 'ver_operadores'
+
+# Alcance de una entrada del registro del complejo: el operador no ve lo comercial ni lo de titularidad.
+AMBITO_REGISTRO_OPERATIVO = 1
+AMBITO_REGISTRO_COMERCIAL = 2
 
 # Soporte delegado: el superadmin conserva cualquier permiso de los roles de complejo aunque no lo tenga asignado.
 ROLES_HEREDADOS_POR_SUPERADMIN = (ROL_DUENO, ROL_OPERADOR)
@@ -251,13 +274,36 @@ class AuditoriaService:
         huella = hashlib.sha256(f'{ip_origen}|{getattr(usuario, "pk", None)}|{accion}'.encode()).hexdigest()
         if not cache.add(f'auditoria:429:{huella}', 1, timeout=VENTANA_AUDITORIA_429):
             return None
-        return AuditoriaService.registrar(
+        registro = AuditoriaService.registrar(
             TipoEventoAuditoria.LIMITE_PETICIONES,
             accion,
             detalle=detalle or 'Se superó el límite de solicitudes permitido.',
             usuario=usuario,
             ip_origen=ip_origen,
         )
+        AuditoriaService._alertar_limite(accion)
+        return registro
+
+    @staticmethod
+    def _alertar_limite(accion):
+        """
+        Un aviso de seguridad a los superadministradores por ruta y ventana, no por cada IP: un ataque distribuido no
+        llena sus bandejas. El aviso nombra la ruta y no la IP ni el usuario; el detalle está en la auditoría.
+        """
+        ventana = settings.ALERTA_LIMITE_VENTANA_SEGUNDOS
+        huella = hashlib.sha256(accion.encode()).hexdigest()[:16]
+        if not cache.add(f'alerta:429:{huella}', 1, timeout=ventana):
+            return
+        try:
+            AvisoComplejoService.a_superadmins(
+                CATEGORIA_AVISO_SISTEMA, PRIORIDAD_AVISO_URGENTE,
+                f'Alerta de seguridad: se bloquearon solicitudes por exceso de intentos en {accion}. '
+                'Revisá la auditoría de seguridad.',
+                clave_unica=f'limite-peticiones-{huella}-{int(time_module.time() // ventana)}',
+            )
+        except DatabaseError:
+            # El rechazo 429 ya se auditó: una falla al avisar no puede convertirlo en un error del servidor.
+            logger_seguridad.exception('No se pudo avisar a los superadministradores del límite de peticiones')
 
     @staticmethod
     def listar(tipo_evento=None, usuario=None, complejo=None, ip_origen=None, fecha_desde=None, fecha_hasta=None):
@@ -451,6 +497,18 @@ class UsuarioService:
         return None
 
     @staticmethod
+    def _avisar_baja_propia(usuario, conteos):
+        senadas = conteos['senadas']
+        AvisoComplejoService.a_superadmins(
+            CATEGORIA_AVISO_CUENTAS, PRIORIDAD_AVISO_URGENTE if senadas else PRIORIDAD_AVISO_NORMAL,
+            f'El usuario id {usuario.pk} ({usuario.rol.nombre}) dio de baja su cuenta. '
+            f'Reservas canceladas: {conteos["canceladas"]}. '
+            + (f'Reservas señadas retenidas: {senadas}, a resolver con el complejo. ' if senadas else 'Sin reservas señadas retenidas. ')
+            + f'Turnos fijos dados de baja: {conteos["turnos_fijos"]}.',
+            {'usuario': usuario.pk}, actor=usuario,
+        )
+
+    @staticmethod
     def desactivar_cuenta_propia(usuario, ip_origen):
         """
         Atiende el derecho de supresión: resuelve las reservas y turnos fijos del titular, anonimiza sus datos
@@ -460,10 +518,11 @@ class UsuarioService:
             UsuarioService._validar_continuidad_superadmin(usuario)
             UsuarioService._validar_complejos_sin_responsable(usuario)
             # Antes de anonimizar: las reservas señadas necesitan una copia del nombre y el teléfono.
-            canceladas, resumen = BajaDeCuentaService.resolver_ocupaciones(usuario)
+            canceladas, resumen, conteos = BajaDeCuentaService.resolver_ocupaciones(usuario)
             UsuarioRepository.anonimizar(usuario)
             usuario.desactivar()
             SesionRepository.revocar_refresh_de_usuario(usuario.pk)
+            UsuarioService._avisar_baja_propia(usuario, conteos)
         for reserva, estado_anterior in canceladas:
             ReservaService._auditar(
                 TipoEventoAuditoria.RESERVA_CANCELADA, 'Cancelación por baja de la cuenta del titular',
@@ -557,14 +616,19 @@ class UsuarioAdminService:
                 SesionRepository.revocar_refresh_de_usuario(usuario.pk)
 
         es_baja = 'estado' in campos and usuario.estado == EstadoUsuario.BAJA
+        detalle = UsuarioAdminService._describir_cambios(usuario, campos, estado_anterior, rol_anterior, sesiones_revocadas)
         AuditoriaService.registrar(
             TipoEventoAuditoria.BAJA_USUARIO if es_baja else TipoEventoAuditoria.CAMBIO_USUARIO,
             'Baja administrativa de usuario' if es_baja else 'Cambio administrativo de usuario',
-            detalle=UsuarioAdminService._describir_cambios(
-                usuario, campos, estado_anterior, rol_anterior, sesiones_revocadas,
-            ),
-            usuario=actor, ip_origen=ip_origen,
+            detalle=detalle, usuario=actor, ip_origen=ip_origen,
         )
+        if {'estado', 'rol'} & set(campos):
+            AvisoComplejoService.a_superadmins(
+                CATEGORIA_AVISO_CUENTAS,
+                PRIORIDAD_AVISO_URGENTE if sesiones_revocadas else PRIORIDAD_AVISO_NORMAL,
+                f'Cambio de cuenta hecho por el superadministrador id {actor.pk}. {detalle}',
+                {'usuario': usuario.pk}, actor=actor,
+            )
         return usuario
 
 
@@ -582,7 +646,34 @@ class ContratoService:
                     f'Propietario: id {complejo.propietario_id}.',
             usuario=actor, complejo=complejo, ip_origen=ip_origen,
         )
+        AvisoComplejoService.a_superadmins(
+            CATEGORIA_AVISO_SISTEMA, PRIORIDAD_AVISO_NORMAL,
+            f'Alta de contrato: «{complejo.nombre}» (complejo id {complejo.pk}) quedó en estado '
+            f'{complejo.get_estado_contrato_display()}.',
+            {'complejo': complejo.pk}, actor=actor,
+        )
+        AvisoComplejoService.al_dueno(
+            complejo, PERMISO_AVISO_CONFIGURACION, CATEGORIA_AVISO_CUENTAS, PRIORIDAD_AVISO_NORMAL,
+            f'se dio de alta el contrato de tu complejo. Estado: {complejo.get_estado_contrato_display()}.',
+            {'complejo': complejo.pk}, actor=actor,
+        )
         return complejo
+
+    @staticmethod
+    def _avisar_cambio_de_estado(complejo, estado_anterior, estado_nuevo, actor):
+        # Suspender o dar de baja oculta el complejo del catálogo: es lo que más le importa a su titular.
+        urgente = estado_nuevo in (EstadoContrato.SUSPENDIDO, EstadoContrato.BAJA)
+        prioridad = PRIORIDAD_AVISO_URGENTE if urgente else PRIORIDAD_AVISO_NORMAL
+        cambio = f'{EstadoContrato(estado_anterior).label} -> {EstadoContrato(estado_nuevo).label}'
+        AvisoComplejoService.a_superadmins(
+            CATEGORIA_AVISO_SISTEMA, prioridad,
+            f'Cambio de contrato de «{complejo.nombre}» (complejo id {complejo.pk}): {cambio}.',
+            {'complejo': complejo.pk}, actor=actor,
+        )
+        AvisoComplejoService.al_dueno(
+            complejo, PERMISO_AVISO_CONFIGURACION, CATEGORIA_AVISO_CUENTAS, prioridad,
+            f'cambió el estado del contrato de tu complejo: {cambio}.', {'complejo': complejo.pk}, actor=actor,
+        )
 
     @staticmethod
     def cambiar_estado(complejo_id, estado_nuevo, actor, ip_origen):
@@ -611,6 +702,7 @@ class ContratoService:
                 DifusionGrillaService.programar_operatoria(complejo.pk)
             else:
                 DifusionGrillaService.programar_cierre(complejo.pk)
+            ContratoService._avisar_cambio_de_estado(complejo, estado_anterior, estado_nuevo, actor)
 
         AuditoriaService.registrar(
             TipoEventoAuditoria.CAMBIO_CONTRATO, 'Cambio de estado de contrato',
@@ -655,6 +747,11 @@ class ComplejoService:
             TipoEventoAuditoria.CAMBIO_CONFIGURACION, 'Cambio de configuración del complejo',
             detalle=f'Campos modificados: {", ".join(sorted(campos))}.',
             usuario=actor, complejo=complejo, ip_origen=ip_origen,
+        )
+        AvisoComplejoService.al_dueno(
+            complejo, PERMISO_AVISO_CONFIGURACION, CATEGORIA_AVISO_OPERATORIA, PRIORIDAD_AVISO_NORMAL,
+            f'se modificó la configuración del complejo (campos: {", ".join(sorted(campos))}).',
+            {'complejo': complejo.pk}, actor=actor,
         )
         return complejo
 
@@ -726,6 +823,10 @@ class OperadorService:
             TipoEventoAuditoria.CAMBIO_CONFIGURACION, 'Alta de operador del complejo',
             detalle=f'Operador: id {usuario.pk}.', usuario=actor, complejo=complejo, ip_origen=ip_origen,
         )
+        AvisoComplejoService.al_dueno(
+            complejo, PERMISO_AVISO_OPERADORES, CATEGORIA_AVISO_CUENTAS, PRIORIDAD_AVISO_NORMAL,
+            f'se vinculó al usuario id {usuario.pk} como operador del complejo.', {'operador': usuario.pk}, actor=actor,
+        )
         return usuario
 
     @staticmethod
@@ -739,6 +840,11 @@ class OperadorService:
         AuditoriaService.registrar(
             TipoEventoAuditoria.CAMBIO_CONFIGURACION, 'Baja de operador del complejo',
             detalle=f'Operador: id {usuario.pk}.', usuario=actor, complejo=complejo, ip_origen=ip_origen,
+        )
+        AvisoComplejoService.al_dueno(
+            complejo, PERMISO_AVISO_OPERADORES, CATEGORIA_AVISO_CUENTAS, PRIORIDAD_AVISO_NORMAL,
+            f'se desvinculó al usuario id {usuario.pk} como operador del complejo.', {'operador': usuario.pk},
+            actor=actor,
         )
 
 
@@ -778,6 +884,7 @@ class CanchaService:
             return cancha
         if 'nombre' in campos:
             CanchaService._validar_nombre(cancha.complejo_id, campos['nombre'], excluir_id=cancha.pk)
+        precio_anterior = cancha.precio_base
         try:
             with transaction.atomic():
                 bloqueada = CanchaRepository.bloquear(cancha.pk)
@@ -790,6 +897,13 @@ class CanchaService:
                     )
                 cancha = CanchaRepository.actualizar(cancha, **campos)
                 DifusionGrillaService.programar_operatoria(cancha.complejo_id, cancha.pk)
+                if 'precio_base' in campos:
+                    AvisoComplejoService.al_dueno(
+                        cancha.complejo, PERMISO_AVISO_PRECIOS, CATEGORIA_AVISO_OPERATORIA, PRIORIDAD_AVISO_NORMAL,
+                        f'se modificó el precio base de la cancha «{cancha.nombre}»: de ${precio_anterior} a '
+                        f'${cancha.precio_base}.',
+                        {'cancha': cancha.pk}, actor=actor,
+                    )
                 return cancha
         except IntegrityError:
             raise ValidationError({'nombre': MENSAJE_NOMBRE_CANCHA_REPETIDO})
@@ -838,12 +952,25 @@ class HorarioAperturaService:
             return resultado
 
     @staticmethod
-    def crear(datos):
+    def _avisar_precio_diferenciado(horario, actor):
+        cancha = horario.cancha
+        AvisoComplejoService.al_dueno(
+            cancha.complejo, PERMISO_AVISO_PRECIOS, CATEGORIA_AVISO_OPERATORIA, PRIORIDAD_AVISO_NORMAL,
+            f'se modificó el precio diferenciado de «{cancha.nombre}» para el horario de '
+            f'{horario.hora_apertura:%H:%M} a {horario.hora_cierre:%H:%M}.',
+            {'cancha': cancha.pk, 'horario': horario.pk}, actor=actor,
+        )
+
+    @staticmethod
+    def crear(datos, actor=None):
         # Un rango nuevo solo agrega turnos: no puede dejar reservas fuera de la grilla.
-        return HorarioAperturaService._guardar(
+        horario = HorarioAperturaService._guardar(
             datos['cancha'].pk, datos['dia_semana'], datos['hora_apertura'], datos['hora_cierre'], None,
             lambda cancha: HorarioAperturaRepository.crear(**datos),
         )
+        if datos.get('precio_diferenciado') is not None:
+            HorarioAperturaService._avisar_precio_diferenciado(horario, actor)
+        return horario
 
     @staticmethod
     def actualizar(horario, datos, confirmar=False, actor=None, ip_origen=None):
@@ -865,7 +992,10 @@ class HorarioAperturaService:
                 )
             return HorarioAperturaRepository.actualizar(horario, **campos)
 
-        return HorarioAperturaService._guardar(horario.cancha_id, dia, apertura, cierre, horario.pk, operar)
+        horario = HorarioAperturaService._guardar(horario.cancha_id, dia, apertura, cierre, horario.pk, operar)
+        if 'precio_diferenciado' in campos:
+            HorarioAperturaService._avisar_precio_diferenciado(horario, actor)
+        return horario
 
     @staticmethod
     def dar_de_baja(horario, confirmar=False, actor=None, ip_origen=None):
@@ -1024,12 +1154,60 @@ class ExcepcionHorariaService:
         )
 
     @staticmethod
+    def _alcance(excepcion):
+        if excepcion.cancha_id:
+            return f'la cancha «{excepcion.cancha.nombre}»'
+        return 'todo el complejo'
+
+    @staticmethod
+    def _periodo(excepcion):
+        if excepcion.fecha_inicio == excepcion.fecha_fin:
+            return f'el {excepcion.fecha_inicio:%d/%m/%Y}'
+        return f'del {excepcion.fecha_inicio:%d/%m/%Y} al {excepcion.fecha_fin:%d/%m/%Y}'
+
+    @staticmethod
+    def _avisar_alta(excepcion, actor):
+        """
+        Al personal, que hay una excepción nueva (urgente si deja reservas sin cancha) y, a cada jugador con una
+        reserva futura dentro del cierre, que su turno quedó afectado. El texto libre de la excepción no se replica.
+        """
+        hoy = timezone.localdate()
+        afectadas = [
+            reserva for reserva in ReservaRepository.afectadas_por_excepcion(excepcion, hoy)
+            if not _ya_comenzo(reserva['fecha_turno'], reserva['hora_inicio'])
+        ]
+        complejo = excepcion.complejo
+        motivo = TipoMotivoExcepcion(excepcion.tipo_motivo).label
+        descripcion = (
+            f'{ExcepcionHorariaService._alcance(excepcion)} {ExcepcionHorariaService._periodo(excepcion)} '
+            f'(«{motivo}»)'
+        )
+        ids = [reserva['id'] for reserva in afectadas]
+        AvisoComplejoService.al_personal(
+            complejo, PERMISO_AVISO_EXCEPCIONES, CATEGORIA_AVISO_OPERATORIA,
+            PRIORIDAD_AVISO_URGENTE if ids else PRIORIDAD_AVISO_NORMAL,
+            f'se registró la excepción id {excepcion.pk}: cierre de {descripcion}.'
+            + (f' Afecta {_plural(len(ids), "reserva", "reservas")} (ids {_lista_de_ids(ids)}).' if ids else ''),
+            {'excepcion': excepcion.pk, 'reservas': ids, **({'cancha': excepcion.cancha_id} if excepcion.cancha_id else {})},
+            actor=actor,
+        )
+        _avisar_titulares_afectados(
+            afectadas,
+            lambda propias: (
+                f'{complejo.nombre} cerrará {descripcion} y {_frase_de_reservas(propias)} queda afectada. '
+                'El complejo se comunicará para reprogramarla o cancelarla.'
+            ),
+            lambda propias: {'excepcion': excepcion.pk, 'reservas': propias},
+        )
+
+    @staticmethod
     def crear(datos, actor, ip_origen):
         ExcepcionHorariaService._validar_alta(datos)
         with transaction.atomic():
             excepcion = ExcepcionHorariaRepository.crear(creado_por=actor, **datos)
             ExcepcionHorariaService._difundir(excepcion)
             TurnoFijoService.avisar_fechas_en_espera(excepcion)
+            ExcepcionHorariaService._avisar_alta(excepcion, actor)
 
         AuditoriaService.registrar(
             TipoEventoAuditoria.ALTA_EXCEPCION, 'Alta de excepción horaria',
@@ -1047,6 +1225,12 @@ class ExcepcionHorariaService:
                 raise NotFound()
             excepcion.desactivar()
             ExcepcionHorariaService._difundir(excepcion)
+            AvisoComplejoService.al_personal(
+                excepcion.complejo, PERMISO_AVISO_EXCEPCIONES, CATEGORIA_AVISO_OPERATORIA, PRIORIDAD_AVISO_NORMAL,
+                f'se dio de baja la excepción id {excepcion.pk}: el cierre de {ExcepcionHorariaService._alcance(excepcion)} '
+                f'{ExcepcionHorariaService._periodo(excepcion)} dejó de regir.',
+                {'excepcion': excepcion.pk}, actor=actor,
+            )
 
         AuditoriaService.registrar(
             TipoEventoAuditoria.BAJA_EXCEPCION, 'Baja de excepción horaria',
@@ -1419,15 +1603,38 @@ class ReservaService:
         )
 
     @staticmethod
+    def _al_titular(reserva, mensaje, prioridad=PRIORIDAD_AVISO_NORMAL):
+        """Aviso a la bandeja del titular. Una reserva manual no tiene cuenta y una cuenta dada de baja ya no tiene bandeja."""
+        AvisoComplejoService.al_usuario(
+            reserva.usuario, CATEGORIA_AVISO_RESERVAS, prioridad, mensaje, {'reserva': reserva.pk},
+        )
+
+    @staticmethod
+    def _al_personal(reserva, mensaje, prioridad=PRIORIDAD_AVISO_NORMAL, *, actor=None, evento=None):
+        """Aviso operativo al dueño y a los operadores del complejo, menos a quien hizo el cambio."""
+        referencias = {'reserva': reserva.pk, 'cancha': reserva.cancha_id}
+        if reserva.usuario_id is not None:
+            referencias['titular'] = reserva.usuario_id
+        if reserva.turno_fijo_id is not None:
+            referencias['turno_fijo'] = reserva.turno_fijo_id
+        AvisoComplejoService.al_personal(
+            reserva.cancha.complejo, PERMISO_AVISO_AGENDA, CATEGORIA_AVISO_RESERVAS, prioridad, mensaje,
+            referencias, actor=actor, evento=evento,
+        )
+
+    @staticmethod
+    def _complejo(reserva):
+        return reserva.cancha.complejo.nombre
+
+    @staticmethod
     def _avisar_reserva_realizada(reserva):
         """
-        Una reserva web registra el evento "reserva realizada" en backend-node y avisa al panel del complejo. El
-        mensaje identifica el turno, no al jugador: su id viaja solo en el evento, que el panel no expone.
+        Una reserva web registra el evento "reserva realizada" en backend-node y avisa al personal del complejo. El
+        mensaje identifica el turno, no al jugador: su id viaja solo en el evento, que el panel no expone. El jugador
+        recibe en su bandeja la constancia de que quedó registrada.
         """
-        AvisoComplejoService.programar(
-            reserva.cancha.complejo_id, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_NORMAL,
-            f'Nueva reserva web id {reserva.pk}: {ReservaService._turno(reserva)}. Pendiente de seña.',
-            {'reserva': reserva.pk},
+        ReservaService._al_personal(
+            reserva, f'nueva reserva web id {reserva.pk}: {ReservaService._turno(reserva)}. Pendiente de seña.',
             evento={
                 'tipo_evento': TIPO_EVENTO_RESERVA_REALIZADA,
                 'usuario_id': reserva.usuario_id,
@@ -1437,22 +1644,140 @@ class ReservaService:
                 },
             },
         )
+        ReservaService._al_titular(
+            reserva,
+            f'Tu reserva id {reserva.pk} en {ReservaService._complejo(reserva)} quedó registrada: '
+            f'{ReservaService._turno(reserva)}. Está pendiente de seña.',
+        )
 
     @staticmethod
-    def _avisar_cancelacion_al_titular(reserva):
+    def _avisar_reserva_manual(reserva, actor):
+        ReservaService._al_personal(
+            reserva, f'se cargó la reserva manual id {reserva.pk}: {ReservaService._turno(reserva)}.', actor=actor,
+        )
+
+    @staticmethod
+    def _avisar_reserva_confirmada(reserva):
+        ReservaService._al_titular(
+            reserva, f'{ReservaService._complejo(reserva)} confirmó tu reserva id {reserva.pk} '
+                     f'({ReservaService._turno(reserva)}).',
+        )
+
+    @staticmethod
+    def _avisar_reserva_senada(reserva):
+        ReservaService._al_titular(
+            reserva, f'{ReservaService._complejo(reserva)} registró la seña de tu reserva id {reserva.pk} '
+                     f'({ReservaService._turno(reserva)}). Tu turno quedó señado.',
+        )
+
+    @staticmethod
+    def _avisar_reserva_pagada(reserva):
         """
-        El titular de una reserva cancelada por el complejo recibe un aviso urgente en su bandeja propia. Una reserva
-        manual no tiene cuenta a la que avisar, y una cuenta dada de baja ya no tiene bandeja.
+        Aviso propio de la reserva pagada. Hoy el estado «Señada/Pagada» es uno solo y se avisa como señada; cuando se
+        separe en dos estados, alcanza con registrar este método en `_avisar_estado_al_titular`.
         """
-        usuario = reserva.usuario
-        if usuario is None or usuario.estado == EstadoUsuario.BAJA:
-            return
-        AvisoComplejoService.programar(
-            None, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_URGENTE,
-            f'{reserva.cancha.complejo.nombre} canceló tu reserva id {reserva.pk} ({ReservaService._turno(reserva)}). '
+        ReservaService._al_titular(
+            reserva, f'{ReservaService._complejo(reserva)} registró el pago de tu reserva id {reserva.pk} '
+                     f'({ReservaService._turno(reserva)}). Tu turno quedó pagado.',
+        )
+
+    @staticmethod
+    def _avisar_reserva_completada(reserva):
+        ReservaService._al_titular(
+            reserva, f'Tu reserva id {reserva.pk} en {ReservaService._complejo(reserva)} '
+                     f'({ReservaService._turno(reserva)}) figura como completada. Gracias por jugar.',
+        )
+
+    @staticmethod
+    def _avisar_reserva_ausente(reserva):
+        ReservaService._al_titular(
+            reserva, f'Tu reserva id {reserva.pk} en {ReservaService._complejo(reserva)} '
+                     f'({ReservaService._turno(reserva)}) figura como ausente. Si es un error, comunicate con el complejo.',
+        )
+
+    @staticmethod
+    def _avisar_estado_al_titular(reserva):
+        avisar = {
+            EstadoReserva.CONFIRMADA: ReservaService._avisar_reserva_confirmada,
+            EstadoReserva.SENADA: ReservaService._avisar_reserva_senada,
+            EstadoReserva.COMPLETADA: ReservaService._avisar_reserva_completada,
+            EstadoReserva.AUSENTE: ReservaService._avisar_reserva_ausente,
+        }.get(reserva.estado)
+        if avisar is not None:
+            avisar(reserva)
+
+    @staticmethod
+    def _avisar_cambio_de_estado(reserva, estado_anterior, actor):
+        ReservaService._al_personal(
+            reserva,
+            f'la reserva id {reserva.pk} ({ReservaService._turno(reserva)}) pasó de «{EstadoReserva(estado_anterior).label}» '
+            f'a «{reserva.get_estado_display()}».',
+            actor=actor,
+        )
+        ReservaService._avisar_estado_al_titular(reserva)
+
+    @staticmethod
+    def _avisar_cancelacion_por_jugador(reserva, estado_anterior, actor):
+        """Constancia al propio jugador y aviso al personal; urgente si había una seña que resolver."""
+        ReservaService._al_titular(
+            reserva,
+            f'Procesamos la cancelación de tu reserva id {reserva.pk} en {ReservaService._complejo(reserva)} '
+            f'({ReservaService._turno(reserva)}). El turno quedó libre.',
+        )
+        senada = estado_anterior == EstadoReserva.SENADA
+        ReservaService._al_personal(
+            reserva,
+            f'el titular canceló la reserva id {reserva.pk} ({ReservaService._turno(reserva)})'
+            + (': tenía una seña, resolvela con el jugador.' if senada else '.'),
+            PRIORIDAD_AVISO_URGENTE if senada else PRIORIDAD_AVISO_NORMAL,
+            actor=actor,
+        )
+
+    @staticmethod
+    def _avisar_cancelacion_por_complejo(reserva, actor):
+        """
+        El titular de una reserva cancelada por el complejo recibe un aviso urgente en su bandeja propia, y el resto
+        del personal se entera de la cancelación.
+        """
+        ReservaService._al_titular(
+            reserva,
+            f'{ReservaService._complejo(reserva)} canceló tu reserva id {reserva.pk} ({ReservaService._turno(reserva)}). '
             'Si habías pagado una seña, comunicate con el complejo.',
-            {'reserva': reserva.pk},
-            usuario_id=usuario.pk,
+            PRIORIDAD_AVISO_URGENTE,
+        )
+        ReservaService._al_personal(
+            reserva, f'se canceló la reserva id {reserva.pk} ({ReservaService._turno(reserva)}).', actor=actor,
+        )
+
+    @staticmethod
+    def _avisar_reapertura(reserva, estado_anterior, actor):
+        ReservaService._al_titular(
+            reserva,
+            f'{ReservaService._complejo(reserva)} reabrió tu reserva id {reserva.pk} ({ReservaService._turno(reserva)}). '
+            f'Quedó en estado «{reserva.get_estado_display()}».',
+        )
+        ReservaService._al_personal(
+            reserva,
+            f'se reabrió la reserva id {reserva.pk} ({ReservaService._turno(reserva)}): de «{estado_anterior}» a '
+            f'«{reserva.get_estado_display()}».',
+            actor=actor,
+        )
+
+    @staticmethod
+    def _avisar_fecha_de_turno_fijo(reserva, turno, cancelada, actor):
+        if cancelada:
+            ReservaService._avisar_cancelacion_por_complejo(reserva, actor)
+            return
+        ReservaService._al_titular(
+            reserva,
+            f'{ReservaService._complejo(reserva)} registró una fecha de tu turno fijo (reserva id {reserva.pk}): '
+            f'{ReservaService._turno(reserva)}. Estado: {reserva.get_estado_display()}.',
+        )
+        ReservaService._al_personal(
+            reserva,
+            f'se llevó a la agenda la fecha del {reserva.fecha_turno:%d/%m/%Y} del turno fijo id {turno.pk} '
+            f'(reserva id {reserva.pk}).',
+            actor=actor,
         )
 
     @staticmethod
@@ -1515,8 +1840,9 @@ class ReservaService:
                 precio_acordado=precio, estado=EstadoReserva.PENDIENTE, **cliente,
             ))
             ReservaService._difundir(reserva)
-            # El personal no se avisa a sí mismo de una reserva que acaba de cargar.
-            if not manual:
+            if manual:
+                ReservaService._avisar_reserva_manual(reserva, actor)
+            else:
                 ReservaService._avisar_reserva_realizada(reserva)
 
         ReservaService._auditar(TipoEventoAuditoria.RESERVA_CREADA, 'Alta de reserva', reserva, actor, ip_origen)
@@ -1564,7 +1890,9 @@ class ReservaService:
                 raise ValidationError(
                     f'Solo podés cancelar con más de {_horas(horas)} de anticipación. Comunicate con el complejo.'
                 )
+            estado_anterior = reserva.estado
             cambio = ReservaService._cancelar(reserva, EstadoReserva.CANCELADA_JUGADOR)
+            ReservaService._avisar_cancelacion_por_jugador(reserva, estado_anterior, jugador)
 
         ReservaService._auditar(
             TipoEventoAuditoria.RESERVA_CANCELADA, 'Cancelación de reserva por el jugador',
@@ -1580,7 +1908,7 @@ class ReservaService:
                 raise NotFound()
             ReservaService._validar_cancelable(reserva)
             cambio = ReservaService._cancelar(reserva, EstadoReserva.CANCELADA_COMPLEJO)
-            ReservaService._avisar_cancelacion_al_titular(reserva)
+            ReservaService._avisar_cancelacion_por_complejo(reserva, actor)
 
         ReservaService._auditar(
             TipoEventoAuditoria.RESERVA_CANCELADA, 'Cancelación de reserva por el complejo',
@@ -1620,6 +1948,8 @@ class ReservaService:
             )
             if cambia_ocupacion:
                 ReservaService._difundir(reserva)
+            if 'estado' in campos:
+                ReservaService._avisar_cambio_de_estado(reserva, estado_anterior, actor)
 
         # Las observaciones son texto libre del personal: su edición no se replica en la auditoría.
         if 'estado' in campos:
@@ -1661,6 +1991,7 @@ class ReservaService:
                 estado=EstadoReserva.CANCELADA_COMPLEJO if cancelada else EstadoReserva.CONFIRMADA,
             ))
             ReservaService._difundir(reserva)
+            ReservaService._avisar_fecha_de_turno_fijo(reserva, turno, cancelada, actor)
 
         if cancelada:
             ReservaService._auditar(
@@ -1715,6 +2046,7 @@ class ReservaService:
             estado_anterior = reserva.get_estado_display()
             ReservaService._guardar(lambda: ReservaRepository.actualizar(reserva, estado=estado_nuevo))
             ReservaService._difundir(reserva)
+            ReservaService._avisar_reapertura(reserva, estado_anterior, actor)
 
         ReservaService._auditar(
             TipoEventoAuditoria.RESERVA_CAMBIO_ESTADO, 'Reapertura de reserva cancelada', reserva, actor, ip_origen,
@@ -1834,9 +2166,10 @@ class TurnoFijoService:
         afectados = sorted(en_espera)
         cantidad = sum(len(fechas) for fechas in en_espera.values())
         if afectados:
-            AvisoComplejoService.programar(
-                excepcion.complejo_id, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_URGENTE,
-                f'La excepción id {excepcion.pk} deja {_plural(cantidad, "fecha", "fechas")} de turnos fijos en espera '
+            # Pide una decisión: le llega también a quien cargó la excepción.
+            AvisoComplejoService.al_personal(
+                excepcion.complejo, PERMISO_AVISO_AGENDA, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_URGENTE,
+                f'la excepción id {excepcion.pk} deja {_plural(cantidad, "fecha", "fechas")} de turnos fijos en espera '
                 f'(turnos fijos {_lista_de_ids(afectados)}). Indicá desde la agenda si cada fecha se mantiene o se cancela.',
                 {'excepcion': excepcion.pk, 'turnos_fijos': afectados},
             )
@@ -2067,6 +2400,29 @@ class ConflictoOperatoriaService:
         return [item for item in despues if motivos_previos.get(item['id']) != item['motivo']]
 
     @staticmethod
+    def _avisar(cancha, reservas, turnos, descripcion):
+        """
+        Un cambio confirmado con ocupaciones fuera de la grilla pide una decisión al personal y avisa a cada jugador con
+        una reserva afectada. Los dos avisos son urgentes y no excluyen a quien confirmó: la decisión sigue pendiente.
+        """
+        complejo = cancha.complejo
+        ids = [reserva['id'] for reserva in reservas]
+        AvisoComplejoService.al_personal(
+            complejo, PERMISO_AVISO_AGENDA, CATEGORIA_AVISO_OPERATORIA, PRIORIDAD_AVISO_URGENTE,
+            f'el cambio de {descripcion} dejó fuera de la grilla {_plural(len(ids), "reserva futura", "reservas futuras")} '
+            f'y {_plural(len(turnos), "turno fijo", "turnos fijos")}. Reprogramalos o cancelalos desde la agenda.',
+            {'cancha': cancha.pk, 'reservas': ids, 'turnos_fijos': [turno['id'] for turno in turnos]},
+        )
+        _avisar_titulares_afectados(
+            reservas,
+            lambda propias: (
+                f'{complejo.nombre} cambió la operatoria de {cancha.nombre} y {_frase_de_reservas(propias)} quedó '
+                'fuera de la grilla. El complejo se comunicará para reprogramarla o cancelarla.'
+            ),
+            lambda propias: {'cancha': cancha.pk, 'reservas': propias},
+        )
+
+    @staticmethod
     def validar_cambio(cancha, confirmar, actor, ip_origen, *, horarios=None, duracion=None, estado=None,
                        descripcion=''):
         """
@@ -2126,20 +2482,18 @@ class ConflictoOperatoriaService:
                     f'Turnos fijos afectados: {[turno["id"] for turno in turnos] or "ninguno"}.',
             usuario=actor, complejo=cancha.complejo_id, ip_origen=ip_origen,
         )
+        ConflictoOperatoriaService._avisar(cancha, reservas, turnos, descripcion)
 
-
-CATEGORIA_AVISO_RESERVAS = 1
-# Tipo de la colección `eventos` de backend-node que solo emite Django: las visitas y consultas llegan del frontend.
-TIPO_EVENTO_RESERVA_REALIZADA = 3
-PRIORIDAD_AVISO_NORMAL = 1
-PRIORIDAD_AVISO_URGENTE = 2
 
 logger_avisos = logging.getLogger('core.avisos')
 
 
 MAXIMO_MENSAJE_AVISO = 280
 MAXIMO_IDS_EN_AVISO = 10
-CAMPOS_DEL_AVISO_PARA_NODE = ('complejo_id', 'usuario_id', 'categoria', 'prioridad', 'mensaje', 'evento')
+CAMPOS_DEL_AVISO_PARA_NODE = (
+    'complejo_id', 'usuario_id', 'usuarios_ids', 'categoria', 'prioridad', 'mensaje', 'evento', 'clave_unica',
+    'registro',
+)
 
 
 def _lista_de_ids(ids):
@@ -2151,31 +2505,151 @@ def _lista_de_ids(ids):
 
 
 def _destino(aviso):
-    if aviso.get('complejo_id') is not None:
-        return f'el complejo {aviso["complejo_id"]}'
-    return f'el usuario {aviso["usuario_id"]}'
+    if aviso.get('usuarios_ids'):
+        return f'los usuarios {_lista_de_ids(aviso["usuarios_ids"])}'
+    if aviso.get('usuario_id') is not None:
+        return f'el usuario {aviso["usuario_id"]}'
+    return f'el complejo {aviso["complejo_id"]}'
+
+
+def _sin_usuario(ids, excluir):
+    excluido = getattr(excluir, 'pk', excluir)
+    return [identificador for identificador in ids if identificador != excluido]
+
+
+class DestinatariosService:
+    """
+    Quién recibe cada aviso en su bandeja personal. Se resuelve por la identificación con el complejo (su
+    propietario y los operadores que lo operan) y por el permiso del rol, nunca por el rol a secas: un usuario
+    suspendido, dado de baja o sin el permiso no recibe nada. `excluir` es quien realizó la acción, que no se avisa
+    a sí mismo.
+    """
+
+    @staticmethod
+    def superadmins(excluir=None):
+        return _sin_usuario(UsuarioRepository.ids_activos_con_rol(ROL_SUPERADMIN), excluir)
+
+    @staticmethod
+    def personal(complejo, permiso, excluir=None):
+        candidatos = {complejo.propietario_id, *UsuarioRepository.ids_de_operadores_activos(complejo.pk)}
+        return _sin_usuario(sorted(PermisoRepository.usuarios_con_permiso(candidatos, permiso)), excluir)
+
+    @staticmethod
+    def dueno(complejo, permiso, excluir=None):
+        return _sin_usuario(sorted(PermisoRepository.usuarios_con_permiso({complejo.propietario_id}, permiso)), excluir)
 
 
 class AvisoComplejoService:
     """
-    Avisos de servidor con la categoría y la prioridad de la colección `notificaciones` de backend-node: para el
-    panel de un complejo o, con `usuario_id`, para la bandeja propia de un usuario. Pueden llevar el evento que los
-    originó (una reserva realizada). Se entregan después del commit y nunca revierten la operación que los originó.
-    El mensaje no lleva datos personales: solo cantidades e ids de reservas o turnos.
+    Avisos de servidor con la categoría y la prioridad de la colección `notificaciones` de backend-node. Llegan a la
+    bandeja personal de cada destinatario (`al_usuario`, `al_personal`, `al_dueno` y `a_superadmins`); la bandeja
+    general de un complejo (`programar` sin usuarios) queda solo para el evento que no tiene a quién avisar. Pueden
+    llevar el evento que los originó (una reserva realizada) y una clave de idempotencia (`clave_unica`) con la que
+    backend-node descarta un aviso repetido. Se entregan después del commit y nunca revierten la operación que los
+    originó. El mensaje no lleva datos personales: solo cantidades, ids, nombres de complejos, horarios y turnos.
     """
 
     @staticmethod
-    def programar(complejo_id, categoria, prioridad, mensaje, referencias=None, *, usuario_id=None, evento=None):
-        if complejo_id is None and usuario_id is None:
+    def _armar(complejo_id, categoria, prioridad, mensaje, referencias, usuario_id, usuarios_ids, evento, clave_unica,
+               registro=None):
+        if complejo_id is None and usuario_id is None and not usuarios_ids:
             raise ValueError('Un aviso necesita un complejo o un usuario destinatario.')
         if len(mensaje) > MAXIMO_MENSAJE_AVISO:
             mensaje = f'{mensaje[:MAXIMO_MENSAJE_AVISO - 1]}…'
-        aviso = {
-            'complejo_id': complejo_id, 'usuario_id': usuario_id, 'categoria': categoria, 'prioridad': prioridad,
-            'mensaje': mensaje, 'referencias': referencias or {}, 'evento': evento,
+        return {
+            'complejo_id': complejo_id, 'usuario_id': usuario_id, 'usuarios_ids': list(usuarios_ids or []) or None,
+            'categoria': categoria, 'prioridad': prioridad, 'mensaje': mensaje, 'referencias': referencias or {},
+            'evento': evento, 'clave_unica': clave_unica, 'registro': registro,
         }
+
+    @staticmethod
+    def programar(complejo_id, categoria, prioridad, mensaje, referencias=None, *, usuario_id=None, usuarios_ids=None,
+                  evento=None, clave_unica=None, registro=None):
+        aviso = AvisoComplejoService._armar(
+            complejo_id, categoria, prioridad, mensaje, referencias, usuario_id, usuarios_ids, evento, clave_unica,
+            registro,
+        )
         # robust: una falla al entregar se registra y no convierte en error una operación ya confirmada.
         transaction.on_commit(lambda: AvisoComplejoService.entregar(aviso), robust=True)
+
+    @staticmethod
+    def al_usuario(usuario, categoria, prioridad, mensaje, referencias=None, *, clave_unica=None):
+        """Aviso a la bandeja de un usuario. Una cuenta dada de baja ya no tiene bandeja y un titular manual no tiene cuenta."""
+        if usuario is None or usuario.estado != EstadoUsuario.ACTIVO:
+            return
+        AvisoComplejoService.programar(
+            None, categoria, prioridad, mensaje, referencias, usuario_id=usuario.pk, clave_unica=clave_unica,
+        )
+
+    @staticmethod
+    def al_personal(complejo, permiso, categoria, prioridad, mensaje, referencias=None, *, actor=None, evento=None):
+        """
+        Aviso operativo: al dueño y a cada operador activo del complejo cuyo rol tenga el permiso, y una entrada de
+        registro del complejo que ven los tres roles de complejo.
+        """
+        AvisoComplejoService._a_grupo(
+            complejo, DestinatariosService.personal(complejo, permiso, actor), categoria, prioridad, mensaje,
+            referencias, evento, AMBITO_REGISTRO_OPERATIVO, actor,
+        )
+
+    @staticmethod
+    def al_dueno(complejo, permiso, categoria, prioridad, mensaje, referencias=None, *, actor=None):
+        """
+        Aviso comercial, financiero o de titularidad: solo al propietario del complejo, si su rol tiene el permiso, y
+        una entrada de registro que el operador no ve.
+        """
+        AvisoComplejoService._a_grupo(
+            complejo, DestinatariosService.dueno(complejo, permiso, actor), categoria, prioridad, mensaje,
+            referencias, None, AMBITO_REGISTRO_COMERCIAL, actor,
+        )
+
+    @staticmethod
+    def _texto_de_registro(texto, referencias, actor):
+        """
+        El texto del aviso más los ids que identifican lo ocurrido: la cancha, el titular de la reserva, el turno fijo y
+        quien hizo el cambio. Son identificadores, no datos personales. Si no entra, se recorta el aviso y no los ids.
+        """
+        referencias = referencias or {}
+        partes = []
+        for clave, etiqueta in (('cancha', 'Cancha id'), ('titular', 'Titular: usuario id'), ('turno_fijo', 'Turno fijo id')):
+            if isinstance(referencias.get(clave), int):
+                partes.append(f'{etiqueta} {referencias[clave]}')
+        if actor is not None:
+            partes.append(f'Hecho por usuario id {getattr(actor, "pk", actor)}')
+        if not partes:
+            return texto
+        sufijo = f' ({"; ".join(partes)})'
+        if len(texto) + len(sufijo) > MAXIMO_MENSAJE_AVISO:
+            texto = f'{texto[:MAXIMO_MENSAJE_AVISO - len(sufijo) - 1]}…'
+        return f'{texto}{sufijo}'
+
+    @staticmethod
+    def _a_grupo(complejo, destinatarios, categoria, prioridad, mensaje, referencias, evento, ambito, actor):
+        """
+        Los avisos personales y la entrada del registro del complejo salen en un mismo pedido. Sin destinatarios queda
+        solo el registro, que además conserva el evento de una reserva realizada para no perder la actividad.
+        """
+        texto = f'{complejo.nombre}: {mensaje}'
+        AvisoComplejoService.programar(
+            complejo.pk, categoria, prioridad, texto, referencias,
+            usuarios_ids=destinatarios, evento=evento,
+            registro={'ambito': ambito, 'mensaje': AvisoComplejoService._texto_de_registro(texto, referencias, actor)},
+        )
+
+    @staticmethod
+    def a_superadmins(categoria, prioridad, mensaje, referencias=None, *, actor=None, clave_unica=None):
+        destinatarios = DestinatariosService.superadmins(actor)
+        if destinatarios:
+            AvisoComplejoService.programar(
+                None, categoria, prioridad, mensaje, referencias, usuarios_ids=destinatarios, clave_unica=clave_unica,
+            )
+
+    @staticmethod
+    def entregar_en_segundo_plano(avisos):
+        """Entrega sin hacer esperar a quien consulta: para los avisos que dispara una lectura y no una escritura."""
+        threading.Thread(
+            target=lambda: [AvisoComplejoService.entregar(aviso) for aviso in avisos], name='avisos', daemon=True,
+        ).start()
 
     @staticmethod
     def entregar(aviso):
@@ -2196,6 +2670,176 @@ class AvisoComplejoService:
                 'Aviso para %s sin entregar: backend-node %s. Categoría %s, prioridad %s. %s',
                 _destino(aviso), error, aviso['categoria'], aviso['prioridad'], aviso['mensaje'],
             )
+
+
+def _frase_de_reservas(ids):
+    return f'tu reserva id {ids[0]}' if len(ids) == 1 else f'tus reservas (ids {_lista_de_ids(ids)})'
+
+
+def _avisar_titulares_afectados(reservas, mensaje_de, referencias_de):
+    """
+    Un aviso urgente por titular con cuenta activa, con todas sus reservas afectadas. `mensaje_de(ids)` arma el
+    texto y `referencias_de(ids)` las referencias; las reservas manuales no tienen a quién avisar.
+    """
+    por_titular = defaultdict(list)
+    for reserva in reservas:
+        if reserva['usuario_id'] is not None:
+            por_titular[reserva['usuario_id']].append(reserva['id'])
+    for usuario_id in UsuarioRepository.ids_activos_entre(por_titular):
+        ids = por_titular[usuario_id]
+        AvisoComplejoService.programar(
+            None, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_URGENTE, mensaje_de(ids), referencias_de(ids),
+            usuario_id=usuario_id,
+        )
+
+
+class RecordatorioService:
+    """
+    Recordatorio del turno próximo al titular de una reserva activa. Se emite desde el comando
+    `emitir_recordatorios_reservas` (cron) y, además, cuando el propio jugador consulta sus reservas o una grilla, para
+    que funcione igual sin tareas programadas. La repetición nunca duplica el aviso: viaja con una clave por reserva
+    (`clave_unica`) y backend-node descarta la que ya emitió. La caché solo espacia las verificaciones del jugador.
+    """
+
+    @staticmethod
+    def _pendientes(usuario_id=None):
+        ahora = timezone.now()
+        limite = ahora + timedelta(hours=settings.RECORDATORIO_HORAS_ANTICIPACION)
+        reservas = ReservaRepository.proximas_a_recordar(
+            timezone.localtime(ahora).date(), timezone.localtime(limite).date(), usuario_id,
+        )
+        return [
+            reserva for reserva in reservas
+            if ahora < _inicio_del_turno(reserva.fecha_turno, reserva.hora_inicio) <= limite
+        ]
+
+    @staticmethod
+    def _cuando(reserva):
+        dias = (reserva.fecha_turno - timezone.localdate()).days
+        hora = f'{reserva.hora_inicio:%H:%M}'
+        if dias == 0:
+            return f'hoy a las {hora}'
+        if dias == 1:
+            return f'mañana a las {hora}'
+        return f'el {reserva.fecha_turno:%d/%m/%Y} a las {hora}'
+
+    @staticmethod
+    def _armar(reserva):
+        return AvisoComplejoService._armar(
+            None, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_NORMAL,
+            f'Recordatorio: tenés turno {RecordatorioService._cuando(reserva)} en {reserva.cancha.complejo.nombre} '
+            f'({reserva.cancha.nombre}, reserva id {reserva.pk}).',
+            {'reserva': reserva.pk}, reserva.usuario_id, None, None, f'recordatorio-reserva-{reserva.pk}',
+        )
+
+    @staticmethod
+    def emitir_pendientes(usuario_id=None, *, en_segundo_plano=False):
+        """Emite el recordatorio de cada turno que empieza dentro de la ventana y devuelve cuántos pidió entregar."""
+        avisos = [RecordatorioService._armar(reserva) for reserva in RecordatorioService._pendientes(usuario_id)]
+        if en_segundo_plano and avisos:
+            AvisoComplejoService.entregar_en_segundo_plano(avisos)
+        else:
+            for aviso in avisos:
+                AvisoComplejoService.entregar(aviso)
+        return len(avisos)
+
+    @staticmethod
+    def verificar_del_titular(usuario):
+        """Verificación transparente de un jugador, como mucho una por intervalo y sin romper nunca la consulta."""
+        if not _esta_autenticado(usuario):
+            return 0
+        if not cache.add(f'recordatorios:{usuario.pk}', 1, timeout=settings.RECORDATORIO_VERIFICACION_SEGUNDOS):
+            return 0
+        try:
+            return RecordatorioService.emitir_pendientes(usuario.pk, en_segundo_plano=True)
+        except Exception:
+            logger_avisos.exception('No se pudieron verificar los recordatorios del usuario %s', usuario.pk)
+            return 0
+
+
+class EstadoSistemaService:
+    """
+    Reporte de estado y carga del servidor para los superadministradores. Mide la base de datos y la actividad de
+    Django, consulta el estado que publica backend-node (memoria, latencia de MongoDB y fallas de servicios externos)
+    y avisa a la bandeja personal de cada superadministrador: normal si todo está en orden, urgente si algo se degradó.
+    backend-node no conoce a los usuarios, por eso el aviso lo emite Django.
+    """
+
+    @staticmethod
+    def _latencia_bd_ms():
+        inicio = time_module.perf_counter()
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT 1')
+            cursor.fetchone()
+        return round((time_module.perf_counter() - inicio) * 1000)
+
+    @staticmethod
+    def _estado_de_node():
+        try:
+            return node_client.consultar_estado()
+        except node_client.NodeNoConfigurado:
+            return None
+        except node_client.NodeNoDisponible as error:
+            return {'estado': 'sin_respuesta', 'motivos': [f'backend-node {error}']}
+
+    @staticmethod
+    def medir():
+        ahora = timezone.now()
+        latencia = EstadoSistemaService._latencia_bd_ms()
+        motivos = []
+        if latencia > settings.REPORTE_LATENCIA_BD_MAXIMA_MS:
+            motivos.append(f'la base de datos tarda {latencia} ms (máximo {settings.REPORTE_LATENCIA_BD_MAXIMA_MS} ms)')
+        node = EstadoSistemaService._estado_de_node()
+        if node is not None and node.get('estado') != 'ok':
+            motivos.extend(str(motivo) for motivo in node.get('motivos') or ['backend-node degradado'])
+        return {
+            'latencia_bd_ms': latencia,
+            'reservas_ultimas_24h': ReservaRepository.cantidad_creadas_desde(ahora - timedelta(hours=24)),
+            'reservas_por_jugar': ReservaRepository.cantidad_por_jugar(timezone.localdate()),
+            'usuarios_activos': UsuarioRepository.cantidad_activos(),
+            'node': node,
+            'motivos': motivos,
+            'momento': ahora,
+        }
+
+    @staticmethod
+    def _texto(reporte):
+        partes = [
+            'Estado del servidor: ' + ('degradado' if reporte['motivos'] else 'normal') + '.',
+            f'Base de datos {reporte["latencia_bd_ms"]} ms, {reporte["reservas_ultimas_24h"]} reservas nuevas en 24 h, '
+            f'{reporte["reservas_por_jugar"]} por jugar, {reporte["usuarios_activos"]} cuentas activas.',
+        ]
+        metricas = (reporte['node'] or {}).get('metricas')
+        if reporte['node'] is None:
+            partes.append('backend-node sin configurar.')
+        elif metricas:
+            latencia = metricas['latencia_mongo_ms']
+            mongo = 'MongoDB sin conexión' if latencia is None else f'MongoDB {latencia} ms'
+            partes.append(
+                f'Node: memoria {metricas["memoria_rss_mb"]} MB, {mongo}, '
+                f'{metricas["fallas_externas_recientes"]} fallas externas recientes.'
+            )
+        if reporte['motivos']:
+            partes.append('Motivos: ' + '; '.join(reporte['motivos']) + '.')
+        return ' '.join(partes)
+
+    @staticmethod
+    def emitir_reporte_estado_servidor(*, solo_si_degradado=False):
+        """
+        Avisa a los superadministradores. Con `solo_si_degradado` calla mientras todo esté normal, para correrlo seguido.
+        Una clave por hora evita que dos corridas seguidas dupliquen el reporte. Devuelve el reporte o None.
+        """
+        reporte = EstadoSistemaService.medir()
+        if solo_si_degradado and not reporte['motivos']:
+            return None
+        AvisoComplejoService.a_superadmins(
+            CATEGORIA_AVISO_SISTEMA,
+            PRIORIDAD_AVISO_URGENTE if reporte['motivos'] else PRIORIDAD_AVISO_NORMAL,
+            EstadoSistemaService._texto(reporte),
+            {'motivos': reporte['motivos']},
+            clave_unica=f'estado-servidor-{timezone.localtime(reporte["momento"]):%Y%m%d%H}',
+        )
+        return reporte
 
 
 def _plural(cantidad, singular, plural):
@@ -2238,51 +2882,66 @@ class BajaDeCuentaService:
     def resolver_ocupaciones(usuario):
         """
         Corre dentro de la transacción de la baja, antes de anonimizar. Devuelve las reservas canceladas para
-        auditarlas después del commit y un resumen sin datos personales.
+        auditarlas después del commit, un resumen sin datos personales y los conteos para avisar a los superadministradores.
         """
         reservas = [
             reserva for reserva in ReservaRepository.bloquear_a_resolver_de_titular(usuario.pk, timezone.localdate())
             if not _ya_comenzo(reserva.fecha_turno, reserva.hora_inicio)
         ]
-        canceladas, senadas_por_complejo = [], defaultdict(list)
+        canceladas, senadas_por_complejo, complejos = [], defaultdict(list), {}
+        canceladas_por_complejo = defaultdict(list)
         for reserva in reservas:
             if reserva.estado == EstadoReserva.SENADA:
                 ReservaRepository.actualizar(
                     reserva, nombre_cliente_manual=usuario.nombre_completo, telefono_cliente_manual=usuario.telefono,
                 )
                 senadas_por_complejo[reserva.cancha.complejo_id].append(reserva.pk)
+                complejos[reserva.cancha.complejo_id] = reserva.cancha.complejo
             else:
                 estado_anterior = reserva.get_estado_display()
                 ReservaRepository.actualizar(reserva, estado=EstadoReserva.CANCELADA_JUGADOR)
                 ReservaService._difundir(reserva)
                 canceladas.append((reserva, estado_anterior))
+                canceladas_por_complejo[reserva.cancha.complejo_id].append(reserva.pk)
+                complejos[reserva.cancha.complejo_id] = reserva.cancha.complejo
 
         turnos_por_complejo = defaultdict(list)
         for turno in TurnoFijoRepository.bloquear_activos_de_titular(usuario.pk):
             turno.desactivar()
             TurnoFijoService._difundir(turno)
             turnos_por_complejo[turno.cancha.complejo_id].append(turno.pk)
+            complejos[turno.cancha.complejo_id] = turno.cancha.complejo
 
+        # La seña retenida es plata de por medio: la gestiona el dueño. Lo operativo le llega a todo el personal.
         for complejo_id, ids in senadas_por_complejo.items():
-            AvisoComplejoService.programar(
-                complejo_id, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_URGENTE,
-                f'Un titular dio de baja su cuenta y conserva {_plural(len(ids), "reserva señada", "reservas señadas")} '
+            AvisoComplejoService.al_dueno(
+                complejos[complejo_id], PERMISO_AVISO_CONFIGURACION, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_URGENTE,
+                f'un titular dio de baja su cuenta y conserva {_plural(len(ids), "reserva señada", "reservas señadas")} '
                 f'(ids {_lista_de_ids(ids)}). Resolvé la seña desde la agenda: mantenerla, reprogramarla o cancelarla y devolverla.',
                 {'reservas': ids},
             )
+        for complejo_id, ids in canceladas_por_complejo.items():
+            AvisoComplejoService.al_personal(
+                complejos[complejo_id], PERMISO_AVISO_AGENDA, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_NORMAL,
+                f'un titular dio de baja su cuenta y se cancelaron {_plural(len(ids), "reserva", "reservas")} '
+                f'(ids {_lista_de_ids(ids)}). Los horarios quedaron libres en la grilla.',
+                {'reservas': ids},
+            )
         for complejo_id, ids in turnos_por_complejo.items():
-            AvisoComplejoService.programar(
-                complejo_id, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_NORMAL,
-                f'Se dieron de baja {_plural(len(ids), "turno fijo", "turnos fijos")} (ids {_lista_de_ids(ids)}) porque su titular '
+            AvisoComplejoService.al_personal(
+                complejos[complejo_id], PERMISO_AVISO_AGENDA, CATEGORIA_AVISO_RESERVAS, PRIORIDAD_AVISO_NORMAL,
+                f'se dieron de baja {_plural(len(ids), "turno fijo", "turnos fijos")} (ids {_lista_de_ids(ids)}) porque su titular '
                 'cerró la cuenta. El horario quedó libre en la grilla.',
                 {'turnos_fijos': ids},
             )
+        senadas = sum(len(ids) for ids in senadas_por_complejo.values())
+        turnos = sum(len(ids) for ids in turnos_por_complejo.values())
         resumen = (
             f'Reservas canceladas: {len(canceladas)}. '
-            f'Reservas señadas conservadas: {sum(len(ids) for ids in senadas_por_complejo.values())}. '
-            f'Turnos fijos dados de baja: {sum(len(ids) for ids in turnos_por_complejo.values())}.'
+            f'Reservas señadas conservadas: {senadas}. '
+            f'Turnos fijos dados de baja: {turnos}.'
         )
-        return canceladas, resumen
+        return canceladas, resumen, {'canceladas': len(canceladas), 'senadas': senadas, 'turnos_fijos': turnos}
 
     @staticmethod
     def purgar_contactos_vencidos():

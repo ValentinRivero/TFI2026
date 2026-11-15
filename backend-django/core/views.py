@@ -7,6 +7,7 @@ from rest_framework.filters import OrderingFilter
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
 
 from .filters import (
@@ -70,6 +71,7 @@ from .services import (
     HorarioAperturaService,
     OperadorService,
     RbacService,
+    RecordatorioService,
     ReporteService,
     ReservaService,
     SesionService,
@@ -285,6 +287,18 @@ class PermisosPorCampoMixin:
                 raise PermissionDenied(f'No tenés permiso para modificar el campo {campo}.')
 
 
+def _usuario_si_hay_sesion(request):
+    """
+    Usuario del access token, si lo hay y es válido. Las acciones públicas no autentican: esto solo sirve para tareas
+    accesorias, como el recordatorio de turnos, y un token vencido o ausente se ignora sin rechazar la consulta.
+    """
+    try:
+        resultado = JWTAuthentication().authenticate(request)
+    except Exception:
+        return None
+    return resultado[0] if resultado else None
+
+
 class AccionesPublicasMixin:
     """
     Las acciones públicas ignoran el header Authorization, como VistaPublica: un access vencido enviado
@@ -393,6 +407,7 @@ class ComplejoViewSet(AccionesPublicasMixin, mixins.ListModelMixin, mixins.Retri
     # La grilla de un día está acotada por las canchas del complejo y sus rangos horarios: va completa.
     @action(detail=True, methods=['get'], pagination_class=None)
     def grilla(self, request, pk=None):
+        RecordatorioService.verificar_del_titular(_usuario_si_hay_sesion(request))
         entrada = FiltroGrillaSerializer(data=request.query_params)
         entrada.is_valid(raise_exception=True)
         grilla = GrillaService.calcular(int(pk), entrada.validated_data['fecha'])
@@ -519,7 +534,7 @@ class HorarioAperturaViewSet(PermisosPorCampoMixin, AccesoComplejoMixin, viewset
     def guardar(self, serializer):
         self.validar_permisos_por_campo(serializer.validated_data, serializer.instance)
         if serializer.instance is None:
-            serializer.instance = HorarioAperturaService.crear(serializer.validated_data)
+            serializer.instance = HorarioAperturaService.crear(serializer.validated_data, self.request.user)
         else:
             serializer.instance = HorarioAperturaService.actualizar(
                 serializer.instance, serializer.validated_data, _confirmado(self.request),
@@ -612,6 +627,7 @@ class ReservaViewSet(viewsets.GenericViewSet):
 
     @action(detail=False, methods=['get'])
     def mias(self, request):
+        RecordatorioService.verificar_del_titular(request.user)
         pagina = self.paginate_queryset(self.filter_queryset(self.get_queryset()))
         return self.get_paginated_response(self.get_serializer(pagina, many=True).data)
 

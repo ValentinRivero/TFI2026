@@ -11,12 +11,14 @@ import BotonAccion from './BotonAccion.jsx';
 
 /**
  * Una notificación: categoría, prioridad, mensaje, fecha y hora, y estado. La urgente se distingue por un borde y por
- * su etiqueta, no solo por el color. Si está sin leer y recibe `onMarcarLeida` ofrece marcarla como leída.
+ * su etiqueta, no solo por el color. Si está sin leer y recibe `onMarcarLeida` ofrece marcarla como leída. Con
+ * `complejo` (el nombre) indica a qué complejo pertenece, para quien recibe avisos de más de uno. Con
+ * `mostrarEstado` en falso (registro del complejo) no hay estado de lectura que mostrar.
  */
-export default function NotificacionRow({ notificacion, onMarcarLeida }) {
+export default function NotificacionRow({ notificacion, complejo = null, mostrarEstado = true, onMarcarLeida }) {
   const categoria = describir(CATEGORIA_NOTIFICACION, notificacion.categoria);
   const prioridad = describir(PRIORIDAD_NOTIFICACION, notificacion.prioridad);
-  const sinLeer = notificacion.estado === NOTIFICACION_NO_LEIDA;
+  const sinLeer = mostrarEstado && notificacion.estado === NOTIFICACION_NO_LEIDA;
   const clases = [
     'superficie',
     'notificacion',
@@ -31,6 +33,7 @@ export default function NotificacionRow({ notificacion, onMarcarLeida }) {
         <div className="d-flex flex-wrap align-items-center gap-2">
           <span className={`badge ${categoria.badge}`}>{categoria.etiqueta}</span>
           <span className={`badge ${prioridad.badge}`}>{prioridad.etiqueta}</span>
+          {complejo && <span className="badge badge-neutro">{complejo}</span>}
           {sinLeer && <span className="badge badge-info">{t('notificaciones.sinLeer')}</span>}
         </div>
         <time className="small text-secondary num" dateTime={notificacion.fecha_creacion ?? undefined}>

@@ -76,6 +76,8 @@ router.get(
   autenticar,
   ...validarPaginacion,
   ...filtrosDeNotificaciones,
+  // Quien administra más de un complejo acota su bandeja a uno.
+  complejoEnConsulta().optional(),
   validarCampos,
   listarMisNotificaciones,
 );
