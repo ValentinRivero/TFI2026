@@ -80,7 +80,8 @@ def _base_de_datos_desde_url(url):
         'HOST': partes.hostname or '',
         'PORT': str(partes.port or 5432),
         'OPTIONS': opciones,
-        'CONN_MAX_AGE': _env_entero('DB_CONN_MAX_AGE', 0, minimo=0),
+        # Reutilizar la conexión evita el handshake TLS con Supabase en cada petición; las pruebas la fijan en 0.
+        'CONN_MAX_AGE': _env_entero('DB_CONN_MAX_AGE', 60, minimo=0, maximo=3600),
         'CONN_HEALTH_CHECKS': True,
         # El pooler de Supabase en modo transacción (puerto 6543) no admite cursores del lado del servidor.
         'DISABLE_SERVER_SIDE_CURSORS': partes.port == 6543,
@@ -319,7 +320,25 @@ X_FRAME_OPTIONS = 'DENY'
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 
-ARCHIVO_LOG_SEGURIDAD = BASE_DIR / 'security.log'
+# Detrás de nginx y Cloudflare el TLS se termina fuera de Django: nginx informa el esquema original en
+# X-Forwarded-Proto y Django lo toma de ahí para redirigir, marcar las cookies como seguras y armar las URL.
+SECURE_SSL_REDIRECT = _env_bool('SECURE_SSL_REDIRECT', not DEBUG)
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    # Se puede bajar en el primer despliegue, hasta confirmar que el dominio sirve bien por HTTPS.
+    SECURE_HSTS_SECONDS = _env_entero('SECURE_HSTS_SEGUNDOS', 31_536_000, minimo=0, maximo=63_072_000)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+# Rutas que se consultan por HTTP dentro de la red privada de Docker, sin pasar por nginx: el healthcheck del
+# contenedor y las dos consultas de backend-node al detalle de un complejo. Una redirección las rompería.
+SECURE_REDIRECT_EXEMPT = [
+    r'^api/health/$',
+    r'^api/complejos/[0-9]+/$',
+    r'^api/complejos/[0-9]+/acceso/$',
+]
+
+# En el contenedor el archivo vive en un volumen, para que sobreviva a cada reconstrucción de la imagen.
+ARCHIVO_LOG_SEGURIDAD = Path(os.environ.get('SECURITY_LOG_PATH') or BASE_DIR / 'security.log')
 
 LOGGING = {
     'version': 1,

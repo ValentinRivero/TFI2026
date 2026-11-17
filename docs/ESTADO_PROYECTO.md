@@ -1,4 +1,4 @@
-# Estado de Implementación del Proyecto — TaLibre
+﻿# Estado de Implementación del Proyecto — TaLibre
 
 Documento de seguimiento técnico del desarrollo. Cada objetivo completado y verificado se marca con `[x]`.
 
@@ -113,10 +113,12 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
   - [x] **6.5.5.** Bandeja personal con avisos urgentes pendientes, distinción y filtro por complejo, y registro del complejo en el panel (sin estado de lectura, por categoría y prioridad).
 
 ## Fase 7: Despliegue, Pruebas Integrales y Entrega
-- [ ] **7.1.** Imágenes Docker (`Dockerfile` y `.dockerignore` por servicio) y `docker-compose.yml` con `web`, `node`, `frontend` y `redis`.
-- [ ] **7.2.** Despliegue en VPS: nginx como proxy, HTTPS con dominio, IP real detrás del proxy (`NUM_PROXIES`, `trust proxy`), límite de conexiones WebSocket simultáneas por IP en `/ws/` sin registrar la query string (lleva el token), y `python manage.py check --deploy` sin pendientes.
+- [x] **7.1.** Imágenes Docker (`Dockerfile` y `.dockerignore` por servicio) y `docker-compose.yml` con `web`, `node`, `frontend` y `redis`.
+- [x] **7.2.** Despliegue en VPS: nginx como proxy, HTTPS con dominio, IP real detrás del proxy (`NUM_PROXIES`, `trust proxy`), límite de conexiones WebSocket simultáneas por IP en `/ws/` sin registrar la query string (lleva el token), y `python manage.py check --deploy` sin pendientes.
+  - [x] **7.2.1.** Despliegue continuo: tras el CI en verde sobre `main` (o a mano) el servidor se actualiza solo con las variables de entorno, la reconstrucción de las imágenes, las migraciones y el seed.
+  - [x] **7.2.2.** Seed de demostración con fechas relativas a hoy e idempotente en cada despliegue, con `--reset` para reiniciar la agenda de muestra.
 - [ ] **7.3.** Pruebas de punta a punta de los flujos principales por rol sobre el despliegue.
-- [ ] **7.4.** Documentación de entrega: `docs/API.md`, `docs/DECISIONES_ARQUITECTURA.md` y reporte de cobertura (`pytest --cov=core`), con CI en verde y tag `v1.0.0`.
+- [ ] **7.4.** Documentación de entrega: `docs/API.md` y reporte de cobertura (`pytest --cov=core`), con CI en verde y tag `v1.0.0`.
 
 ## Notas de la Fase 1
 - Modelo de datos alineado a la Sección 3 de `PROJECT.md`: `roles`, `permisos`, `roles_permisos`, `usuarios`, `complejos`, `servicios`, `complejos_servicios`, `deportes`, `canchas`, `horarios_apertura`, `excepciones_horarias`, `turnos_fijos`, `reservas`, `logs_auditoria`.
@@ -126,7 +128,6 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - RBAC con 28 permisos que separan pantallas (`ver_*`) de acciones e incluyen los 8 códigos de ejemplo de la Sección 3 de `PROJECT.md`.
 - Pruebas de Fase 1: 27 tests, migrados a `core/tests/` en el punto 1.5.
 - Migración `0001` y `seed_inicial` verificados sobre Supabase (PostgreSQL).
-- El proyecto no usa `.env.example`: el equipo comparte los `.env` fuera del repositorio.
 - La gestión de roles desde una pantalla queda fuera del alcance actual: se reparten permisos entre los 4 roles existentes.
 - `config/asgi.py` todavía no tiene su forma definitiva: el punto 4.5 le suma `JWTAuthMiddleware`, y los puntos 4.4 y 4.5 completan `core/routing.py` y `core/consumers.py`.
 
@@ -424,10 +425,18 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - **Favicon:** `index.html` declara el SVG, los PNG de 32 y 192 píxeles, el `apple-touch-icon` y `/favicon.ico`, todos generados por `npm run iconos`; no hay recursos por defecto de Vite.
 - **Pruebas:** Django con las pruebas de destinatarios, avisos al jugador, al personal, al dueño y a los superadministradores, recordatorios y reporte de estado; Node con lotes, idempotencia, estado interno y el filtro por complejo (incluido el casteo real de `$gte` con `sanitizeFilter`); frontend con el filtro de complejo y los urgentes de la bandeja.
 
+## Notas de la Fase 7
+- **Un solo origen:** nginx sirve el build de Vite y reparte las rutas entre Django (`/api/`, `/graphql`, `/ws/`) y Node (`/api/actividad`, `/api/reportes-aux`, `/api/externa`). El frontend se compila con las tres variables `VITE_*` vacías: las llamadas son rutas relativas y el WebSocket usa el origen de la página (`wss://` bajo HTTPS).
+- **Rutas internas:** `/api/interno` devuelve 404 desde internet; solo Django la usa, por la red privada de Docker.
+- **Acceso al origen:** nginx rechaza toda conexión que no provenga de los rangos de Cloudflare y recupera la IP real del visitante desde `CF-Connecting-IP`. Docker publica los puertos sin pasar por las reglas del cortafuegos del host, de modo que esta lista es la barrera efectiva del servidor web.
+- **HTTPS en Django:** `SECURE_PROXY_SSL_HEADER`, redirección a HTTPS, HSTS y conexiones persistentes a la base (`DB_CONN_MAX_AGE`, 60 por defecto) se activan fuera de `DEBUG`. `check --deploy --fail-level WARNING` queda sin pendientes y lo cubre una prueba automática.
+- **Registros:** los accesos de nginx omiten la query string (el WebSocket lleva el token) y los errores solo guardan fallas críticas. `security.log` vive en un volumen para sobrevivir a cada reconstrucción.
+- **Seed:** la agenda de muestra se calcula respecto de la fecha de carga y se crea solo junto con su complejo; repetir el comando no duplica ni pisa turnos cargados después. `seed_inicial --reset` da de baja lógica la agenda de los complejos de muestra y la regenera.
+
 ## Decisiones de arquitectura
 - **Frontend:** React con Vite y PWA manual, en capas `services/`, `components/` y `pages/`: solo la capa de servicios conoce las URLs de la API, lo que separa el acceso a datos de la presentación. El access token vive en memoria y el refresh en una cookie HttpOnly, `Secure` y `SameSite=Strict`: un script inyectado por XSS no puede leer el refresh, y `SameSite=Strict` mitiga CSRF. Nada de la sesión se guarda en `localStorage`.
 - **`backend-node`:** persiste sus eventos en MongoDB Atlas con Mongoose y consulta a Django por HTTP. No accede a las 14 tablas.
-- **WebSocket de disponibilidad:** lectura pública con identificación opcional, porque el catálogo y la grilla son públicos (`CU-04`, `CU-05`). El canal es de solo lectura: no procesa mensajes del cliente, sus eventos no llevan datos personales y rechaza complejos sin contrato activo. La decisión se documenta en `docs/DECISIONES_ARQUITECTURA.md`.
+- **WebSocket de disponibilidad:** lectura pública con identificación opcional, porque el catálogo y la grilla son públicos (`CU-04`, `CU-05`). El canal es de solo lectura: no procesa mensajes del cliente, sus eventos no llevan datos personales y rechaza complejos sin contrato activo.
 - **Pruebas:** `pytest --cov=core` en Django y `npm test` en Node, ambas en CI.
 - **Despliegue:** VPS propio con `docker compose`, nginx y HTTPS.
 
