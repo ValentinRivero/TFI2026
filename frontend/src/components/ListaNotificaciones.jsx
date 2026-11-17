@@ -9,12 +9,15 @@ import NotificacionRow from './NotificacionRow.jsx';
 /**
  * Notificaciones de una bandeja con todos sus estados: carga, error con reintento, vacío y filas con "Mostrar más".
  * `lista` es lo que devuelve `useBandejaNotificaciones`; `vacio` es `{ titulo, descripcion }` del estado sin
- * resultados; `onMarcarLeida` recibe la notificación que se quiere marcar.
+ * resultados; `onMarcarLeida` recibe la notificación que se quiere marcar; `nombresDeComplejos` (`{ id: nombre }`)
+ * hace que cada fila indique su complejo; `mostrarEstado` en falso oculta el estado de lectura (registro).
  */
 export default function ListaNotificaciones({
   lista,
   vacio,
   etiqueta,
+  nombresDeComplejos = {},
+  mostrarEstado = true,
   errorTitulo = t('notificaciones.errorTitulo'),
   mostrarResumen = true,
   onMarcarLeida,
@@ -40,7 +43,13 @@ export default function ListaNotificaciones({
           )}
           <div className="d-grid gap-3">
             {items.map((notificacion) => (
-              <NotificacionRow key={notificacion.id} notificacion={notificacion} onMarcarLeida={onMarcarLeida} />
+              <NotificacionRow
+                key={notificacion.id}
+                notificacion={notificacion}
+                complejo={nombresDeComplejos[notificacion.complejo_id] ?? null}
+                mostrarEstado={mostrarEstado}
+                onMarcarLeida={onMarcarLeida}
+              />
             ))}
           </div>
           {errorMas && (

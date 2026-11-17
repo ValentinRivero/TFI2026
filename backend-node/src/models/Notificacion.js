@@ -9,8 +9,11 @@ import { TAMANO_DE_PAGINA } from '../utils/paginacion.js';
 export const CATEGORIAS_NOTIFICACION = Object.freeze({ RESERVAS: 1, CUENTAS: 2, OPERATORIA: 3, SISTEMA: 4 });
 export const PRIORIDADES_NOTIFICACION = Object.freeze({ NORMAL: 1, URGENTE: 2 });
 export const ESTADOS_NOTIFICACION = Object.freeze({ BAJA: 0, NO_LEIDA: 1, LEIDA: 2 });
+// Alcance de una entrada del registro del complejo: lo comercial y de titularidad no lo ve el operador.
+export const AMBITOS_NOTIFICACION = Object.freeze({ OPERATIVO: 1, COMERCIAL: 2 });
 
 const MAXIMO_MENSAJE = LIMITES.maximoMensaje;
+const MAXIMO_CLAVE = LIMITES.maximoClaveUnica;
 // El mensaje se muestra en paneles compartidos por el personal del complejo: no lleva datos personales (Ley 25.326).
 const EMAIL = /[^\s@]+@[^\s@]+\.[^\s@]+/;
 // Del evento solo viaja lo que la bandeja muestra: `metadata` y `usuario_id` no llegan al panel.
@@ -34,6 +37,19 @@ const notificacionSchema = new mongoose.Schema(
       ],
     },
     usuario_id: { type: Number, default: null, validate: enteroPositivo('usuario_id') },
+    // Clave de idempotencia que elige quien emite el aviso: por usuario, una clave se acepta una sola vez.
+    clave_unica: {
+      type: String,
+      trim: true,
+      default: null,
+      maxlength: [MAXIMO_CLAVE, `La clave no puede superar los ${MAXIMO_CLAVE} caracteres.`],
+    },
+    // Solo las entradas del registro del complejo (sin usuario destinatario) lo llevan; las personales, no.
+    ambito: {
+      type: Number,
+      default: null,
+      enum: { values: [null, ...Object.values(AMBITOS_NOTIFICACION)], message: 'Ámbito no admitido.' },
+    },
     categoria: {
       type: Number,
       required: [true, 'La categoría es obligatoria.'],
@@ -69,12 +85,12 @@ const soloVigentes = () => mongoose.trusted({ $in: [...VIGENTES] });
 /**
  * Filtro de la bandeja de un destinatario. La de un complejo trae solo sus avisos generales: los dirigidos a un
  * usuario puntual los ve únicamente ese usuario. Sin destinatario se rechaza, para no listar las de todos.
- * Los criterios opcionales (`categoria`, `prioridad`, `estado`) acotan la bandeja; `estado` admite solo los
+ * Los criterios opcionales (`categoria`, `prioridad`, `estado`, y `sinComercial` para el registro que ve un operador) acotan la bandeja; `estado` admite solo los
  * vigentes, así que una baja lógica nunca sale por esta vía.
  */
 notificacionSchema.statics.filtroDeBandeja = function filtroDeBandeja(
   { complejo_id: complejoId, usuario_id: usuarioId },
-  { categoria, prioridad, estado } = {},
+  { categoria, prioridad, estado, sinComercial = false } = {},
 ) {
   if (!complejoId && !usuarioId) {
     throw new Error('La bandeja necesita un destinatario: complejo_id o usuario_id.');
@@ -88,6 +104,8 @@ notificacionSchema.statics.filtroDeBandeja = function filtroDeBandeja(
     estado: estado ?? soloVigentes(),
     ...(categoria === undefined ? {} : { categoria }),
     ...(prioridad === undefined ? {} : { prioridad }),
+    // Lo marcado como comercial queda fuera; las entradas sin ámbito (anteriores a esta marca) cuentan como operativas.
+    ...(sinComercial ? { ambito: mongoose.trusted({ $ne: AMBITOS_NOTIFICACION.COMERCIAL }) } : {}),
   };
 };
 
@@ -114,6 +132,11 @@ notificacionSchema.statics.vigentePorId = function vigentePorId(id) {
 
 notificacionSchema.index({ complejo_id: 1, estado: 1, fecha_creacion: -1 });
 notificacionSchema.index({ usuario_id: 1, estado: 1, fecha_creacion: -1 });
+// Un recordatorio o un reporte repetido no se duplica: la base rechaza la segunda clave del mismo usuario.
+notificacionSchema.index(
+  { usuario_id: 1, clave_unica: 1 },
+  { unique: true, partialFilterExpression: { clave_unica: { $type: 'string' } } },
+);
 notificacionSchema.plugin(bajaLogica);
 
 export default mongoose.model('Notificacion', notificacionSchema);

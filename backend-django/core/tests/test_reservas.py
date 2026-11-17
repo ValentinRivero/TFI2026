@@ -3,6 +3,7 @@ from decimal import Decimal
 from unittest import mock
 
 import pytest
+from django.core.cache import cache
 from django.db import IntegrityError, connection
 from django.test.utils import CaptureQueriesContext
 from rest_framework import status
@@ -551,6 +552,8 @@ class TestMisReservas:
         api = cliente_de(jugador)
 
         def _consultas():
+            # La verificación de recordatorios se espacia por caché: se limpia para medir siempre lo mismo.
+            cache.clear()
             with CaptureQueriesContext(connection) as capturadas:
                 assert api.get(URL_MIAS).status_code == status.HTTP_200_OK
             return len(capturadas)

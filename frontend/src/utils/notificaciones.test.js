@@ -8,13 +8,15 @@ import {
   debeSondear,
   esUrgente,
   FILTROS_URGENTES,
+  filtrosDeRegistro,
+  filtrosUrgentesDe,
   leerFiltros,
   normalizarNotificacion,
   normalizarPagina,
   textoContador,
 } from './notificaciones.js';
 
-const FILTROS = { estado: 'no-leidas', prioridad: '', categoria: '' };
+const FILTROS = { estado: 'no-leidas', prioridad: '', categoria: '', complejo: '' };
 
 describe('leerFiltros', () => {
   test('sin query usa las no leídas y ningún otro filtro', () => {
@@ -23,7 +25,15 @@ describe('leerFiltros', () => {
 
   test('lee estado, prioridad y categoría válidos', () => {
     const filtros = leerFiltros(new URLSearchParams('estado=leidas&prioridad=2&categoria=3'));
-    expect(filtros).toEqual({ estado: 'leidas', prioridad: '2', categoria: '3' });
+    expect(filtros).toEqual({ estado: 'leidas', prioridad: '2', categoria: '3', complejo: '' });
+  });
+
+  test('lee el complejo si es un id', () => {
+    expect(leerFiltros(new URLSearchParams('complejo=12')).complejo).toBe('12');
+  });
+
+  test.each(['0', '-3', '4.5', 'abc', '12abc', '%20'])('ignora un complejo que no es un id (%s)', (valor) => {
+    expect(leerFiltros(new URLSearchParams({ complejo: valor })).complejo).toBe('');
   });
 
   test('ignora valores que los catálogos no conocen', () => {
@@ -38,11 +48,12 @@ describe('aParametrosUrl', () => {
   });
 
   test('conserva solo lo que se aparta del valor por defecto', () => {
-    expect(aParametrosUrl({ estado: 'todas', prioridad: '2', categoria: '' })).toEqual({ estado: 'todas', prioridad: '2' });
+    expect(aParametrosUrl({ ...FILTROS, estado: 'todas', prioridad: '2' })).toEqual({ estado: 'todas', prioridad: '2' });
+    expect(aParametrosUrl({ ...FILTROS, complejo: '7' })).toEqual({ complejo: '7' });
   });
 
   test('ida y vuelta con leerFiltros', () => {
-    const filtros = { estado: 'leidas', prioridad: '1', categoria: '4' };
+    const filtros = { estado: 'leidas', prioridad: '1', categoria: '4', complejo: '9' };
     expect(leerFiltros(new URLSearchParams(aParametrosUrl(filtros)))).toEqual(filtros);
   });
 });
@@ -57,14 +68,28 @@ describe('aParametrosApi', () => {
   });
 
   test('suma categoría, prioridad, complejo y página', () => {
-    const filtros = { estado: 'leidas', prioridad: '2', categoria: '3' };
-    expect(aParametrosApi(filtros, 3, 7)).toEqual({
-      complejo_id: 7, estado: 2, categoria: '3', prioridad: '2', page: 3,
+    const filtros = { estado: 'leidas', prioridad: '2', categoria: '3', complejo: '7' };
+    expect(aParametrosApi(filtros, 3)).toEqual({
+      complejo_id: '7', estado: 2, categoria: '3', prioridad: '2', page: 3,
     });
   });
 
   test('los avisos urgentes pendientes piden prioridad 2 y estado 1', () => {
-    expect(aParametrosApi(FILTROS_URGENTES, 1, 5)).toEqual({ complejo_id: 5, estado: 1, prioridad: '2' });
+    expect(aParametrosApi(FILTROS_URGENTES, 1)).toEqual({ estado: 1, prioridad: '2' });
+  });
+
+  test('el registro del complejo pide todas las entradas, sin estado ni complejo propio', () => {
+    const filtros = { estado: 'no-leidas', prioridad: '2', categoria: '3', complejo: '5' };
+
+    expect(filtrosDeRegistro(filtros)).toEqual({ estado: 'todas', prioridad: '2', categoria: '3', complejo: '' });
+    expect(aParametrosApi(filtrosDeRegistro(filtros), 2)).toEqual({ categoria: '3', prioridad: '2', page: 2 });
+  });
+
+  test('los urgentes comparten solo el complejo elegido en la bandeja', () => {
+    const filtros = { estado: 'todas', prioridad: '1', categoria: '3', complejo: '5' };
+
+    expect(filtrosUrgentesDe(filtros)).toEqual({ ...FILTROS_URGENTES, complejo: '5' });
+    expect(aParametrosApi(filtrosUrgentesDe(filtros))).toEqual({ complejo_id: '5', estado: 1, prioridad: '2' });
   });
 });
 
@@ -137,6 +162,11 @@ describe('contador de la campana', () => {
 describe('clavesDeVacio', () => {
   test('con categoría o prioridad sugiere ampliar la búsqueda', () => {
     expect(clavesDeVacio({ ...FILTROS, categoria: '1' }, 'x.generica').descripcion)
+      .toBe('notificaciones.vacioFiltradasDescripcion');
+  });
+
+  test('con un complejo elegido también sugiere ampliar la búsqueda', () => {
+    expect(clavesDeVacio({ ...FILTROS, complejo: '4' }, 'x.generica').descripcion)
       .toBe('notificaciones.vacioFiltradasDescripcion');
   });
 

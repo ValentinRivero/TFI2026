@@ -67,7 +67,7 @@ describe('POST /api/interno/notificaciones', () => {
 
     expect(respuesta.status).toBe(201);
     const notificacion = notificacionGuardada();
-    expect(respuesta.body).toEqual({ id: notificacion.id, evento: null });
+    expect(respuesta.body).toEqual({ id: notificacion.id, ids: [notificacion.id], evento: null, registro: null, omitidas: 0 });
     expect(notificacion).toMatchObject({
       ...AVISO, usuario_id: null, evento: null, estado: ESTADOS_NOTIFICACION.NO_LEIDA,
     });

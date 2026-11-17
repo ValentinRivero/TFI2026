@@ -4,15 +4,24 @@ import { apiNode } from './api.js';
 
 const RUTA = '/api/actividad/notificaciones';
 
-/** Una página de las notificaciones dirigidas a la cuenta (`{ count, next, previous, results }`). */
+/**
+ * Una página de las notificaciones dirigidas a la cuenta (`{ count, next, previous, results }`). Cada rol recibe las
+ * suyas en esta bandeja: el personal de un complejo, lo operativo; el dueño, además lo comercial; el superadmin, lo del sistema.
+ */
 export const listarMisNotificaciones = async (filtros, pagina, signal) => {
   const { data } = await apiNode.get(`${RUTA}/mias`, { params: aParametrosApi(filtros, pagina), signal });
   return normalizarPagina(data);
 };
 
-/** Una página de los avisos generales del complejo (dueño, operador y superadmin). */
-export const listarNotificacionesDelComplejo = async (complejoId, filtros, pagina, signal) => {
-  const { data } = await apiNode.get(RUTA, { params: aParametrosApi(filtros, pagina, complejoId), signal });
+/**
+ * Una página del registro del complejo (dueño, operador y superadmin): lo ocurrido, sin estado de lectura. El operador
+ * no recibe lo comercial; lo decide el servicio.
+ */
+export const listarRegistroDelComplejo = async (complejoId, filtros, pagina, signal) => {
+  const { data } = await apiNode.get(RUTA, {
+    params: { ...aParametrosApi({ ...filtros, complejo: '' }, pagina), complejo_id: complejoId },
+    signal,
+  });
   return normalizarPagina(data);
 };
 

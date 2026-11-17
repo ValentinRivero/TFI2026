@@ -29,6 +29,13 @@ describe('Modelo Notificacion', () => {
     expect(notificacion.usuario_id).toBeNull();
   });
 
+  test('el ámbito del registro es opcional y solo admite operativo o comercial', async () => {
+    expect(valida().ambito).toBeNull();
+    await expect(valida({ ambito: 1 }).validate()).resolves.toBeUndefined();
+    await expect(valida({ ambito: 2 }).validate()).resolves.toBeUndefined();
+    expect(await erroresDe(valida({ ambito: 3 }))).toContain('ambito');
+  });
+
   test('categorías, prioridades y estados coinciden con PROJECT.md', () => {
     expect(CATEGORIAS_NOTIFICACION).toEqual({ RESERVAS: 1, CUENTAS: 2, OPERATORIA: 3, SISTEMA: 4 });
     expect(PRIORIDADES_NOTIFICACION).toEqual({ NORMAL: 1, URGENTE: 2 });
@@ -225,6 +232,23 @@ describe('Consultas de notificaciones con sanitizeFilter activo', () => {
     ['la búsqueda de una notificación vigente por id', () => Notificacion.vigentePorId('6af8953c6391980c346f2035')],
   ])('castea sin error %s', (_descripcion, armar) => {
     expect(errorAlCastear(armar())).toBeFalsy();
+  });
+
+  test('el registro de un operador excluye lo comercial y castea con sanitizeFilter', () => {
+    const consulta = Notificacion.bandeja({ complejo_id: 4 }, { criterios: { sinComercial: true } });
+
+    consulta._castConditions();
+
+    expect(consulta.error()).toBeFalsy();
+    expect(consulta.getFilter().ambito).toEqual(mongoose.trusted({ $ne: 2 }));
+  });
+
+  test('sin la marca de confianza ese mismo operador no castearía', () => {
+    const consulta = Notificacion.find({ ambito: { $ne: 2 } });
+
+    consulta._castConditions();
+
+    expect(consulta.error()).toBeTruthy();
   });
 
   test('sin filtro de estado la consulta sigue acotada a los dos estados vigentes y excluye la baja', () => {

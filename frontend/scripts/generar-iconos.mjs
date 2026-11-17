@@ -3,7 +3,8 @@
  * al turno libre. Es obra propia, sin fuentes ni imágenes de terceros.
  *
  * Uso: `npm run iconos`. Escribe en `public/icons/`:
- *   logo.svg, favicon.svg, icon-192.png, icon-512.png, icon-maskable-512.png y apple-touch-icon.png.
+ *   logo.svg, favicon.svg, icon-32.png, icon-192.png, icon-512.png, icon-maskable-512.png y apple-touch-icon.png,
+ * y en `public/` el `favicon.ico` que los navegadores piden por su cuenta en la raíz del sitio.
  *
  * Para reemplazar el logo por el definitivo alcanza con sobrescribir esos archivos (mismos nombres y tamaños);
  * nada más en la app depende de este script. Las medidas del dibujo están en `DISENO`, en una grilla de 100 x 100.
@@ -13,7 +14,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
 
-const CARPETA = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'icons');
+const PUBLICO = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
+const CARPETA = join(PUBLICO, 'icons');
 
 const VERDE = [0x15, 0x80, 0x3d];
 const BLANCO = [0xff, 0xff, 0xff];
@@ -131,16 +133,34 @@ const png = (lado, pixeles) => {
 
 // El ícono "maskable" ocupa todo el lienzo y reduce la figura al 70 % para que el sistema pueda recortarlo.
 const VARIANTES = [
+  { archivo: 'icon-32.png', lado: 32, redondeado: true, escala: 1, desplazamiento: 0 },
   { archivo: 'icon-192.png', lado: 192, redondeado: true, escala: 1, desplazamiento: 0 },
   { archivo: 'icon-512.png', lado: 512, redondeado: true, escala: 1, desplazamiento: 0 },
   { archivo: 'icon-maskable-512.png', lado: 512, redondeado: false, escala: 0.7, desplazamiento: 15 },
   { archivo: 'apple-touch-icon.png', lado: 180, redondeado: false, escala: 1, desplazamiento: 0 },
 ];
 
+// Un .ico puede llevar la imagen como PNG: un encabezado, una entrada de directorio y los bytes del PNG de 32 x 32.
+const ico = (imagenPng, lado) => {
+  const cabecera = Buffer.alloc(6);
+  cabecera.writeUInt16LE(1, 2); // tipo: ícono
+  cabecera.writeUInt16LE(1, 4); // una imagen
+  const entrada = Buffer.alloc(16);
+  entrada.writeUInt8(lado, 0);
+  entrada.writeUInt8(lado, 1);
+  entrada.writeUInt16LE(1, 4); // planos
+  entrada.writeUInt16LE(32, 6); // bits por píxel
+  entrada.writeUInt32LE(imagenPng.length, 8);
+  entrada.writeUInt32LE(cabecera.length + entrada.length, 12);
+  return Buffer.concat([cabecera, entrada, imagenPng]);
+};
+
 mkdirSync(CARPETA, { recursive: true });
 writeFileSync(join(CARPETA, 'logo.svg'), svg());
 writeFileSync(join(CARPETA, 'favicon.svg'), svg());
 for (const { archivo, lado, ...opciones } of VARIANTES) {
-  writeFileSync(join(CARPETA, archivo), png(lado, rasterizar(lado, opciones)));
+  const imagen = png(lado, rasterizar(lado, opciones));
+  writeFileSync(join(CARPETA, archivo), imagen);
+  if (archivo === 'icon-32.png') writeFileSync(join(PUBLICO, 'favicon.ico'), ico(imagen, lado));
 }
 console.log(`Íconos generados en ${CARPETA}`);

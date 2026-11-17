@@ -432,8 +432,10 @@ class TestDifusionDeExcepciones:
                 respuesta = cliente_de(dueno).post(URL, _franja(complejo, cancha), format='json')
                 publicar.assert_not_called()
 
-            assert len(pendientes) == 1
-            pendientes[0]()
+            # La difusión de la grilla y la entrada del registro del complejo.
+            assert len(pendientes) == 2
+            for pendiente in pendientes:
+                pendiente()
 
         publicar.assert_called_once_with(complejo.id, {
             'event': 'grilla_actualizada',

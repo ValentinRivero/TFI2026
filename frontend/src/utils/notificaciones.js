@@ -8,15 +8,23 @@ import {
 import { PARAMETROS } from '../config/parametros.js';
 
 const FILTROS_DE_ESTADO = Object.values(FILTRO_ESTADO_NOTIFICACION);
+const ID_DE_COMPLEJO = /^[1-9]\d*$/;
 
 export const ESTADO_FILTRO_POR_DEFECTO = FILTRO_ESTADO_NOTIFICACION.NO_LEIDAS.valor;
 
-/** Avisos urgentes pendientes de un complejo: bloque fijo de su bandeja, independiente de los filtros elegidos. */
+/** Avisos urgentes pendientes: bloque fijo de la bandeja, independiente de los filtros elegidos. */
 export const FILTROS_URGENTES = Object.freeze({
   estado: ESTADO_FILTRO_POR_DEFECTO,
   prioridad: String(PRIORIDAD_URGENTE),
   categoria: '',
+  complejo: '',
 });
+
+/** Filtros del registro de un complejo: todas las entradas, sin estado de lectura ni complejo (lo fija la pantalla). */
+export const filtrosDeRegistro = (filtros) => ({ ...filtros, estado: 'todas', complejo: '' });
+
+/** Los urgentes pendientes del mismo complejo que la bandeja: el único filtro que comparten. */
+export const filtrosUrgentesDe = (filtros) => ({ ...FILTROS_URGENTES, complejo: filtros.complejo });
 
 // Un código que el catálogo no conoce (por ejemplo, de un enlace editado a mano) se ignora.
 const codigoDe = (valor, catalogo) => (valor !== null && Object.hasOwn(catalogo, valor) ? valor : '');
@@ -28,6 +36,8 @@ export const leerFiltros = (parametros) => {
     estado: estado?.valor ?? ESTADO_FILTRO_POR_DEFECTO,
     prioridad: codigoDe(parametros.get('prioridad'), PRIORIDAD_NOTIFICACION),
     categoria: codigoDe(parametros.get('categoria'), CATEGORIA_NOTIFICACION),
+    // Un id de complejo: cualquier otra cosa (por ejemplo, de un enlace editado a mano) se ignora.
+    complejo: ID_DE_COMPLEJO.test(parametros.get('complejo') ?? '') ? parametros.get('complejo') : '',
   };
 };
 
@@ -37,13 +47,14 @@ export const aParametrosUrl = (filtros) => {
   if (filtros.estado !== ESTADO_FILTRO_POR_DEFECTO) parametros.estado = filtros.estado;
   if (filtros.prioridad) parametros.prioridad = filtros.prioridad;
   if (filtros.categoria) parametros.categoria = filtros.categoria;
+  if (filtros.complejo) parametros.complejo = filtros.complejo;
   return parametros;
 };
 
-/** Parámetros de las bandejas de `backend-node`; `complejoId` solo va en la del complejo. */
-export const aParametrosApi = (filtros, pagina = 1, complejoId = null) => {
+/** Parámetros de la bandeja propia de `backend-node`; `complejo` acota a los avisos de un solo complejo. */
+export const aParametrosApi = (filtros, pagina = 1) => {
   const parametros = {};
-  if (complejoId) parametros.complejo_id = complejoId;
+  if (filtros.complejo) parametros.complejo_id = filtros.complejo;
   const codigoEstado = FILTROS_DE_ESTADO.find(({ valor }) => valor === filtros.estado)?.codigo;
   if (codigoEstado) parametros.estado = codigoEstado;
   if (filtros.categoria) parametros.categoria = filtros.categoria;
@@ -82,12 +93,12 @@ export const aplicarLeidas = (notificaciones, idsLeidos, ocultar) => {
 };
 
 /**
- * Claves de texto del estado vacío de una bandeja según los filtros: con categoría o prioridad elegidas se sugiere
+ * Claves de texto del estado vacío de una bandeja según los filtros: con categoría, prioridad o complejo elegidos se sugiere
  * ampliar la búsqueda; sin ellas y viendo solo las no leídas, que no hay pendientes; en otro caso, el texto propio
  * de la bandeja (`claveDescripcion`).
  */
 export const clavesDeVacio = (filtros, claveDescripcion) => {
-  if (filtros.categoria || filtros.prioridad) {
+  if (filtros.categoria || filtros.prioridad || filtros.complejo) {
     return { titulo: 'notificaciones.vacioTitulo', descripcion: 'notificaciones.vacioFiltradasDescripcion' };
   }
   if (filtros.estado === ESTADO_FILTRO_POR_DEFECTO) {

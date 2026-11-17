@@ -11,6 +11,8 @@ import { ROLES } from '../middlewares/rol.middleware.js';
 
 // Los estados vigentes se filtran con un operador marcado como confiable: sin la marca, `sanitizeFilter` lo anula.
 const vigentes = () => mongoose.trusted({ $in: [1, 2] });
+// El registro que ve un operador deja afuera lo comercial (ámbito 2); las entradas sin ámbito cuentan como operativas.
+const sinComercial = () => mongoose.trusted({ $ne: 2 });
 
 const CLAVE = 'clave-compartida-de-prueba-con-largo-suficiente-0123456789';
 const COMPLEJO_PROPIO = 4;
@@ -190,10 +192,32 @@ describe('GET /api/actividad/notificaciones (bandeja del complejo)', () => {
     expect(respuesta.body.count).toBe(21);
     expect(respuesta.body.next).toBe('/api/actividad/notificaciones?complejo_id=4&page=2&limit=20');
     expect(consultasDe('Notificacion', 'find')[0].filtro).toEqual(
-      { complejo_id: 4, usuario_id: null, estado: vigentes() },
+      { complejo_id: 4, usuario_id: null, estado: vigentes(), ambito: sinComercial() },
     );
     expect(consultasDe('Notificacion', 'find')[0].opciones).toMatchObject({ skip: 0, limit: 20 });
     expect(consultasDe('Notificacion', 'countDocuments')[0].filtro).toEqual(consultasDe('Notificacion', 'find')[0].filtro);
+  });
+
+  test('el operador no ve lo comercial; el dueño y el superadmin ven todo el registro', async () => {
+    datos.cantidad = 0;
+
+    await request(app).get('/api/actividad/notificaciones?complejo_id=4').set(como(ROLES.OPERADOR_COMPLEJO));
+    await request(app).get('/api/actividad/notificaciones?complejo_id=4').set(como(ROLES.DUENO_COMPLEJO));
+    await request(app).get('/api/actividad/notificaciones?complejo_id=4').set(como(ROLES.SUPERADMIN));
+
+    const [operador, dueno, superadmin] = consultasDe('Notificacion', 'find').map((consulta) => consulta.filtro);
+    expect(operador.ambito).toEqual(sinComercial());
+    expect(dueno).toEqual({ complejo_id: 4, usuario_id: null, estado: vigentes() });
+    expect(superadmin).toEqual(dueno);
+  });
+
+  test('el registro no pierde sus entradas al paginar: los enlaces no exponen el filtro por rol', async () => {
+    datos.cantidad = 45;
+
+    const respuesta = await request(app)
+      .get('/api/actividad/notificaciones?complejo_id=4').set(como(ROLES.OPERADOR_COMPLEJO));
+
+    expect(respuesta.body.next).toBe('/api/actividad/notificaciones?complejo_id=4&page=2&limit=20');
   });
 
   test('cada notificación expone su evento resuelto, sin datos de usuarios', async () => {
@@ -258,9 +282,51 @@ describe('GET /api/actividad/notificaciones/mias (bandeja propia de cualquier us
   test('el destinatario sale del token: ningún parámetro permite leer las de otra cuenta', async () => {
     datos.cantidad = 0;
 
-    await request(app).get('/api/actividad/notificaciones/mias?usuario_id=99&complejo_id=4').set(como(ROLES.JUGADOR, 7));
+    await request(app).get('/api/actividad/notificaciones/mias?usuario_id=99').set(como(ROLES.JUGADOR, 7));
 
     expect(consultasDe('Notificacion', 'find')[0].filtro).toEqual({ usuario_id: 7, estado: vigentes() });
+  });
+
+  test('con complejo_id acota la bandeja propia a ese complejo, sin cambiar de titular', async () => {
+    datos.cantidad = 0;
+
+    const respuesta = await request(app)
+      .get('/api/actividad/notificaciones/mias?usuario_id=99&complejo_id=4')
+      .set(como(ROLES.DUENO_COMPLEJO, 7));
+
+    expect(respuesta.status).toBe(200);
+    expect(consultasDe('Notificacion', 'find')[0].filtro).toEqual({ usuario_id: 7, complejo_id: 4, estado: vigentes() });
+    expect(consultasDe('Notificacion', 'countDocuments')[0].filtro).toEqual({
+      usuario_id: 7, complejo_id: 4, estado: vigentes(),
+    });
+  });
+
+  test('conserva el complejo en los enlaces de paginación', async () => {
+    datos.cantidad = 45;
+
+    const respuesta = await request(app)
+      .get('/api/actividad/notificaciones/mias?complejo_id=4&prioridad=2')
+      .set(como(ROLES.OPERADOR_COMPLEJO, 7));
+
+    expect(respuesta.body.next).toContain('complejo_id=4');
+    expect(respuesta.body.next).toContain('prioridad=2');
+  });
+
+  test.each(['0', 'cuatro', '4.5'])('un complejo_id inválido (%s) responde 400 sin consultar', async (valor) => {
+    const respuesta = await request(app)
+      .get(`/api/actividad/notificaciones/mias?complejo_id=${valor}`)
+      .set(como(ROLES.DUENO_COMPLEJO, 7));
+
+    expect(respuesta.status).toBe(400);
+    expect(consultas).toHaveLength(0);
+  });
+
+  test('un complejo_id repetido responde 400', async () => {
+    const respuesta = await request(app)
+      .get('/api/actividad/notificaciones/mias?complejo_id=4&complejo_id=9')
+      .set(como(ROLES.DUENO_COMPLEJO, 7));
+
+    expect(respuesta.status).toBe(400);
   });
 
   test('no consulta a Django: no hay complejo que verificar', async () => {

@@ -16,6 +16,9 @@ export const LIMITES = Object.freeze({
   maximoMensaje: 280,
   maximoBytesMetadata: 2048,
   largoMinimoClaveInterna: 32,
+  // Destinatarios de un mismo aviso (el personal de un complejo o los superadministradores) y largo de su clave.
+  maximoDestinatarios: 50,
+  maximoClaveUnica: 120,
 });
 
 const URL_CLIMA_POR_DEFECTO = 'https://api.open-meteo.com/v1/forecast';
@@ -78,6 +81,13 @@ export const leerParametros = (entorno) => Object.freeze({
   }),
   // Mismo tope que el dashboard de la API principal (RANGO_MAXIMO_DIAS), que muestra estas métricas junto a las suyas.
   rangoMaximoDias: entero(entorno, 'RANGO_MAXIMO_DIAS', 366, { minimo: 1, maximo: 3_660 }),
+  // Umbrales desde los que `/api/interno/estado` se informa como degradado a backend-django.
+  estado: Object.freeze({
+    latenciaMongoMaximaMs: entero(entorno, 'ESTADO_LATENCIA_MONGO_MAXIMA_MS', 500, { minimo: 10, maximo: 60_000 }),
+    memoriaMaximaMb: entero(entorno, 'ESTADO_MEMORIA_MAXIMA_MB', 1_024, { minimo: 64, maximo: 65_536 }),
+    fallasExternasMaximas: entero(entorno, 'ESTADO_FALLAS_EXTERNAS_MAXIMAS', 5, { minimo: 1, maximo: 1_000 }),
+    ventanaFallasMs: entero(entorno, 'ESTADO_VENTANA_FALLAS_MS', 300_000, { minimo: 1_000, maximo: 86_400_000 }),
+  }),
 });
 
 export const obtenerParametros = () => leerParametros(process.env);

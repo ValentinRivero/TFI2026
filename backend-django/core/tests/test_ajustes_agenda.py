@@ -338,6 +338,12 @@ class TestCambioDeHorarioDeTurnoFijo:
         })
 
 
+def _personales(entregar):
+    """Los avisos con destinatarios: la entrada del registro del complejo no cuenta como aviso personal."""
+    avisos = [llamada.args[0] for llamada in entregar.call_args_list]
+    return [aviso for aviso in avisos if aviso['usuarios_ids'] or aviso['usuario_id']]
+
+
 class TestFechasEnEspera:
     @pytest.fixture
     def turno(self, crear_turno_fijo, cancha):
@@ -515,7 +521,7 @@ class TestFechasEnEspera:
             with django_capture_on_commit_callbacks(execute=True):
                 cliente_de(dueno).post('/api/excepciones/', datos, format='json')
 
-        (aviso,) = [llamada.args[0] for llamada in entregar.call_args_list]
+        (aviso,) = _personales(entregar)
         assert '1 fecha de turnos fijos' in aviso['mensaje']
 
     def test_crear_una_excepcion_que_deja_fechas_en_espera_avisa_con_urgencia(
@@ -531,7 +537,7 @@ class TestFechasEnEspera:
             with django_capture_on_commit_callbacks(execute=True):
                 respuesta = cliente_de(dueno).post('/api/excepciones/', datos, format='json')
 
-        (aviso,) = [llamada.args[0] for llamada in entregar.call_args_list]
+        (aviso,) = _personales(entregar)
         assert aviso['prioridad'] == PRIORIDAD_AVISO_URGENTE and aviso['complejo_id'] == complejo.id
         assert aviso['referencias'] == {'excepcion': respuesta.json()['id'], 'turnos_fijos': [turno.id]}
         assert '2 fechas' in aviso['mensaje'] and 'Teodoro' not in aviso['mensaje']
@@ -549,7 +555,7 @@ class TestFechasEnEspera:
             with django_capture_on_commit_callbacks(execute=True):
                 cliente_de(dueno).post('/api/excepciones/', datos, format='json')
 
-        entregar.assert_not_called()
+        assert _personales(entregar) == []
 
 
 def test_la_reapertura_no_crea_otra_reserva(operador, cliente_de, cancelada):

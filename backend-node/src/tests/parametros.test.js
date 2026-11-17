@@ -13,6 +13,7 @@ const POR_DEFECTO = {
   bodyMaximoBytes: 10_240,
   mongo: { timeoutSeleccionMs: 10_000, maxPoolSize: 100 },
   rangoMaximoDias: 366,
+  estado: { latenciaMongoMaximaMs: 500, memoriaMaximaMb: 1_024, fallasExternasMaximas: 5, ventanaFallasMs: 300_000 },
 };
 
 describe('Valores por defecto', () => {
@@ -41,6 +42,8 @@ describe('Valores por defecto', () => {
       maximoMensaje: 280,
       maximoBytesMetadata: 2048,
       largoMinimoClaveInterna: 32,
+      maximoDestinatarios: 50,
+      maximoClaveUnica: 120,
     });
     expect(Object.isFrozen(LIMITES)).toBe(true);
     expect(Object.isFrozen(LIMITES.paginacion)).toBe(true);
@@ -65,6 +68,10 @@ describe('Lectura del entorno', () => {
     ['MONGO_TIMEOUT_SELECCION_MS', '5000', (p) => p.mongo.timeoutSeleccionMs, 5_000],
     ['MONGO_MAX_POOL', '20', (p) => p.mongo.maxPoolSize, 20],
     ['RANGO_MAXIMO_DIAS', '90', (p) => p.rangoMaximoDias, 90],
+    ['ESTADO_LATENCIA_MONGO_MAXIMA_MS', '250', (p) => p.estado.latenciaMongoMaximaMs, 250],
+    ['ESTADO_MEMORIA_MAXIMA_MB', '2048', (p) => p.estado.memoriaMaximaMb, 2_048],
+    ['ESTADO_FALLAS_EXTERNAS_MAXIMAS', '3', (p) => p.estado.fallasExternasMaximas, 3],
+    ['ESTADO_VENTANA_FALLAS_MS', '60000', (p) => p.estado.ventanaFallasMs, 60_000],
   ])('%s=%s se aplica', (variable, valor, leer, esperado) => {
     expect(leer(leerParametros({ [variable]: valor }))).toBe(esperado);
   });
@@ -128,6 +135,10 @@ describe('Valores inválidos', () => {
     ['MONGO_MAX_POOL', '501'],
     ['RANGO_MAXIMO_DIAS', '0'],
     ['RANGO_MAXIMO_DIAS', '3661'],
+    ['ESTADO_LATENCIA_MONGO_MAXIMA_MS', '9'],
+    ['ESTADO_MEMORIA_MAXIMA_MB', '63'],
+    ['ESTADO_FALLAS_EXTERNAS_MAXIMAS', '0'],
+    ['ESTADO_VENTANA_FALLAS_MS', '999'],
   ])('%s=%s corta el arranque y nombra la variable', (variable, valor) => {
     expect(() => leerParametros({ [variable]: valor })).toThrow(variable);
   });

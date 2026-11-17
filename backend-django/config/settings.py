@@ -258,6 +258,14 @@ GRILLA_CACHE_SEGUNDOS = _env_entero('GRILLA_CACHE_SEGUNDOS', 60, minimo=1, maxim
 NODE_TIMEOUT_SEGUNDOS = _env_entero('NODE_TIMEOUT_SEGUNDOS', 3, minimo=1, maximo=30)
 # Días que se conservan el nombre y el teléfono copiados en una reserva señada de un titular dado de baja.
 CONTACTOS_BAJA_DIAS = _env_entero('CONTACTOS_BAJA_DIAS', 30, minimo=1, maximo=365)
+# Horas de anticipación con las que se recuerda un turno al jugador, y segundos mínimos entre dos verificaciones
+# de recordatorios que dispara el propio jugador al consultar sus reservas o una grilla.
+RECORDATORIO_HORAS_ANTICIPACION = _env_entero('RECORDATORIO_HORAS_ANTICIPACION', 24, minimo=1, maximo=72)
+RECORDATORIO_VERIFICACION_SEGUNDOS = _env_entero('RECORDATORIO_VERIFICACION_SEGUNDOS', 300, minimo=1, maximo=86400)
+# Latencia de la base de datos, en milisegundos, desde la que el reporte de estado del servidor se marca degradado.
+REPORTE_LATENCIA_BD_MAXIMA_MS = _env_entero('REPORTE_LATENCIA_BD_MAXIMA_MS', 500, minimo=10, maximo=60000)
+# Segundos que se agrupan los avisos de límite de peticiones de una misma ruta para los superadministradores.
+ALERTA_LIMITE_VENTANA_SEGUNDOS = _env_entero('ALERTA_LIMITE_VENTANA_SEGUNDOS', 900, minimo=60, maximo=86400)
 # Meses que se conserva la IP en logs_auditoria antes de anonimizarla.
 AUDITORIA_RETENCION_MESES = _env_entero('AUDITORIA_RETENCION_MESES', 12, minimo=1, maximo=120)
 # Tope de seguridad de los marcadores del mapa, que se devuelven sin paginar.

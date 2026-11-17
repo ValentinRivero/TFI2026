@@ -75,29 +75,34 @@ export const listarActividad = async (req, res) => {
   });
 };
 
-/** Bandeja de avisos generales de un complejo que el usuario administra. */
+/**
+ * Registro de un complejo que el usuario administra: las entradas generales (sin destinatario) de lo ocurrido, de la
+ * más reciente a la más antigua. El operador no ve las de ámbito comercial.
+ */
 export const listarNotificacionesDelComplejo = async (req, res) => {
   const { complejo_id: complejoId } = matchedData(req, { locations: ['query'] });
   await verificarAccesoAComplejo(complejoId, req.token);
   const destinatario = { complejo_id: complejoId };
   const criterios = criteriosDe(req);
+  const criteriosDeLectura = { ...criterios, sinComercial: req.usuario.rol === ROLES.OPERADOR_COMPLEJO };
   await listarPaginado(req, res, {
     modelo: Notificacion,
-    filtro: Notificacion.filtroDeBandeja(destinatario, criterios),
+    filtro: Notificacion.filtroDeBandeja(destinatario, criteriosDeLectura),
     filtrosDeEnlace: { ...destinatario, ...criterios },
-    listar: (pagina) => Notificacion.bandeja(destinatario, { ...pagina, criterios }),
+    listar: (pagina) => Notificacion.bandeja(destinatario, { ...pagina, criterios: criteriosDeLectura }),
     serializar: serializarNotificacion,
   });
 };
 
 /** Bandeja propia de cualquier usuario autenticado: el destinatario sale siempre del token. */
 export const listarMisNotificaciones = async (req, res) => {
-  const destinatario = { usuario_id: req.usuario.id };
+  const { complejo_id: complejoId } = matchedData(req, { locations: ['query'] });
+  const destinatario = { usuario_id: req.usuario.id, ...(complejoId ? { complejo_id: complejoId } : {}) };
   const criterios = criteriosDe(req);
   await listarPaginado(req, res, {
     modelo: Notificacion,
     filtro: Notificacion.filtroDeBandeja(destinatario, criterios),
-    filtrosDeEnlace: criterios,
+    filtrosDeEnlace: { ...(complejoId ? { complejo_id: complejoId } : {}), ...criterios },
     listar: (pagina) => Notificacion.bandeja(destinatario, { ...pagina, criterios }),
     serializar: serializarNotificacion,
   });

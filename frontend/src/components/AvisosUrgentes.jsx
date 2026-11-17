@@ -2,11 +2,13 @@ import { t } from '../i18n/index.js';
 import ListaNotificaciones from './ListaNotificaciones.jsx';
 
 /**
- * Bloque destacado con los avisos urgentes sin leer del complejo, encima de la bandeja. `lista` es lo que devuelve
- * `useBandejaNotificaciones` filtrada por urgentes pendientes; sin avisos muestra una línea tranquilizadora.
+ * Bloque destacado con los avisos urgentes sin leer, encima de la bandeja. `lista` es lo que devuelve
+ * `useBandejaNotificaciones` filtrada por urgentes pendientes; sin avisos muestra una línea tranquilizadora o, con
+ * `ocultarSiVacio`, solo aparece cuando hay avisos pendientes (o un error al cargarlos). `nombresDeComplejos` se pasa a las filas.
  */
-export default function AvisosUrgentes({ lista, onMarcarLeida }) {
+export default function AvisosUrgentes({ lista, nombresDeComplejos, ocultarSiVacio = false, onMarcarLeida }) {
   const pendientes = lista.items.length;
+  if (ocultarSiVacio && !lista.error && pendientes === 0) return null;
 
   return (
     <section className="bloque-urgente p-3 mb-4" aria-labelledby="avisos-urgentes-titulo">
@@ -20,6 +22,7 @@ export default function AvisosUrgentes({ lista, onMarcarLeida }) {
         etiqueta={t('notificaciones.urgentesTitulo')}
         errorTitulo={t('notificaciones.urgentesErrorTitulo')}
         mostrarResumen={false}
+        nombresDeComplejos={nombresDeComplejos}
         vacio={{ titulo: t('notificaciones.urgentesVacio') }}
         onMarcarLeida={onMarcarLeida}
       />

@@ -331,7 +331,9 @@ export const ROLES_POR_SECCION = Object.freeze({
   sistema: [ROL.SUPERADMIN],
   perfil: Object.values(ROL),
   notificaciones: Object.values(ROL),
-  notificacionesComplejo: [ROL.OPERADOR, ROL.DUENO, ROL.SUPERADMIN],
+  registroComplejo: [ROL.OPERADOR, ROL.DUENO, ROL.SUPERADMIN],
+  // Quienes reciben avisos de uno o más complejos y pueden acotar la bandeja a uno.
+  avisosPorComplejo: [ROL.OPERADOR, ROL.DUENO],
 });
 
 export const puedeVer = (seccion, rol) => Boolean(rol) && (ROLES_POR_SECCION[seccion] ?? []).includes(rol);

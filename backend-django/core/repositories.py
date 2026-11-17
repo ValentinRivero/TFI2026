@@ -120,6 +120,30 @@ class UsuarioRepository:
         return Usuario.objects.select_related('rol', 'complejo_operado').order_by('id')
 
     @staticmethod
+    def ids_activos_con_rol(nombre_rol):
+        return list(
+            Usuario.objects.filter(rol__nombre=nombre_rol, rol__estado=EstadoRegistro.ACTIVO, estado=EstadoUsuario.ACTIVO)
+            .order_by('id').values_list('id', flat=True)
+        )
+
+    @staticmethod
+    def ids_de_operadores_activos(complejo_id):
+        return list(
+            Usuario.objects.filter(
+                complejo_operado_id=complejo_id, rol__nombre='OPERADOR_COMPLEJO', rol__estado=EstadoRegistro.ACTIVO,
+                estado=EstadoUsuario.ACTIVO,
+            ).order_by('id').values_list('id', flat=True)
+        )
+
+    @staticmethod
+    def cantidad_activos():
+        return Usuario.objects.filter(estado=EstadoUsuario.ACTIVO).count()
+
+    @staticmethod
+    def ids_activos_entre(usuario_ids):
+        return sorted(Usuario.objects.filter(id__in=list(usuario_ids), estado=EstadoUsuario.ACTIVO).values_list('id', flat=True))
+
+    @staticmethod
     def duenos_activos():
         return Usuario.objects.filter(
             rol__nombre='DUENO_COMPLEJO', rol__estado=EstadoRegistro.ACTIVO, estado=EstadoUsuario.ACTIVO,
@@ -187,6 +211,16 @@ class PermisoRepository:
             rol__usuarios__estado=EstadoUsuario.ACTIVO,
         ).values_list('permiso__codigo', flat=True)
         return set(codigos)
+
+    @staticmethod
+    def usuarios_con_permiso(usuario_ids, codigo):
+        """De los usuarios dados, los activos cuyo rol activo tiene asignado el permiso activo."""
+        return set(
+            PermisoRepository._asignaciones_activas().filter(
+                permiso__codigo=codigo, rol__usuarios__id__in=list(usuario_ids),
+                rol__usuarios__estado=EstadoUsuario.ACTIVO,
+            ).values_list('rol__usuarios__id', flat=True)
+        )
 
     @staticmethod
     def codigos_activos_de_roles(nombres_roles):
@@ -639,13 +673,50 @@ class ReservaRepository:
         return list(
             Reserva.objects.filter(cancha_id=cancha_id, estado__in=ESTADOS_RESERVA_A_RESOLVER, fecha_turno__gte=hoy)
             .order_by('fecha_turno', 'hora_inicio', 'id')
-            .values('id', 'fecha_turno', 'hora_inicio', 'hora_fin', 'estado')
+            .values('id', 'usuario_id', 'fecha_turno', 'hora_inicio', 'hora_fin', 'estado')
         )
+
+    @staticmethod
+    def proximas_a_recordar(desde_fecha, hasta_fecha, usuario_id=None):
+        """
+        Reservas con titular activo que todavía se van a jugar y caen entre dos fechas. El recorte exacto por hora
+        lo hace el servicio, que conoce la zona horaria.
+        """
+        reservas = Reserva.objects.filter(
+            usuario__estado=EstadoUsuario.ACTIVO, estado__in=ESTADOS_RESERVA_A_RESOLVER,
+            fecha_turno__gte=desde_fecha, fecha_turno__lte=hasta_fecha,
+        ).select_related('cancha__complejo', 'usuario')
+        if usuario_id is not None:
+            reservas = reservas.filter(usuario_id=usuario_id)
+        return list(reservas.order_by('fecha_turno', 'hora_inicio', 'id'))
+
+    @staticmethod
+    def afectadas_por_excepcion(excepcion, hoy):
+        """Reservas por jugar que una excepción deja sin cancha: las de su alcance, fechas y, si no es de día completo, franja."""
+        reservas = Reserva.objects.filter(
+            cancha__complejo_id=excepcion.complejo_id, estado__in=ESTADOS_RESERVA_A_RESOLVER,
+            fecha_turno__gte=max(hoy, excepcion.fecha_inicio), fecha_turno__lte=excepcion.fecha_fin,
+        )
+        if excepcion.cancha_id is not None:
+            reservas = reservas.filter(cancha_id=excepcion.cancha_id)
+        if excepcion.es_dia_completo != AlcanceExcepcion.DIA_COMPLETO:
+            reservas = reservas.filter(hora_inicio__lt=excepcion.hora_fin, hora_fin__gt=excepcion.hora_inicio)
+        return list(reservas.order_by('fecha_turno', 'hora_inicio', 'id').values(
+            'id', 'usuario_id', 'fecha_turno', 'hora_inicio',
+        ))
+
+    @staticmethod
+    def cantidad_creadas_desde(momento):
+        return Reserva.objects.filter(fecha_creacion__gte=momento).count()
+
+    @staticmethod
+    def cantidad_por_jugar(hoy):
+        return Reserva.objects.filter(estado__in=ESTADOS_RESERVA_A_RESOLVER, fecha_turno__gte=hoy).count()
 
     @staticmethod
     def bloquear_a_resolver_de_titular(usuario_id, hoy):
         return list(
-            Reserva.objects.select_for_update(of=('self',)).select_related('cancha', 'usuario')
+            Reserva.objects.select_for_update(of=('self',)).select_related('cancha__complejo', 'usuario')
             .filter(usuario_id=usuario_id, estado__in=ESTADOS_RESERVA_A_RESOLVER, fecha_turno__gte=hoy)
             .order_by('fecha_turno', 'hora_inicio', 'id')
         )
@@ -794,7 +865,7 @@ class TurnoFijoRepository:
     @staticmethod
     def bloquear_activos_de_titular(usuario_id):
         return list(
-            TurnoFijo.objects.select_for_update(of=('self',)).select_related('cancha')
+            TurnoFijo.objects.select_for_update(of=('self',)).select_related('cancha__complejo')
             .filter(usuario_id=usuario_id, estado__in=ESTADOS_TURNO_FIJO_ACTIVOS).order_by('id')
         )
 

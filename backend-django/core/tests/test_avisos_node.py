@@ -104,6 +104,12 @@ class TestEntregaANode:
             'mensaje': 'La excepción id 9 deja 2 fechas en espera.',
         }
 
+    def test_un_aviso_para_varios_usuarios_viaja_con_su_clave_de_idempotencia(self, node):
+        AvisoComplejoService.entregar(_aviso(usuarios_ids=[31, 32], clave_unica='recordatorio-reserva-20'))
+
+        cuerpo = node.pedidos[0]['cuerpo']
+        assert cuerpo['usuarios_ids'] == [31, 32] and cuerpo['clave_unica'] == 'recordatorio-reserva-20'
+
     def test_un_aviso_personal_viaja_solo_con_el_usuario(self, node):
         AvisoComplejoService.entregar(_aviso(complejo_id=None, usuario_id=31, prioridad=PRIORIDAD_AVISO_NORMAL))
 
@@ -285,8 +291,9 @@ class TestDeExtremoAExtremo:
 
         assert respuesta.status_code == status.HTTP_204_NO_CONTENT
         prioridades = sorted(pedido['cuerpo']['prioridad'] for pedido in node.pedidos)
-        assert prioridades == [PRIORIDAD_AVISO_NORMAL, PRIORIDAD_AVISO_URGENTE]
+        assert prioridades == [PRIORIDAD_AVISO_NORMAL, PRIORIDAD_AVISO_NORMAL, PRIORIDAD_AVISO_URGENTE]
         assert all(pedido['cuerpo']['complejo_id'] == complejo.id for pedido in node.pedidos)
+        assert all(pedido['cuerpo']['usuarios_ids'] == [complejo.propietario_id] for pedido in node.pedidos)
         assert all('Lucía' not in pedido['cuerpo']['mensaje'] for pedido in node.pedidos)
 
     def test_con_node_caido_la_baja_se_confirma_igual(
@@ -301,7 +308,7 @@ class TestDeExtremoAExtremo:
         jugador.refresh_from_db()
         assert respuesta.status_code == status.HTTP_204_NO_CONTENT
         assert jugador.estado == 0
-        assert registro_de_avisos.text.count('sin entregar') == 2
+        assert registro_de_avisos.text.count('sin entregar') == 3
 
 
 from core.tests.test_perfil import _baja, con_reservas  # noqa: E402,F401

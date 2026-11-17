@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 
+import { registrarFallaExterna } from '../utils/fallasExternas.js';
+
 const MENSAJES_POR_TIPO = {
   'entity.parse.failed': [400, 'El cuerpo de la solicitud no es un JSON válido.'],
   'entity.too.large': [413, 'El cuerpo de la solicitud supera el tamaño permitido.'],
@@ -30,6 +32,7 @@ export const rutaNoEncontrada = (req, res) => {
 
 // Express reconoce el manejador de errores por sus cuatro parámetros: `next` es obligatorio aunque no se use.
 export const manejarErrores = (error, req, res, next) => {
+  if (error instanceof ErrorServicioExterno) registrarFallaExterna();
   if (error instanceof ErrorHttp) {
     return res.status(error.status).json({ error: true, mensaje: error.message });
   }
