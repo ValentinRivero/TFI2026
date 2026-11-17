@@ -1,0 +1,84 @@
+name: Deploy
+
+# Despliega en el servidor cuando el CI de `main` termina en verde y, a mano, con "Run workflow" (por ejemplo, si el
+# servidor estaba apagado cuando se integro un cambio). Los PR y las demas ramas nunca despliegan.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un despliegue por vez, en orden: dos reconstrucciones simultaneas del mismo stack se pisarian.
+concurrency:
+  group: despliegue-produccion
+  cancel-in-progress: false
+
+jobs:
+  desplegar:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      VPS_HOST_KEY: ${{ secrets.VPS_HOST_KEY }}
+      ENV_PRODUCCION: ${{ secrets.ENV_PRODUCCION }}
+      # Se despliega el commit que aprobo el CI y no lo ultimo de main, que pudo avanzar sin pasar por las pruebas.
+      COMMIT: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Verificar los secretos
+        run: |
+          faltantes=""
+          for nombre in VPS_HOST VPS_USER VPS_SSH_KEY ENV_PRODUCCION; do
+            if [ -z "${!nombre}" ]; then faltantes="$faltantes $nombre"; fi
+          done
+          if [ -n "$faltantes" ]; then
+            echo "Faltan secretos de GitHub Actions:$faltantes"
+            exit 1
+          fi
+
+      - name: Preparar la conexion SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/despliegue
+          chmod 600 ~/.ssh/despliegue
+          # Con VPS_HOST_KEY (salida de ssh-keyscan del servidor) se verifica la huella; sin ella, se toma la
+          # que ofrece el servidor en esta conexion.
+          if [ -n "$VPS_HOST_KEY" ]; then
+            printf '%s\n' "$VPS_HOST_KEY" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -H "$VPS_HOST" > ~/.ssh/known_hosts
+          fi
+
+      - name: Actualizar las variables de entorno del servidor
+        run: |
+          printf '%s\n' "$ENV_PRODUCCION" | ssh -i ~/.ssh/despliegue "$VPS_USER@$VPS_HOST" \
+            'umask 077 && cat > /opt/talibre/env/.env.nuevo && chmod 600 /opt/talibre/env/.env.nuevo && mv /opt/talibre/env/.env.nuevo /opt/talibre/env/.env'
+
+      - name: Desplegar
+        run: |
+          ssh -i ~/.ssh/despliegue "$VPS_USER@$VPS_HOST" bash -s -- "${COMMIT:-origin/main}" <<'REMOTO'
+          set -euo pipefail
+          cd /opt/talibre/app
+
+          git fetch --prune origin
+          git reset --hard "$1"
+
+          # Reconstruye solo las capas que cambiaron y espera a que cada contenedor quede sano.
+          docker compose up -d --build --remove-orphans --wait --wait-timeout 300
+
+          docker compose exec -T web python manage.py migrate --noinput
+          docker compose exec -T web python manage.py seed_inicial
+
+          docker image prune -f
+          docker compose ps
+          REMOTO

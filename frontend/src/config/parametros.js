@@ -5,11 +5,24 @@
  */
 const entorno = import.meta.env;
 
+/**
+ * Dirección del WebSocket. Sin definir, apunta al backend local de desarrollo; definida pero vacía (el despliegue
+ * detrás de nginx), usa el mismo origen de la página con `wss://` si se abrió por HTTPS: un `new WebSocket('/ws/...')`
+ * relativo no lo aceptan todos los navegadores.
+ */
+export const resolverUrlWs = (valor, ubicacion = globalThis.location) => {
+  if (valor === undefined) return 'ws://localhost:8000';
+  if (valor !== '') return valor;
+  if (!ubicacion) return '';
+  return `${ubicacion.protocol === 'https:' ? 'wss:' : 'ws:'}//${ubicacion.host}`;
+};
+
 // Solo los servicios (`api.js`, `wsService.js`) importan las URLs: las páginas nunca conocen una dirección de API.
+// En el despliegue las tres variables van vacías y todo se pide al mismo dominio (rutas relativas `/api/...`).
 export const ENTORNO = Object.freeze({
   urlDjango: entorno.VITE_API_DJANGO_URL ?? 'http://localhost:8000',
   urlNode: entorno.VITE_API_NODE_URL ?? 'http://localhost:3000',
-  urlWs: entorno.VITE_WS_URL ?? 'ws://localhost:8000',
+  urlWs: resolverUrlWs(entorno.VITE_WS_URL),
   desarrollo: entorno.DEV,
   produccion: entorno.PROD,
 });
@@ -18,7 +31,7 @@ export const PARAMETROS = Object.freeze({
   idioma: 'es',
   // Versión de la aplicación que muestra el pie de página: `0.<fase>.<ítem>` del plan (6.4 -> 0.6.4) hasta el despliegue,
   // cuando pasa a 1.0.0 (CLAUDE.md §8.8).
-  app: Object.freeze({ version: '0.6.7' }),
+  app: Object.freeze({ version: '0.7.2' }),
   formato: Object.freeze({ locale: 'es-AR', moneda: 'ARS' }),
   // Espejo de PAGE_SIZE de Django y del límite por defecto de Node.
   paginacion: Object.freeze({ tamanio: 20, botones: 5 }),

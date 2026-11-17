@@ -17,3 +17,5 @@ if not URL_POSTGRES_DE_PRUEBA:
     )
 
 DATABASES = {'default': _base_de_datos_desde_url(URL_POSTGRES_DE_PRUEBA)}
+# Una conexión persistente impediría destruir la base de pruebas al terminar.
+DATABASES['default']['CONN_MAX_AGE'] = 0

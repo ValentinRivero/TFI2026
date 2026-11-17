@@ -3,7 +3,6 @@
 # ==========================================
 .env
 .env.*
-!.env.example
 
 # ==========================================
 # LOGS Y AUDITORÍA
@@ -61,6 +60,45 @@ coverage/
 Thumbs.db
 
 # ==========================================
+# CERTIFICADOS, CLAVES Y SECRETOS
+# ==========================================
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+*.jks
+*.secret
+*.secrets
+secrets/
+certs/
+id_rsa*
+id_ed25519*
+id_ecdsa*
+talibre_deploy*
+known_hosts
+
+# ==========================================
+# COPIAS DE SEGURIDAD Y VOLCADOS DE BASE DE DATOS
+# ==========================================
+*.sql
+*.dump
+*.bak
+*.backup
+*.orig
+*.rej
+*.tmp
+
+# ==========================================
+# CACHES DE HERRAMIENTAS
+# ==========================================
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+.history/
+
+# ==========================================
 # CONFIGURACIÓN DE AUTOMATISMOS
 # ==========================================
 .claude/
@@ -69,6 +107,8 @@ AGENT.md
 PROJECT.md
 docs/datos_informe.md
 docs/auditoria_informe_final.md
+docs/DECISIONES_ARQUITECTURA.md
+docs/DESPLIEGUE.md
 
 # ==========================================
 # X
