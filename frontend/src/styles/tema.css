@@ -82,9 +82,9 @@
   --casillero-libre-fondo-hover: #f0fdf4;
   --casillero-libre-borde: #15803d;
   --casillero-libre-texto: #166534;
-  --casillero-ocupado-fondo: #e7e5e4;
-  --casillero-ocupado-borde: #a8a29e;
-  --casillero-ocupado-texto: #57534e;
+  --casillero-ocupado-fondo: #fef2f2;
+  --casillero-ocupado-borde: #ef4444;
+  --casillero-ocupado-texto: #991b1b;
   --casillero-excepcion-fondo: #fef3c7;
   --casillero-excepcion-borde: #b45309;
   --casillero-excepcion-texto: #78350f;
@@ -1705,6 +1705,7 @@ a {
   padding: 0.75rem 1.5rem;
   cursor: pointer;
   list-style: none;
+  user-select: none;
 }
 
 .banner-complejos-resumen::-webkit-details-marker {
