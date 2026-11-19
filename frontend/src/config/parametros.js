@@ -56,44 +56,16 @@ export const PARAMETROS = Object.freeze({
     zoomAjusteMaximo: 16,
     margenAjustePx: 40,
     anchoPopupPx: 232,
-    capaInicial: 'mapa',
-    // Cada capa es una pila de teselas (la última queda arriba) con las atribuciones que exigen sus proveedores. Todas
-    // se piden sin clave. `zoomNativoMaximo` es el último nivel con datos reales en Goya: más cerca se amplía ese nivel
-    // (con imágenes satelitales, el siguiente muestra "Map data not yet available").
-    capas: Object.freeze({
-      mapa: Object.freeze({
-        valor: 'mapa',
-        clave: 'mapa.capaMapa',
-        teselas: Object.freeze([
-          Object.freeze({
-            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-            zoomNativoMaximo: 19,
-          }),
-        ]),
-        atribuciones: Object.freeze([
-          Object.freeze({ texto: 'Tiles © Esri', url: 'https://www.esri.com/', licencia: 'Esri World Street Map' }),
-          Object.freeze({ texto: '© OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright', licencia: 'ODbL' }),
-        ]),
-      }),
-      satelite: Object.freeze({
-        valor: 'satelite',
-        clave: 'mapa.capaSatelite',
-        teselas: Object.freeze([
-          Object.freeze({
-            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-            zoomNativoMaximo: 17,
-          }),
-          Object.freeze({
-            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
-            zoomNativoMaximo: 19,
-          }),
-        ]),
-        atribuciones: Object.freeze([
-          Object.freeze({ texto: 'Tiles © Esri', url: 'https://www.esri.com/', licencia: 'Esri World Imagery' }),
-          Object.freeze({ texto: '© OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright', licencia: 'ODbL' }),
-        ]),
-      }),
+    // Teselas de calles, pedidas sin clave, con las atribuciones que exigen sus proveedores. `zoomNativoMaximo` es el
+    // último nivel con datos reales en Goya: más cerca se amplía ese nivel.
+    teselas: Object.freeze({
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+      zoomNativoMaximo: 19,
     }),
+    atribuciones: Object.freeze([
+      Object.freeze({ texto: 'Tiles © Esri', url: 'https://www.esri.com/', licencia: 'Esri World Street Map' }),
+      Object.freeze({ texto: '© OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright', licencia: 'ODbL' }),
+    ]),
   }),
   catalogo: Object.freeze({ busquedaDemoraMs: 400, serviciosEnTarjeta: 4 }),
   // Fuente del pronóstico: su licencia (CC BY 4.0) exige mostrarla junto al clima.

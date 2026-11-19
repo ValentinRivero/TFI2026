@@ -1784,12 +1784,12 @@ a {
   font-size: 0.95rem;
 }
 
-/* Capa Mapa: las teselas de calles son ráster y no admiten otro estilo, así que se desaturan y se llevan a un verde muy suave (calles en gris claro, manzanas verdosas). El satélite no se toca. */
-.mapa-capa-mapa .leaflet-tile-pane {
+/* Las teselas de calles son ráster y no admiten otro estilo, así que se desaturan y se llevan a un verde muy suave (calles en gris claro, manzanas verdosas). */
+.mapa-contenedor .leaflet-tile-pane {
   filter: saturate(0.3) hue-rotate(22deg);
 }
 
-/* Controles flotantes propios: capa de teselas arriba a la derecha y "Centrar en Goya" abajo a la izquierda */
+/* Control flotante propio: "Centrar en Goya" abajo a la izquierda */
 .mapa-control {
   position: absolute;
   z-index: 5;
@@ -1798,34 +1798,6 @@ a {
   background: var(--tema-superficie);
   color: var(--tema-texto);
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.22);
-}
-
-.mapa-control-capas {
-  top: 0.75rem;
-  right: 0.75rem;
-  display: inline-flex;
-  overflow: hidden;
-}
-
-.mapa-control-opcion {
-  min-width: var(--toque-min);
-  min-height: var(--toque-min);
-  padding: 0 1rem;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font-weight: 600;
-  transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
-}
-
-.mapa-control-opcion:hover {
-  background: var(--tema-primario-suave);
-}
-
-.mapa-control-opcion.activa,
-.mapa-control-opcion.activa:hover {
-  background: var(--tema-primario);
-  color: #ffffff;
 }
 
 .mapa-control-centrar {
@@ -1844,7 +1816,6 @@ a {
   background: var(--tema-primario-suave);
 }
 
-.mapa-control-opcion:focus-visible,
 .mapa-control-centrar:focus-visible {
   outline: 3px solid rgba(var(--tema-primario-rgb), 0.45);
   outline-offset: -3px;
