@@ -6,7 +6,7 @@
 
 Disponibilidad en tiempo real · Mapa interactivo · Panel de gestión para complejos · Reportes
 
-[![CI](https://github.com/ValentinRivero/TFI2026/actions/workflows/ci.yml/badge.svg)](https://github.com/ValentinRivero/TFI2026/actions/workflows/ci.yml) ![Python](https://img.shields.io/badge/Python-3.14-3776AB.svg?logo=python&logoColor=white) ![Django](https://img.shields.io/badge/Django-6.1-092E20.svg?logo=django&logoColor=white) ![Node.js](https://img.shields.io/badge/Node.js-24-5FA04E.svg?logo=nodedotjs&logoColor=white) ![React](https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=black) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supabase-4169E1.svg?logo=postgresql&logoColor=white) ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248.svg?logo=mongodb&logoColor=white)
+[![CI](https://github.com/ValentinRivero/TaLibre/actions/workflows/ci.yml/badge.svg)](https://github.com/ValentinRivero/TaLibre/actions/workflows/ci.yml) ![Python](https://img.shields.io/badge/Python-3.14-3776AB.svg?logo=python&logoColor=white) ![Django](https://img.shields.io/badge/Django-6.1-092E20.svg?logo=django&logoColor=white) ![Node.js](https://img.shields.io/badge/Node.js-24-5FA04E.svg?logo=nodedotjs&logoColor=white) ![React](https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=black) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supabase-4169E1.svg?logo=postgresql&logoColor=white) ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248.svg?logo=mongodb&logoColor=white)
 
 </div>
 
