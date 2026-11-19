@@ -45,9 +45,15 @@
   --tema-borde: #e2e8e5;
   --tema-pizarra: #0f172a;
   --tema-pizarra-suave: #1e293b;
+  --hero-fondo: var(--tema-pizarra);
+  --hero-borde: var(--tema-primario);
+  --hero-titulo: #ffffff;
   --hero-texto: #f1f5f9;
   --hero-texto-suave: #cbd5e1;
   --hero-acento: #86efac;
+  --hero-linea: rgba(255, 255, 255, 0.18);
+  --hero-linea-fuerte: rgba(255, 255, 255, 0.4);
+  --hero-cancha-opacidad: 0.1;
   --pie-aviso: #f87171;
   --tema-texto: #1e293b;
   --tema-texto-suave: #475569;
@@ -1596,40 +1602,61 @@ a {
   margin-bottom: 1rem;
 }
 
-/* Portada del catálogo: presentación sobre pizarra con líneas de cancha de fondo, guía de uso y tarjeta para complejos */
+/*
+ * Portada del catálogo: sección de ancho completo, pegada a la barra superior, con líneas de cancha de fondo. Ocupa el
+ * ancho del bloque contenedor (no usa 100vw, que suma el ancho de la barra de desplazamiento y desborda). El texto se
+ * alinea con el resto de la página porque va dentro de un `.container`.
+ */
 .hero-presentacion {
   position: relative;
   overflow: hidden;
-  border: 1px solid var(--tema-pizarra-suave);
-  border-bottom: 4px solid var(--tema-primario);
-  border-radius: var(--radio);
-  background: var(--tema-pizarra);
+  border-bottom: 4px solid var(--hero-borde);
+  background: var(--hero-fondo);
   color: var(--hero-texto);
 }
 
-/* Anclada arriba y con alto propio (por la proporción del ancho): no se mueve cuando el hero crece al cargar el clima */
+/*
+ * La cancha se dibuja completa dentro de una caja que ocupa el alto de la sección (menos un margen): `meet` la
+ * escala sin recortarla ni deformarla y `xMaxYMid` la apoya a la derecha. El trazo no escala con el dibujo.
+ */
 .hero-cancha {
   position: absolute;
-  top: 2rem;
-  right: -4%;
-  width: min(62%, 38rem);
-  height: auto;
+  top: 1.5rem;
+  right: 0;
+  width: 100%;
+  height: calc(100% - 3rem);
   fill: none;
   stroke: var(--hero-acento);
   stroke-width: 2;
-  opacity: 0.14;
+  stroke-linejoin: round;
+  opacity: var(--hero-cancha-opacidad);
   pointer-events: none;
+}
+
+.hero-cancha * {
+  vector-effect: non-scaling-stroke;
+}
+
+.hero-cancha .hero-cancha-punto {
+  fill: var(--hero-acento);
+  stroke: none;
+}
+
+@media (min-width: 992px) {
+  .hero-cancha {
+    width: min(58%, 60rem);
+  }
 }
 
 .hero-contenido {
   position: relative;
   max-width: 44rem;
-  padding: 1.75rem 1.25rem;
+  padding-block: 2rem;
 }
 
 @media (min-width: 768px) {
   .hero-contenido {
-    padding: 2.75rem 2.5rem;
+    padding-block: 3rem;
   }
 }
 
@@ -1639,7 +1666,7 @@ a {
   font-size: clamp(2.1rem, 6vw, 3.5rem);
   font-weight: 700;
   line-height: 1.05;
-  color: #ffffff;
+  color: var(--hero-titulo);
 }
 
 .hero-bajada {
@@ -1661,7 +1688,7 @@ a {
   align-items: center;
   gap: 0.4rem;
   padding: 0.3rem 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--hero-linea);
   border-radius: 999px;
   color: var(--hero-texto);
   font-size: 0.875rem;
@@ -1676,19 +1703,19 @@ a {
   --bs-body-color: var(--hero-texto);
   --bs-secondary-color: var(--hero-texto-suave);
   --bs-secondary-rgb: 203, 213, 225;
-  --bs-border-color: rgba(255, 255, 255, 0.18);
+  --bs-border-color: var(--hero-linea);
   max-width: 100%;
   color: var(--hero-texto);
 }
 
 .hero-clima .superficie {
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: var(--hero-linea);
   background: var(--tema-pizarra-suave);
 }
 
 .hero-clima .clima-dia-compacto {
-  border-color: rgba(255, 255, 255, 0.14);
-  background: var(--tema-pizarra);
+  border-color: var(--hero-linea);
+  background: var(--hero-fondo);
 }
 
 .hero-clima a {
@@ -1697,8 +1724,8 @@ a {
 
 .hero-clima .btn-outline-secondary {
   --bs-btn-color: var(--hero-texto);
-  --bs-btn-border-color: rgba(255, 255, 255, 0.4);
-  --bs-btn-hover-color: var(--tema-pizarra);
+  --bs-btn-border-color: var(--hero-linea-fuerte);
+  --bs-btn-hover-color: var(--hero-fondo);
   --bs-btn-hover-bg: var(--hero-texto);
   --bs-btn-hover-border-color: var(--hero-texto);
 }

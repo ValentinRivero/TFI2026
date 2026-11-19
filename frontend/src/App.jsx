@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import AceptarPolitica from './components/AceptarPolitica.jsx';
 import Cargando from './components/Cargando.jsx';
 import Layout from './components/Layout.jsx';
@@ -42,9 +42,13 @@ function NoEncontrada() {
   );
 }
 
+const RUTA_PORTADA = '/';
+
+// La portada arma sus propias secciones (el hero ocupa todo el ancho): el resto de las pantallas públicas va en el contenedor estándar.
 function PlantillaPublica() {
+  const { pathname } = useLocation();
   return (
-    <Layout>
+    <Layout ancho={pathname === RUTA_PORTADA ? 'completo' : 'normal'}>
       <Outlet />
     </Layout>
   );

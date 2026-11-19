@@ -35,12 +35,15 @@ const SECCIONES_DE_SESION = [
  * que en móvil pasa a un panel flotante anclado bajo el botón del menú y que acompaña el desplazamiento (`sticky`),
  * contenido principal y pie de página (`PiePagina`). El límite de
  * `Suspense` envuelve solo el contenido: mientras carga una pantalla diferida la barra y el menú siguen en su lugar. `enlaces` suma accesos propios de la pantalla (`{ a, texto }`);
- * `ancho` admite `panel` para los paneles de administración (contenedor fluido y densidad de escritorio).
+ * `ancho` admite `panel` para los paneles de administración (contenedor fluido y densidad de escritorio) y `completo`
+ * para las pantallas que arman sus propias secciones: no envuelve el contenido en un contenedor ni le da relleno
+ * vertical, así una sección puede ocupar el ancho de la ventana (portada) y el resto ubicarse en su `Container`.
  * `claveCarga` fija el límite de carga: por defecto cambia con la ruta; un panel con subvistas propias lo fija para
  * que su estructura (selector, subnavegación) no se vuelva a montar al pasar de una subvista a otra.
  */
 export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, children }) {
   const esPanel = ancho === 'panel';
+  const esCompleto = ancho === 'completo';
   const { autenticado, usuario, rol } = useSesion();
   const navegar = useNavigate();
   const { pathname } = useLocation();
@@ -157,10 +160,13 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
         </Container>
       </Navbar>
 
-      <main id="contenido" className={`flex-grow-1 py-4 position-relative${esPanel ? ' panel-admin' : ''}`}>
+      <main
+        id="contenido"
+        className={`flex-grow-1 position-relative${esCompleto ? '' : ' py-4'}${esPanel ? ' panel-admin' : ''}`}
+      >
         {/* `key` crea un límite nuevo por pantalla: así la carga de una ruta diferida muestra el overlay también al navegar. */}
         <Suspense key={claveCarga ?? pathname} fallback={<Cargando variante="superpuesto" />}>
-          <Container fluid={esPanel}>{children}</Container>
+          {esCompleto ? children : <Container fluid={esPanel}>{children}</Container>}
         </Suspense>
       </main>
 
