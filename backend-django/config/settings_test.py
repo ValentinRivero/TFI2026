@@ -22,6 +22,31 @@ CACHES = {
     },
 }
 
+# Los parámetros operativos de las pruebas no dependen del .env local: se fijan en sus valores por defecto.
+RESERVA_MESES_ANTICIPACION = 2
+RANGO_MAXIMO_DIAS = 366
+GRILLA_CACHE_SEGUNDOS = 60
+NODE_TIMEOUT_SEGUNDOS = 3
+CONTACTOS_BAJA_DIAS = 30
+AUDITORIA_RETENCION_MESES = 12
+RECORDATORIO_HORAS_ANTICIPACION = 24
+RECORDATORIO_VERIFICACION_SEGUNDOS = 300
+REPORTE_LATENCIA_BD_MAXIMA_MS = 500
+ALERTA_LIMITE_VENTANA_SEGUNDOS = 900
+CATALOGO_MARCADORES_MAXIMO = 500
+# Las pruebas hablan HTTP plano con el cliente de Django: la redirección a HTTPS es de producción.
+SECURE_SSL_REDIRECT = False
+REST_FRAMEWORK = {
+    **REST_FRAMEWORK,  # noqa: F405
+    'NUM_PROXIES': 0,
+    'DEFAULT_THROTTLE_RATES': {
+        **REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'],  # noqa: F405
+        'login': '5/minute',
+        'reservas': '20/hour',
+        'grilla': '300/minute',
+    },
+}
+
 # MD5 solo acelera el hasheo en los tests; nunca se usa fuera de este módulo.
 PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.MD5PasswordHasher',
@@ -31,3 +56,7 @@ PASSWORD_HASHERS = [
 LOGGING = copy.deepcopy(LOGGING_BASE)
 LOGGING['handlers']['archivo_seguridad'] = {'class': 'logging.NullHandler'}
 LOGGING['handlers']['consola'] = {'class': 'logging.NullHandler'}
+
+# Los tests nunca entregan avisos a un backend-node real, aunque el .env local lo tenga configurado.
+NODE_API_URL = ''
+INTERNAL_API_KEY = ''

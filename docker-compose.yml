@@ -1,0 +1,103 @@
+# Stack de produccion. Las variables viven fuera del repositorio, en /opt/talibre/env/.env del servidor,
+# que el despliegue escribe desde un secreto de GitHub. El desarrollo local no usa este archivo.
+name: talibre
+
+x-registro: &registro
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  nginx:
+    build:
+      context: ./frontend
+      additional_contexts:
+        configuracion_nginx: ./nginx
+      args:
+        VITE_API_DJANGO_URL: ""
+        VITE_API_NODE_URL: ""
+        VITE_WS_URL: ""
+    image: talibre-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /opt/talibre/certs:/etc/nginx/certs:ro
+    depends_on:
+      - web
+      - node
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/nginx-salud"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - interna
+    logging: *registro
+
+  web:
+    build: ./backend-django
+    image: talibre-web
+    env_file: /opt/talibre/env/.env
+    environment:
+      SECURITY_LOG_PATH: /var/log/talibre/security.log
+    expose:
+      - "8000"
+    volumes:
+      - seguridad_logs:/var/log/talibre
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - interna
+    logging: *registro
+
+  node:
+    build: ./backend-node
+    image: talibre-node
+    env_file: /opt/talibre/env/.env
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/salud"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - interna
+    logging: *registro
+
+  # Solo sirve de channel layer y de cache compartida: no guarda nada que deba sobrevivir a un reinicio.
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru"]
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - interna
+    logging: *registro
+
+networks:
+  interna:
+    driver: bridge
+
+volumes:
+  seguridad_logs:

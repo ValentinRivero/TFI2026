@@ -1,27 +1,33 @@
 import re
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
-from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth import get_user_model, password_validation
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from .models import (
+    LARGO_EMAIL,
+    LARGO_MAXIMO_PASSWORD,
+    LARGO_MINIMO_EMAIL,
+    LARGO_NOMBRE,
+    LARGO_TELEFONO,
+    SIMBOLOS_PASSWORD,
+)
 from .repositories import UsuarioRepository
-from .serializers import TextoLimpioField
+from .serializers import NombrePersonaField, TextoLimpioField, validar_telefono
 from .services import RbacService
 
 Usuario = get_user_model()
 
-PATRON_TELEFONO = re.compile(r'^\+?[0-9\s()-]{6,30}$')
-MENSAJE_TELEFONO = 'Ingresá un teléfono válido: solo números, espacios, guiones, paréntesis y un + inicial.'
 MENSAJE_POLITICA = 'Para usar TaLibre tenés que aceptar la política de privacidad.'
-
-
-def _validar_telefono(valor):
-    if valor and not PATRON_TELEFONO.match(valor):
-        raise serializers.ValidationError(MENSAJE_TELEFONO)
-    return valor
+MENSAJE_EMAIL = 'Ingresá un correo electrónico válido, por ejemplo nombre@dominio.com.'
+# Solo letras ASCII, números y los símbolos de SIMBOLOS_PASSWORD: sin espacios, tildes, ñ ni emojis.
+PATRON_PASSWORD = re.compile(rf'^[A-Za-z0-9{re.escape(SIMBOLOS_PASSWORD)}]+$')
+MENSAJE_PASSWORD = (
+    f'La contraseña solo puede tener letras sin tildes ni ñ, números y estos símbolos: {SIMBOLOS_PASSWORD} '
+    '(sin espacios ni emojis).'
+)
 
 
 def _validar_aceptacion(valor):
@@ -42,22 +48,29 @@ class TokenConRolSerializer(TokenObtainPairSerializer):
 
 
 class RegistroSerializer(serializers.Serializer):
-    nombre_completo = TextoLimpioField(max_length=120)
-    email = serializers.EmailField(max_length=120)
-    password = serializers.CharField(write_only=True, trim_whitespace=False, max_length=128)
-    telefono = TextoLimpioField(max_length=30, required=False, allow_blank=True, default='')
+    nombre_completo = NombrePersonaField(max_length=LARGO_NOMBRE)
+    email = serializers.EmailField(max_length=LARGO_EMAIL)
+    password = serializers.CharField(write_only=True, trim_whitespace=False, max_length=LARGO_MAXIMO_PASSWORD)
+    telefono = TextoLimpioField(max_length=LARGO_TELEFONO, required=False, allow_blank=True, default='')
     acepta_politica_privacidad = serializers.BooleanField(
         write_only=True, error_messages={'required': MENSAJE_POLITICA},
     )
 
     def validate_email(self, valor):
         email = valor.strip().lower()
+        if len(email) < LARGO_MINIMO_EMAIL or '.' not in email.rpartition('@')[2]:
+            raise serializers.ValidationError(MENSAJE_EMAIL)
         if UsuarioRepository.existe_email(email):
             raise serializers.ValidationError('Ya existe una cuenta registrada con ese email.')
         return email
 
+    def validate_password(self, valor):
+        if not PATRON_PASSWORD.match(valor):
+            raise serializers.ValidationError(MENSAJE_PASSWORD)
+        return valor
+
     def validate_telefono(self, valor):
-        return _validar_telefono(valor)
+        return validar_telefono(valor)
 
     def validate_acepta_politica_privacidad(self, valor):
         return _validar_aceptacion(valor)
@@ -65,15 +78,15 @@ class RegistroSerializer(serializers.Serializer):
     def validate(self, attrs):
         candidato = Usuario(email=attrs['email'], nombre_completo=attrs['nombre_completo'])
         try:
-            validate_password(attrs['password'], user=candidato)
+            password_validation.validate_password(attrs['password'], user=candidato)
         except DjangoValidationError as error:
             raise serializers.ValidationError({'password': list(error.messages)})
         return attrs
 
 
 class LoginSerializer(serializers.Serializer):
-    email = serializers.EmailField(max_length=120)
-    password = serializers.CharField(write_only=True, trim_whitespace=False, max_length=128)
+    email = serializers.EmailField(max_length=LARGO_EMAIL)
+    password = serializers.CharField(write_only=True, trim_whitespace=False, max_length=LARGO_MAXIMO_PASSWORD)
 
     def validate_email(self, valor):
         return valor.strip().lower()
@@ -110,13 +123,13 @@ class PerfilSerializer(serializers.ModelSerializer):
 
 
 class PerfilEdicionSerializer(serializers.Serializer):
-    nombre_completo = TextoLimpioField(max_length=120, required=False)
-    telefono = TextoLimpioField(max_length=30, required=False, allow_blank=True)
+    nombre_completo = NombrePersonaField(max_length=LARGO_NOMBRE, required=False)
+    telefono = TextoLimpioField(max_length=LARGO_TELEFONO, required=False, allow_blank=True)
     # Solo registra la aceptación de la versión vigente; retirar el consentimiento equivale a dar de baja la cuenta.
     acepta_politica_privacidad = serializers.BooleanField(required=False)
 
     def validate_telefono(self, valor):
-        return _validar_telefono(valor)
+        return validar_telefono(valor)
 
     def validate_acepta_politica_privacidad(self, valor):
         return _validar_aceptacion(valor)

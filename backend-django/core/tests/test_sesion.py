@@ -57,6 +57,15 @@ class TestLogin:
 
         assert _login(cliente).status_code == status.HTTP_200_OK
 
+    @pytest.mark.parametrize('password', ['Contraseña con espacios 1', 'ClaveéSegura|2026', 'x' * 128])
+    def test_una_cuenta_con_contrasena_anterior_a_las_reglas_sigue_ingresando(self, cliente, crear_usuario, password):
+        # Las reglas de caracteres rigen al elegir la contraseña, no al iniciar sesión: no deben dejar afuera a cuentas existentes.
+        crear_usuario('antiguo@talibre.test', password=password)
+
+        respuesta = _login(cliente, email='antiguo@talibre.test', password=password)
+
+        assert respuesta.status_code == status.HTTP_200_OK
+
     def test_registra_login_exitoso(self, cliente, jugador):
         _login(cliente)
 

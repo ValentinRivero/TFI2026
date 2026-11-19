@@ -99,7 +99,7 @@ known_hosts
 .history/
 
 # ==========================================
-# CONFIGURACIÓN DE AUTOMATISMOS
+# CONFIGURACIÓN DE AUTOMATISMOS Y DOCUM PERSONAL
 # ==========================================
 .claude/
 CLAUDE.md
@@ -110,7 +110,6 @@ docs/auditoria_informe_final.md
 docs/DECISIONES_ARQUITECTURA.md
 docs/DESPLIEGUE.md
 docs/presentación.txt
-
 # ==========================================
 # X
 # ==========================================

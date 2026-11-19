@@ -3,6 +3,24 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import F, Q
 
+# Largos y límites que comparten el modelo y la API: se declaran una sola vez para que no se desalineen.
+LARGO_NOMBRE = 120  # personas, complejos y clientes cargados a mano
+LARGO_EMAIL = 120
+LARGO_TELEFONO = 30
+LARGO_DIRECCION = 160
+LARGO_INFO_SENA = 200
+LARGO_NOMBRE_CANCHA = 80
+LARGO_TEXTO_LIBRE = 255  # observaciones y descripciones
+LARGO_ACCION_AUDITORIA = 120
+LARGO_MAXIMO_PASSWORD = 128  # solo se aplica en la API; la base guarda el hash
+LARGO_MINIMO_NOMBRE = 2  # letras de un nombre de persona; solo se aplica en la API
+LARGO_MINIMO_EMAIL = 6  # a@b.co: el menor correo posible; solo se aplica en la API
+SIMBOLOS_PASSWORD = '!@#$%^&*()_+-=.,:;?/'  # junto con letras ASCII y números; solo se aplica en la API
+LATITUD_MAXIMA = 90
+LONGITUD_MAXIMA = 180
+HORAS_CANCELACION_DEFECTO = 4
+HORAS_CANCELACION_MAXIMAS = 168
+
 
 class EstadoRegistro(models.IntegerChoices):
     BAJA = 0, 'Baja lógica'
@@ -135,6 +153,7 @@ class TipoEventoAuditoria(models.IntegerChoices):
     RESERVA_CAMBIO_ESTADO = 13, 'Cambio de estado de reserva'
     CAMBIO_CONFIGURACION = 14, 'Cambio de configuración del complejo'
     ACEPTACION_POLITICA = 15, 'Aceptación de la política de privacidad'
+    CAMBIO_USUARIO = 16, 'Cambio administrativo de usuario'
 
 
 class Rol(ModeloBase):
@@ -216,9 +235,9 @@ class Usuario(AbstractBaseUser, ModeloBase):
         db_index=True,
     )
     rol = models.ForeignKey(Rol, on_delete=models.PROTECT, related_name='usuarios')
-    nombre_completo = models.CharField(max_length=120)
-    email = models.EmailField(max_length=120, unique=True)
-    telefono = models.CharField(max_length=30, blank=True)
+    nombre_completo = models.CharField(max_length=LARGO_NOMBRE)
+    email = models.EmailField(max_length=LARGO_EMAIL, unique=True)
+    telefono = models.CharField(max_length=LARGO_TELEFONO, blank=True)
     complejo_operado = models.ForeignKey(
         'Complejo',
         null=True,
@@ -281,21 +300,21 @@ class Usuario(AbstractBaseUser, ModeloBase):
 
 class Complejo(ModeloBase):
     propietario = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name='complejos_propios')
-    nombre = models.CharField(max_length=120)
-    direccion = models.CharField(max_length=160)
+    nombre = models.CharField(max_length=LARGO_NOMBRE)
+    direccion = models.CharField(max_length=LARGO_DIRECCION)
     latitud = models.DecimalField(
         max_digits=9,
         decimal_places=6,
-        validators=[MinValueValidator(-90), MaxValueValidator(90)],
+        validators=[MinValueValidator(-LATITUD_MAXIMA), MaxValueValidator(LATITUD_MAXIMA)],
     )
     longitud = models.DecimalField(
         max_digits=9,
         decimal_places=6,
-        validators=[MinValueValidator(-180), MaxValueValidator(180)],
+        validators=[MinValueValidator(-LONGITUD_MAXIMA), MaxValueValidator(LONGITUD_MAXIMA)],
     )
-    telefono_contacto = models.CharField(max_length=30, blank=True)
-    horas_limite_cancelacion = models.SmallIntegerField(default=4)
-    info_sena = models.CharField(max_length=200, blank=True)
+    telefono_contacto = models.CharField(max_length=LARGO_TELEFONO, blank=True)
+    horas_limite_cancelacion = models.SmallIntegerField(default=HORAS_CANCELACION_DEFECTO)
+    info_sena = models.CharField(max_length=LARGO_INFO_SENA, blank=True)
     estado_contrato = models.SmallIntegerField(
         choices=EstadoContrato.choices,
         default=EstadoContrato.PENDIENTE,
@@ -375,7 +394,7 @@ class Cancha(ModeloBase):
     )
     complejo = models.ForeignKey(Complejo, on_delete=models.PROTECT, related_name='canchas')
     deporte = models.ForeignKey(Deporte, on_delete=models.PROTECT, related_name='canchas')
-    nombre = models.CharField(max_length=80)
+    nombre = models.CharField(max_length=LARGO_NOMBRE_CANCHA)
     tipo_superficie = models.SmallIntegerField(choices=TipoSuperficie.choices)
     cobertura = models.SmallIntegerField(choices=Cobertura.choices)
     iluminacion = models.SmallIntegerField(choices=Iluminacion.choices)
@@ -412,23 +431,19 @@ class HorarioApertura(ModeloBase):
     dia_semana = models.SmallIntegerField(choices=DiaSemana.choices)
     hora_apertura = models.TimeField()
     hora_cierre = models.TimeField()
-    # NULL indica que ese día se cobra el precio_base de la cancha.
+    # NULL indica que en ese rango se cobra el precio_base de la cancha.
     precio_diferenciado = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     class Meta:
         db_table = 'horarios_apertura'
         verbose_name = 'horario de apertura'
         verbose_name_plural = 'horarios de apertura'
-        ordering = ['cancha_id', 'dia_semana']
+        # Un día puede tener varios rangos (cortes); que no se solapen lo valida HorarioAperturaService.
+        ordering = ['cancha_id', 'dia_semana', 'hora_apertura']
         indexes = [
             models.Index(fields=['cancha', 'dia_semana', 'estado'], name='idx_horario_cancha_dia'),
         ]
         constraints = [
-            models.UniqueConstraint(
-                fields=['cancha', 'dia_semana'],
-                condition=~Q(estado=0),
-                name='uq_horario_cancha_dia_activo',
-            ),
             models.CheckConstraint(
                 condition=Q(precio_diferenciado__isnull=True) | Q(precio_diferenciado__gte=0),
                 name='ck_horario_precio_diferenciado',
@@ -463,7 +478,7 @@ class ExcepcionHoraria(ModeloBase):
     hora_inicio = models.TimeField(null=True, blank=True)
     hora_fin = models.TimeField(null=True, blank=True)
     tipo_motivo = models.SmallIntegerField(choices=TipoMotivoExcepcion.choices)
-    descripcion = models.CharField(max_length=255, blank=True)
+    descripcion = models.CharField(max_length=LARGO_TEXTO_LIBRE, blank=True)
 
     class Meta:
         db_table = 'excepciones_horarias'
@@ -512,8 +527,8 @@ class TurnoFijo(ModeloBase):
         related_name='turnos_fijos',
     )
     creado_por = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name='turnos_fijos_creados')
-    nombre_cliente_manual = models.CharField(max_length=120, blank=True)
-    telefono_cliente_manual = models.CharField(max_length=30, blank=True)
+    nombre_cliente_manual = models.CharField(max_length=LARGO_NOMBRE, blank=True)
+    telefono_cliente_manual = models.CharField(max_length=LARGO_TELEFONO, blank=True)
     dia_semana = models.SmallIntegerField(choices=DiaSemana.choices)
     hora_inicio = models.TimeField()
     hora_fin = models.TimeField()
@@ -572,14 +587,14 @@ class Reserva(ModeloBase):
         related_name='reservas',
     )
     creado_por = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name='reservas_creadas')
-    nombre_cliente_manual = models.CharField(max_length=120, blank=True)
-    telefono_cliente_manual = models.CharField(max_length=30, blank=True)
+    nombre_cliente_manual = models.CharField(max_length=LARGO_NOMBRE, blank=True)
+    telefono_cliente_manual = models.CharField(max_length=LARGO_TELEFONO, blank=True)
     fecha_turno = models.DateField()
     hora_inicio = models.TimeField()
     hora_fin = models.TimeField()
     precio_acordado = models.DecimalField(max_digits=10, decimal_places=2)
     tipo_ocupacion = models.SmallIntegerField(choices=TipoOcupacion.choices, default=TipoOcupacion.WEB)
-    observaciones = models.CharField(max_length=255, blank=True)
+    observaciones = models.CharField(max_length=LARGO_TEXTO_LIBRE, blank=True)
 
     class Meta:
         db_table = 'reservas'
@@ -635,7 +650,7 @@ class LogAuditoria(ModeloBase):
         related_name='logs_auditoria',
     )
     tipo_evento = models.SmallIntegerField(choices=TipoEventoAuditoria.choices)
-    accion = models.CharField(max_length=120)
+    accion = models.CharField(max_length=LARGO_ACCION_AUDITORIA)
     detalle = models.TextField(blank=True)
     ip_origen = models.GenericIPAddressField(null=True, blank=True)
 

@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import timedelta
 from pathlib import Path
 from urllib.parse import parse_qsl, unquote, urlparse
@@ -32,6 +33,37 @@ def _env_obligatoria(nombre):
     return valor
 
 
+def _env_entero(nombre, por_defecto, minimo=None, maximo=None):
+    """Entero de entorno con rango: un valor inválido corta el arranque en lugar de caer al valor por defecto."""
+    valor = os.environ.get(nombre)
+    if valor is None or not valor.strip():
+        return por_defecto
+    try:
+        numero = int(valor.strip())
+    except ValueError:
+        raise ImproperlyConfigured(f'{nombre} debe ser un número entero.') from None
+    if (minimo is not None and numero < minimo) or (maximo is not None and numero > maximo):
+        limites = f'entre {minimo} y {maximo}' if None not in (minimo, maximo) else (
+            f'de al menos {minimo}' if minimo is not None else f'de hasta {maximo}'
+        )
+        raise ImproperlyConfigured(f'{nombre} debe ser un entero {limites}.')
+    return numero
+
+
+# DRF toma el período por su primera letra (segundo, minuto, hora o día).
+_PATRON_TASA = re.compile(r'^[1-9]\d*/[smhd][a-z]*$')
+
+
+def _env_tasa(nombre, por_defecto):
+    valor = os.environ.get(nombre)
+    if valor is None or not valor.strip():
+        return por_defecto
+    valor = valor.strip()
+    if not _PATRON_TASA.match(valor):
+        raise ImproperlyConfigured(f'{nombre} debe tener el formato cantidad/período, por ejemplo 5/minute.')
+    return valor
+
+
 def _base_de_datos_desde_url(url):
     partes = urlparse(url)
     if partes.scheme not in ('postgres', 'postgresql'):
@@ -48,7 +80,8 @@ def _base_de_datos_desde_url(url):
         'HOST': partes.hostname or '',
         'PORT': str(partes.port or 5432),
         'OPTIONS': opciones,
-        'CONN_MAX_AGE': int(os.environ.get('DB_CONN_MAX_AGE', '0')),
+        # Reutilizar la conexión evita el handshake TLS con Supabase en cada petición; las pruebas la fijan en 0.
+        'CONN_MAX_AGE': _env_entero('DB_CONN_MAX_AGE', 60, minimo=0, maximo=3600),
         'CONN_HEALTH_CHECKS': True,
         # El pooler de Supabase en modo transacción (puerto 6543) no admite cursores del lado del servidor.
         'DISABLE_SERVER_SIDE_CURSORS': partes.port == 6543,
@@ -74,6 +107,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'django_filters',
+    'graphene_django',
     'channels',
     'core',
 ]
@@ -163,11 +197,17 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',
     ),
     'DEFAULT_THROTTLE_RATES': {
-        'anon': os.environ.get('THROTTLE_ANON', '60/minute'),
-        'user': os.environ.get('THROTTLE_USER', '240/minute'),
-        'login': '5/minute',
-        'registro': os.environ.get('THROTTLE_REGISTRO', '10/hour'),
+        'anon': _env_tasa('THROTTLE_ANON', '60/minute'),
+        'user': _env_tasa('THROTTLE_USER', '240/minute'),
+        'login': _env_tasa('THROTTLE_LOGIN', '5/minute'),
+        'registro': _env_tasa('THROTTLE_REGISTRO', '10/hour'),
+        'reservas': _env_tasa('THROTTLE_RESERVAS', '20/hour'),
+        'grilla': _env_tasa('THROTTLE_GRILLA', '300/minute'),
+        'graphql': _env_tasa('THROTTLE_GRAPHQL', '120/minute'),
     },
+    # Saltos de proxy de confianza para identificar la IP del cliente: 0 usa la IP de la conexión e ignora
+    # X-Forwarded-For, que un cliente puede falsificar; detrás de nginx se define en 1.
+    'NUM_PROXIES': _env_entero('NUM_PROXIES', 0, minimo=0, maximo=10),
     'EXCEPTION_HANDLER': 'core.exceptions.custom_exception_handler',
 }
 
@@ -176,9 +216,13 @@ if DEBUG:
     # JWT queda primero para que una petición sin credenciales reciba 401 y no 403.
     REST_FRAMEWORK['DEFAULT_AUTHENTICATION_CLASSES'] += ('rest_framework.authentication.SessionAuthentication',)
 
+GRAPHENE = {
+    'SCHEMA': 'config.schema.schema',
+}
+
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(os.environ.get('JWT_ACCESS_MINUTOS', '30'))),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=int(os.environ.get('JWT_REFRESH_DIAS', '1'))),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=_env_entero('JWT_ACCESS_MINUTOS', 30, minimo=1)),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=_env_entero('JWT_REFRESH_DIAS', 1, minimo=1)),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': False,
@@ -201,20 +245,73 @@ CSRF_TRUSTED_ORIGINS = _env_lista('CSRF_TRUSTED_ORIGINS', ','.join(CORS_ALLOWED_
 # La cookie HttpOnly del refresh solo viaja en peticiones cross-origin con credenciales habilitadas.
 CORS_ALLOW_CREDENTIALS = True
 
+# backend-node recibe los avisos de servidor por su ruta interna, autenticada con una clave compartida. Sin estas
+# variables (o con una clave de menos de 32 caracteres) los avisos quedan en el log y nada falla.
+NODE_API_URL = os.environ.get('NODE_API_URL', '').strip()
+INTERNAL_API_KEY = os.environ.get('INTERNAL_API_KEY', '').strip()
+
+# Parámetros operativos. Cada uno se ajusta por entorno; los valores por defecto son los vigentes en producción.
+# Los módulos los leen de `django.conf.settings` en el momento de uso, no al importar.
+RESERVA_MESES_ANTICIPACION = _env_entero('RESERVA_MESES_ANTICIPACION', 2, minimo=1, maximo=24)
+# Rango máximo, en días, de una excepción horaria y de un reporte. Backend-node aplica el mismo tope a las visitas.
+RANGO_MAXIMO_DIAS = _env_entero('RANGO_MAXIMO_DIAS', 366, minimo=1, maximo=3660)
+GRILLA_CACHE_SEGUNDOS = _env_entero('GRILLA_CACHE_SEGUNDOS', 60, minimo=1, maximo=3600)
+NODE_TIMEOUT_SEGUNDOS = _env_entero('NODE_TIMEOUT_SEGUNDOS', 3, minimo=1, maximo=30)
+# Días que se conservan el nombre y el teléfono copiados en una reserva señada de un titular dado de baja.
+CONTACTOS_BAJA_DIAS = _env_entero('CONTACTOS_BAJA_DIAS', 30, minimo=1, maximo=365)
+# Horas de anticipación con las que se recuerda un turno al jugador, y segundos mínimos entre dos verificaciones
+# de recordatorios que dispara el propio jugador al consultar sus reservas o una grilla.
+RECORDATORIO_HORAS_ANTICIPACION = _env_entero('RECORDATORIO_HORAS_ANTICIPACION', 24, minimo=1, maximo=72)
+RECORDATORIO_VERIFICACION_SEGUNDOS = _env_entero('RECORDATORIO_VERIFICACION_SEGUNDOS', 300, minimo=1, maximo=86400)
+# Latencia de la base de datos, en milisegundos, desde la que el reporte de estado del servidor se marca degradado.
+REPORTE_LATENCIA_BD_MAXIMA_MS = _env_entero('REPORTE_LATENCIA_BD_MAXIMA_MS', 500, minimo=10, maximo=60000)
+# Segundos que se agrupan los avisos de límite de peticiones de una misma ruta para los superadministradores.
+ALERTA_LIMITE_VENTANA_SEGUNDOS = _env_entero('ALERTA_LIMITE_VENTANA_SEGUNDOS', 900, minimo=60, maximo=86400)
+# Meses que se conserva la IP en logs_auditoria antes de anonimizarla.
+AUDITORIA_RETENCION_MESES = _env_entero('AUDITORIA_RETENCION_MESES', 12, minimo=1, maximo=120)
+# Tope de seguridad de los marcadores del mapa, que se devuelven sin paginar.
+CATALOGO_MARCADORES_MAXIMO = _env_entero('CATALOGO_MARCADORES_MAXIMO', 500, minimo=1, maximo=5000)
+# Django solo aplica este límite al leer el cuerpo completo; los JSON de DRF llegan como flujo, así que el tope
+# efectivo del cuerpo en producción es el del proxy.
+DATA_UPLOAD_MAX_MEMORY_SIZE = _env_entero('DATA_UPLOAD_MAX_MEMORY_SIZE', 2_621_440, minimo=1024)
+DATA_UPLOAD_MAX_NUMBER_FIELDS = _env_entero('DATA_UPLOAD_MAX_NUMBER_FIELDS', 1000, minimo=10)
+CACHE_TIMEOUT_SEGUNDOS = _env_entero('CACHE_TIMEOUT_SEGUNDOS', 300, minimo=1)
+
+_CONFIG_CANAL = {
+    'capacity': _env_entero('CHANNEL_CAPACITY', 100, minimo=1),
+    'expiry': _env_entero('CHANNEL_EXPIRY_SEGUNDOS', 60, minimo=1),
+    'group_expiry': _env_entero('CHANNEL_GROUP_EXPIRY_SEGUNDOS', 86400, minimo=60),
+}
+
 REDIS_URL = os.environ.get('REDIS_URL', '').strip()
 
 if REDIS_URL:
     CHANNEL_LAYERS = {
         'default': {
             'BACKEND': 'channels_redis.core.RedisChannelLayer',
-            'CONFIG': {'hosts': [REDIS_URL]},
+            'CONFIG': {'hosts': [REDIS_URL], **_CONFIG_CANAL},
+        },
+    }
+    # Con varios procesos, los limitadores de peticiones necesitan contadores compartidos.
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_URL,
+            'TIMEOUT': CACHE_TIMEOUT_SEGUNDOS,
         },
     }
 else:
-    # Sin Redis el channel layer vive en memoria: alcanza con un solo proceso de Daphne.
+    # Sin Redis el channel layer y la caché viven en memoria: alcanza con un solo proceso de Daphne.
     CHANNEL_LAYERS = {
         'default': {
             'BACKEND': 'channels.layers.InMemoryChannelLayer',
+            'CONFIG': dict(_CONFIG_CANAL),
+        },
+    }
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'TIMEOUT': CACHE_TIMEOUT_SEGUNDOS,
         },
     }
 
@@ -223,7 +320,25 @@ X_FRAME_OPTIONS = 'DENY'
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 
-ARCHIVO_LOG_SEGURIDAD = BASE_DIR / 'security.log'
+# Detrás de nginx y Cloudflare el TLS se termina fuera de Django: nginx informa el esquema original en
+# X-Forwarded-Proto y Django lo toma de ahí para redirigir, marcar las cookies como seguras y armar las URL.
+SECURE_SSL_REDIRECT = _env_bool('SECURE_SSL_REDIRECT', not DEBUG)
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    # Se puede bajar en el primer despliegue, hasta confirmar que el dominio sirve bien por HTTPS.
+    SECURE_HSTS_SECONDS = _env_entero('SECURE_HSTS_SEGUNDOS', 31_536_000, minimo=0, maximo=63_072_000)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+# Rutas que se consultan por HTTP dentro de la red privada de Docker, sin pasar por nginx: el healthcheck del
+# contenedor y las dos consultas de backend-node al detalle de un complejo. Una redirección las rompería.
+SECURE_REDIRECT_EXEMPT = [
+    r'^api/health/$',
+    r'^api/complejos/[0-9]+/$',
+    r'^api/complejos/[0-9]+/acceso/$',
+]
+
+# En el contenedor el archivo vive en un volumen, para que sobreviva a cada reconstrucción de la imagen.
+ARCHIVO_LOG_SEGURIDAD = Path(os.environ.get('SECURITY_LOG_PATH') or BASE_DIR / 'security.log')
 
 LOGGING = {
     'version': 1,
@@ -266,6 +381,12 @@ LOGGING = {
         'django': {
             'handlers': ['consola'],
             'level': os.environ.get('DJANGO_LOG_LEVEL', 'INFO'),
+        },
+        # Fallas operativas del núcleo que no son de seguridad, como un channel layer caído.
+        'core': {
+            'handlers': ['consola'],
+            'level': 'WARNING',
+            'propagate': False,
         },
     },
 }

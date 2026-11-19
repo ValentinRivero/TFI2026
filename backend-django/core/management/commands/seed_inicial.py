@@ -1,9 +1,10 @@
 import os
-from datetime import date, time
+from datetime import time, timedelta
 from decimal import Decimal
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.utils import timezone
 
 from core.models import (
     AlcanceExcepcion,
@@ -126,38 +127,38 @@ SERVICIOS = [
 ]
 
 USUARIOS = [
-    {'email': 'talibre@irracional.net', 'nombre_completo': 'Bombo Devs',
-     'telefono': '3777 400000', 'rol': 'SUPERADMIN'},
-    {'email': 'ramon.acosta@irracional.net', 'nombre_completo': 'Ramón Acosta',
-     'telefono': '3777 412234', 'rol': 'DUENO_COMPLEJO'},
-    {'email': 'lucas.benitez@irracional.net', 'nombre_completo': 'Lucas Benítez',
-     'telefono': '3777 412235', 'rol': 'OPERADOR_COMPLEJO', 'complejo_operado': 'Complejo El Potrero'},
-    {'email': 'carolina.insaurralde@irracional.net', 'nombre_completo': 'Carolina Insaurralde',
-     'telefono': '3777 455679', 'rol': 'DUENO_COMPLEJO'},
-    {'email': 'hector.romero@irracional.net', 'nombre_completo': 'Héctor Romero',
-     'telefono': '3777 431091', 'rol': 'DUENO_COMPLEJO'},
-    {'email': 'marta.fernandez@irracional.net', 'nombre_completo': 'Marta Fernández',
-     'telefono': '3777 409877', 'rol': 'DUENO_COMPLEJO'},
-    {'email': 'facundo.gomez@irracional.net', 'nombre_completo': 'Facundo Gómez',
-     'telefono': '3777 501122', 'rol': 'JUGADOR'},
-    {'email': 'valeria.sosa@irracional.net', 'nombre_completo': 'Valeria Sosa',
-     'telefono': '3777 503344', 'rol': 'JUGADOR'},
-    {'email': 'matias.ojeda@irracional.net', 'nombre_completo': 'Matías Ojeda',
-     'telefono': '3777 505566', 'rol': 'JUGADOR'},
+    {'email': 'superadmin@demo.talibre.test', 'nombre_completo': 'Bombo Devs',
+     'telefono': '3777 000100', 'rol': 'SUPERADMIN'},
+    {'email': 'aurelio.quintana@demo.talibre.test', 'nombre_completo': 'Aurelio Quintana',
+     'telefono': '3777 000201', 'rol': 'DUENO_COMPLEJO'},
+    {'email': 'elias.mendieta@demo.talibre.test', 'nombre_completo': 'Elías Mendieta',
+     'telefono': '3777 000202', 'rol': 'OPERADOR_COMPLEJO', 'complejo_operado': 'Complejo El Yacaré'},
+    {'email': 'brenda.saucedo@demo.talibre.test', 'nombre_completo': 'Brenda Saucedo',
+     'telefono': '3777 000203', 'rol': 'DUENO_COMPLEJO'},
+    {'email': 'ciro.valdez@demo.talibre.test', 'nombre_completo': 'Ciro Valdez',
+     'telefono': '3777 000204', 'rol': 'DUENO_COMPLEJO'},
+    {'email': 'delfina.paredes@demo.talibre.test', 'nombre_completo': 'Delfina Paredes',
+     'telefono': '3777 000205', 'rol': 'DUENO_COMPLEJO'},
+    {'email': 'fabricio.medina@demo.talibre.test', 'nombre_completo': 'Fabricio Medina',
+     'telefono': '3777 000206', 'rol': 'JUGADOR'},
+    {'email': 'gisela.barrios@demo.talibre.test', 'nombre_completo': 'Gisela Barrios',
+     'telefono': '3777 000207', 'rol': 'JUGADOR'},
+    {'email': 'hugo.caceres@demo.talibre.test', 'nombre_completo': 'Hugo Cáceres',
+     'telefono': '3777 000208', 'rol': 'JUGADOR'},
 ]
 
 FIN_DE_SEMANA = (DiaSemana.SABADO, DiaSemana.DOMINGO)
 
 COMPLEJOS = [
     {
-        'nombre': 'Complejo El Potrero',
-        'propietario': 'ramon.acosta@irracional.net',
-        'direccion': 'Av. Neustadt 1250, Goya, Corrientes',
-        'latitud': Decimal('-29.146820'),
-        'longitud': Decimal('-59.271430'),
-        'telefono_contacto': '3777 412233',
+        'nombre': 'Complejo El Yacaré',
+        'propietario': 'aurelio.quintana@demo.talibre.test',
+        'direccion': 'Av. del Ombú 1250, Goya, Corrientes',
+        'latitud': Decimal('-29.145000'),
+        'longitud': Decimal('-59.272500'),
+        'telefono_contacto': '3777 000101',
         'horas_limite_cancelacion': 4,
-        'info_sena': 'Seña del 30% por transferencia al alias ELPOTRERO.GOYA. Se descuenta del total.',
+        'info_sena': 'Seña del 30% por transferencia al alias YACARE.DEMO.SENA. Se descuenta del total.',
         'estado_contrato': EstadoContrato.ACTIVO,
         'servicios': ['Estacionamiento', 'Vestuarios', 'Duchas', 'Buffet', 'Parrilleros'],
         'canchas': [
@@ -176,12 +177,12 @@ COMPLEJOS = [
         ],
     },
     {
-        'nombre': 'Pádel Costa Goya',
-        'propietario': 'carolina.insaurralde@irracional.net',
-        'direccion': 'Av. Mazzanti 860, Goya, Corrientes',
-        'latitud': Decimal('-29.138910'),
-        'longitud': Decimal('-59.256780'),
-        'telefono_contacto': '3777 455678',
+        'nombre': 'Pádel Ñandubay',
+        'propietario': 'brenda.saucedo@demo.talibre.test',
+        'direccion': 'Calle Los Aromos 860, Goya, Corrientes',
+        'latitud': Decimal('-29.137500'),
+        'longitud': Decimal('-59.258000'),
+        'telefono_contacto': '3777 000102',
         'horas_limite_cancelacion': 12,
         'info_sena': 'Seña del 50% para confirmar el turno. Se reintegra cancelando con 12 horas de anticipación.',
         'estado_contrato': EstadoContrato.ACTIVO,
@@ -196,12 +197,12 @@ COMPLEJOS = [
         ],
     },
     {
-        'nombre': 'Polideportivo Santa Lucía',
-        'propietario': 'hector.romero@irracional.net',
-        'direccion': 'José Gómez 1540, Goya, Corrientes',
-        'latitud': Decimal('-29.152340'),
-        'longitud': Decimal('-59.264120'),
-        'telefono_contacto': '3777 431090',
+        'nombre': 'Polideportivo Los Timbós',
+        'propietario': 'ciro.valdez@demo.talibre.test',
+        'direccion': 'Pasaje Los Jacarandaes 1540, Goya, Corrientes',
+        'latitud': Decimal('-29.153500'),
+        'longitud': Decimal('-59.265000'),
+        'telefono_contacto': '3777 000103',
         'horas_limite_cancelacion': 4,
         'info_sena': '',
         'estado_contrato': EstadoContrato.ACTIVO,
@@ -218,12 +219,12 @@ COMPLEJOS = [
         ],
     },
     {
-        'nombre': 'Complejo Los Lapachos',
-        'propietario': 'marta.fernandez@irracional.net',
-        'direccion': 'Av. Madariaga 2100, Goya, Corrientes',
-        'latitud': Decimal('-29.160450'),
-        'longitud': Decimal('-59.278900'),
-        'telefono_contacto': '3777 409876',
+        'nombre': 'Club Mburucuyá',
+        'propietario': 'delfina.paredes@demo.talibre.test',
+        'direccion': 'Av. de los Tarumás 2100, Goya, Corrientes',
+        'latitud': Decimal('-29.161000'),
+        'longitud': Decimal('-59.280000'),
+        'telefono_contacto': '3777 000104',
         'horas_limite_cancelacion': 4,
         'info_sena': '',
         'estado_contrato': EstadoContrato.PENDIENTE,
@@ -237,81 +238,101 @@ COMPLEJOS = [
     },
 ]
 
-EXCEPCIONES = [
-    {'complejo': 'Complejo El Potrero', 'cancha': None, 'creado_por': 'ramon.acosta@irracional.net',
-     'fecha_inicio': date(2026, 12, 8), 'fecha_fin': date(2026, 12, 8), 'es_dia_completo': AlcanceExcepcion.DIA_COMPLETO,
-     'hora_inicio': None, 'hora_fin': None, 'tipo_motivo': TipoMotivoExcepcion.FERIADO,
-     'descripcion': 'Feriado de la Inmaculada Concepción'},
-    {'complejo': 'Complejo El Potrero', 'cancha': 'Cancha 2', 'creado_por': 'lucas.benitez@irracional.net',
-     'fecha_inicio': date(2026, 11, 18), 'fecha_fin': date(2026, 11, 18), 'es_dia_completo': AlcanceExcepcion.FRANJA_HORARIA,
-     'hora_inicio': time(14, 0), 'hora_fin': time(17, 0), 'tipo_motivo': TipoMotivoExcepcion.MANTENIMIENTO,
-     'descripcion': 'Recambio de red y cepillado del césped'},
-    {'complejo': 'Pádel Costa Goya', 'cancha': None, 'creado_por': 'carolina.insaurralde@irracional.net',
-     'fecha_inicio': date(2026, 12, 24), 'fecha_fin': date(2026, 12, 25), 'es_dia_completo': AlcanceExcepcion.DIA_COMPLETO,
-     'hora_inicio': None, 'hora_fin': None, 'tipo_motivo': TipoMotivoExcepcion.FERIADO,
-     'descripcion': 'Cierre por Nochebuena y Navidad'},
-    {'complejo': 'Polideportivo Santa Lucía', 'cancha': 'Estadio Cubierto',
-     'creado_por': 'hector.romero@irracional.net', 'fecha_inicio': date(2026, 11, 21),
-     'fecha_fin': date(2026, 11, 21), 'es_dia_completo': AlcanceExcepcion.FRANJA_HORARIA, 'hora_inicio': time(9, 0),
-     'hora_fin': time(15, 0), 'tipo_motivo': TipoMotivoExcepcion.EVENTO_PRIVADO,
-     'descripcion': 'Encuentro escolar de minibásquet'},
-]
+def _proximo_dia_semana(desde, dia_semana):
+    """Primera fecha igual o posterior a `desde` que cae en `dia_semana` (0 = lunes, igual que `date.weekday()`)."""
+    return desde + timedelta(days=(dia_semana - desde.weekday()) % 7)
 
-TURNOS_FIJOS = [
-    {'complejo': 'Complejo El Potrero', 'cancha': 'Cancha 1', 'usuario': None,
-     'creado_por': 'lucas.benitez@irracional.net',
-     'nombre_cliente_manual': 'Los Pibes del Martes (Sergio Duarte)', 'telefono_cliente_manual': '3777 540077',
-     'dia_semana': DiaSemana.MARTES, 'hora_inicio': time(21, 0), 'hora_fin': time(22, 0),
-     'fecha_inicio_vigencia': date(2026, 11, 17), 'fecha_fin_vigencia': date(2026, 12, 15),
-     'reservas': [date(2026, 11, 17), date(2026, 11, 24), date(2026, 12, 1)]},
-    {'complejo': 'Pádel Costa Goya', 'cancha': 'Pádel 2', 'usuario': 'valeria.sosa@irracional.net',
-     'creado_por': 'carolina.insaurralde@irracional.net', 'nombre_cliente_manual': '',
-     'telefono_cliente_manual': '', 'dia_semana': DiaSemana.JUEVES, 'hora_inicio': time(20, 0),
-     'hora_fin': time(21, 30), 'fecha_inicio_vigencia': date(2026, 11, 19), 'fecha_fin_vigencia': None,
-     'reservas': [date(2026, 11, 19), date(2026, 11, 26)]},
-]
 
-RESERVAS = [
-    {'complejo': 'Complejo El Potrero', 'cancha': 'Cancha 1', 'fecha_turno': date(2026, 11, 20),
-     'hora_inicio': time(20, 0), 'hora_fin': time(21, 0), 'usuario': 'facundo.gomez@irracional.net',
-     'creado_por': 'facundo.gomez@irracional.net', 'tipo_ocupacion': TipoOcupacion.WEB,
-     'estado': EstadoReserva.CONFIRMADA, 'precio_acordado': '38000.00'},
-    {'complejo': 'Complejo El Potrero', 'cancha': 'Cancha 1', 'fecha_turno': date(2026, 11, 20),
-     'hora_inicio': time(21, 0), 'hora_fin': time(22, 0), 'usuario': None,
-     'creado_por': 'lucas.benitez@irracional.net', 'nombre_cliente_manual': 'Diego Maidana',
-     'telefono_cliente_manual': '3777 520011', 'tipo_ocupacion': TipoOcupacion.MANUAL,
-     'estado': EstadoReserva.SENADA, 'precio_acordado': '38000.00',
-     'observaciones': 'Seña de $11.400 recibida por transferencia'},
-    {'complejo': 'Complejo El Potrero', 'cancha': 'Cancha 2', 'fecha_turno': date(2026, 11, 19),
-     'hora_inicio': time(19, 0), 'hora_fin': time(20, 0), 'usuario': 'valeria.sosa@irracional.net',
-     'creado_por': 'valeria.sosa@irracional.net', 'tipo_ocupacion': TipoOcupacion.WEB,
-     'estado': EstadoReserva.CANCELADA_JUGADOR, 'precio_acordado': '42000.00'},
-    {'complejo': 'Complejo El Potrero', 'cancha': 'Cancha 7', 'fecha_turno': date(2026, 11, 13),
-     'hora_inicio': time(21, 0), 'hora_fin': time(22, 0), 'usuario': 'matias.ojeda@irracional.net',
-     'creado_por': 'matias.ojeda@irracional.net', 'tipo_ocupacion': TipoOcupacion.WEB,
-     'estado': EstadoReserva.COMPLETADA, 'precio_acordado': '56000.00'},
-    {'complejo': 'Complejo El Potrero', 'cancha': 'Cancha 7', 'fecha_turno': date(2026, 11, 14),
-     'hora_inicio': time(20, 0), 'hora_fin': time(21, 0), 'usuario': 'facundo.gomez@irracional.net',
-     'creado_por': 'facundo.gomez@irracional.net', 'tipo_ocupacion': TipoOcupacion.WEB,
-     'estado': EstadoReserva.AUSENTE, 'precio_acordado': '56000.00'},
-    {'complejo': 'Pádel Costa Goya', 'cancha': 'Pádel 1', 'fecha_turno': date(2026, 11, 20),
-     'hora_inicio': time(18, 30), 'hora_fin': time(20, 0), 'usuario': 'valeria.sosa@irracional.net',
-     'creado_por': 'valeria.sosa@irracional.net', 'tipo_ocupacion': TipoOcupacion.WEB,
-     'estado': EstadoReserva.SENADA, 'precio_acordado': '30000.00'},
-    {'complejo': 'Pádel Costa Goya', 'cancha': 'Pádel 3', 'fecha_turno': date(2026, 11, 21),
-     'hora_inicio': time(9, 30), 'hora_fin': time(11, 0), 'usuario': None,
-     'creado_por': 'carolina.insaurralde@irracional.net', 'nombre_cliente_manual': 'Silvina Leiva',
-     'telefono_cliente_manual': '3777 530099', 'tipo_ocupacion': TipoOcupacion.MANUAL,
-     'estado': EstadoReserva.PENDIENTE, 'precio_acordado': '34000.00'},
-    {'complejo': 'Polideportivo Santa Lucía', 'cancha': 'Estadio Cubierto', 'fecha_turno': date(2026, 11, 22),
-     'hora_inicio': time(17, 0), 'hora_fin': time(19, 0), 'usuario': 'matias.ojeda@irracional.net',
-     'creado_por': 'matias.ojeda@irracional.net', 'tipo_ocupacion': TipoOcupacion.WEB,
-     'estado': EstadoReserva.CONFIRMADA, 'precio_acordado': '45000.00'},
-]
+# La agenda de demostración se calcula respecto de la fecha de la carga, así la base siempre muestra turnos próximos.
+# Los cierres por excepción caen después de todas las reservas y turnos fijos del mismo complejo, para que la
+# agenda de muestra no tenga turnos dentro de un día cerrado.
+def _excepciones(hoy):
+    return [
+        {'complejo': 'Complejo El Yacaré', 'cancha': None, 'creado_por': 'aurelio.quintana@demo.talibre.test',
+         'fecha_inicio': hoy + timedelta(days=25), 'fecha_fin': hoy + timedelta(days=25),
+         'es_dia_completo': AlcanceExcepcion.DIA_COMPLETO, 'hora_inicio': None, 'hora_fin': None,
+         'tipo_motivo': TipoMotivoExcepcion.FERIADO, 'descripcion': 'Cierre por jornada feriada'},
+        {'complejo': 'Complejo El Yacaré', 'cancha': 'Cancha 2', 'creado_por': 'elias.mendieta@demo.talibre.test',
+         'fecha_inicio': hoy + timedelta(days=1), 'fecha_fin': hoy + timedelta(days=1),
+         'es_dia_completo': AlcanceExcepcion.FRANJA_HORARIA, 'hora_inicio': time(14, 0), 'hora_fin': time(17, 0),
+         'tipo_motivo': TipoMotivoExcepcion.MANTENIMIENTO, 'descripcion': 'Recambio de red y cepillado del césped'},
+        {'complejo': 'Pádel Ñandubay', 'cancha': None, 'creado_por': 'brenda.saucedo@demo.talibre.test',
+         'fecha_inicio': hoy + timedelta(days=15), 'fecha_fin': hoy + timedelta(days=16),
+         'es_dia_completo': AlcanceExcepcion.DIA_COMPLETO, 'hora_inicio': None, 'hora_fin': None,
+         'tipo_motivo': TipoMotivoExcepcion.FERIADO, 'descripcion': 'Cierre por festividades'},
+        {'complejo': 'Polideportivo Los Timbós', 'cancha': 'Estadio Cubierto',
+         'creado_por': 'ciro.valdez@demo.talibre.test', 'fecha_inicio': hoy + timedelta(days=4),
+         'fecha_fin': hoy + timedelta(days=4), 'es_dia_completo': AlcanceExcepcion.FRANJA_HORARIA,
+         'hora_inicio': time(9, 0), 'hora_fin': time(15, 0), 'tipo_motivo': TipoMotivoExcepcion.EVENTO_PRIVADO,
+         'descripcion': 'Encuentro escolar de minibásquet'},
+    ]
+
+
+def _turnos_fijos(hoy):
+    primer_martes = _proximo_dia_semana(hoy, DiaSemana.MARTES)
+    primer_jueves = _proximo_dia_semana(hoy, DiaSemana.JUEVES)
+    return [
+        {'complejo': 'Complejo El Yacaré', 'cancha': 'Cancha 1', 'usuario': None,
+         'creado_por': 'elias.mendieta@demo.talibre.test',
+         'nombre_cliente_manual': 'Los del Martes (Ignacio Ferreyra)', 'telefono_cliente_manual': '3777 000301',
+         'dia_semana': DiaSemana.MARTES, 'hora_inicio': time(21, 0), 'hora_fin': time(22, 0),
+         'fecha_inicio_vigencia': primer_martes, 'fecha_fin_vigencia': primer_martes + timedelta(days=28),
+         'reservas': [primer_martes + timedelta(days=7 * semana) for semana in range(3)]},
+        {'complejo': 'Pádel Ñandubay', 'cancha': 'Pádel 2', 'usuario': 'gisela.barrios@demo.talibre.test',
+         'creado_por': 'brenda.saucedo@demo.talibre.test', 'nombre_cliente_manual': '',
+         'telefono_cliente_manual': '', 'dia_semana': DiaSemana.JUEVES, 'hora_inicio': time(20, 0),
+         'hora_fin': time(21, 30), 'fecha_inicio_vigencia': primer_jueves, 'fecha_fin_vigencia': None,
+         'reservas': [primer_jueves + timedelta(days=7 * semana) for semana in range(2)]},
+    ]
+
+
+# Ninguna reserva suelta de la cancha 1 usa el turno de las 21:00: lo ocupa el turno fijo de los martes.
+def _reservas(hoy):
+    return [
+        {'complejo': 'Complejo El Yacaré', 'cancha': 'Cancha 1', 'fecha_turno': hoy + timedelta(days=3),
+         'hora_inicio': time(20, 0), 'hora_fin': time(21, 0), 'usuario': 'fabricio.medina@demo.talibre.test',
+         'creado_por': 'fabricio.medina@demo.talibre.test', 'tipo_ocupacion': TipoOcupacion.WEB,
+         'estado': EstadoReserva.CONFIRMADA, 'precio_acordado': '38000.00'},
+        {'complejo': 'Complejo El Yacaré', 'cancha': 'Cancha 1', 'fecha_turno': hoy + timedelta(days=3),
+         'hora_inicio': time(19, 0), 'hora_fin': time(20, 0), 'usuario': None,
+         'creado_por': 'elias.mendieta@demo.talibre.test', 'nombre_cliente_manual': 'Julián Ríos',
+         'telefono_cliente_manual': '3777 000302', 'tipo_ocupacion': TipoOcupacion.MANUAL,
+         'estado': EstadoReserva.SENADA, 'precio_acordado': '38000.00',
+         'observaciones': 'Seña de $11.400 recibida por transferencia'},
+        {'complejo': 'Complejo El Yacaré', 'cancha': 'Cancha 2', 'fecha_turno': hoy + timedelta(days=2),
+         'hora_inicio': time(19, 0), 'hora_fin': time(20, 0), 'usuario': 'gisela.barrios@demo.talibre.test',
+         'creado_por': 'gisela.barrios@demo.talibre.test', 'tipo_ocupacion': TipoOcupacion.WEB,
+         'estado': EstadoReserva.CANCELADA_JUGADOR, 'precio_acordado': '42000.00'},
+        {'complejo': 'Complejo El Yacaré', 'cancha': 'Cancha 7', 'fecha_turno': hoy - timedelta(days=4),
+         'hora_inicio': time(21, 0), 'hora_fin': time(22, 0), 'usuario': 'hugo.caceres@demo.talibre.test',
+         'creado_por': 'hugo.caceres@demo.talibre.test', 'tipo_ocupacion': TipoOcupacion.WEB,
+         'estado': EstadoReserva.COMPLETADA, 'precio_acordado': '56000.00'},
+        {'complejo': 'Complejo El Yacaré', 'cancha': 'Cancha 7', 'fecha_turno': hoy - timedelta(days=3),
+         'hora_inicio': time(20, 0), 'hora_fin': time(21, 0), 'usuario': 'fabricio.medina@demo.talibre.test',
+         'creado_por': 'fabricio.medina@demo.talibre.test', 'tipo_ocupacion': TipoOcupacion.WEB,
+         'estado': EstadoReserva.AUSENTE, 'precio_acordado': '56000.00'},
+        {'complejo': 'Pádel Ñandubay', 'cancha': 'Pádel 1', 'fecha_turno': hoy + timedelta(days=3),
+         'hora_inicio': time(18, 30), 'hora_fin': time(20, 0), 'usuario': 'gisela.barrios@demo.talibre.test',
+         'creado_por': 'gisela.barrios@demo.talibre.test', 'tipo_ocupacion': TipoOcupacion.WEB,
+         'estado': EstadoReserva.SENADA, 'precio_acordado': '30000.00'},
+        {'complejo': 'Pádel Ñandubay', 'cancha': 'Pádel 3', 'fecha_turno': hoy + timedelta(days=4),
+         'hora_inicio': time(9, 30), 'hora_fin': time(11, 0), 'usuario': None,
+         'creado_por': 'brenda.saucedo@demo.talibre.test', 'nombre_cliente_manual': 'Karina Molina',
+         'telefono_cliente_manual': '3777 000303', 'tipo_ocupacion': TipoOcupacion.MANUAL,
+         'estado': EstadoReserva.PENDIENTE, 'precio_acordado': '34000.00'},
+        {'complejo': 'Polideportivo Los Timbós', 'cancha': 'Estadio Cubierto', 'fecha_turno': hoy + timedelta(days=5),
+         'hora_inicio': time(17, 0), 'hora_fin': time(19, 0), 'usuario': 'hugo.caceres@demo.talibre.test',
+         'creado_por': 'hugo.caceres@demo.talibre.test', 'tipo_ocupacion': TipoOcupacion.WEB,
+         'estado': EstadoReserva.CONFIRMADA, 'precio_acordado': '45000.00'},
+    ]
 
 
 class Command(BaseCommand):
-    help = 'Carga roles, permisos RBAC, deportes, servicios y datos de demostración de Goya. Es idempotente.'
+    help = (
+        'Carga roles, permisos RBAC, deportes, servicios y datos de demostración de Goya. Es idempotente: la agenda '
+        'de muestra (excepciones, turnos fijos y reservas) solo se crea junto con su complejo, así que repetir el '
+        'comando nunca duplica turnos ni pisa los que se cargaron después.'
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -319,8 +340,28 @@ class Command(BaseCommand):
             action='store_true',
             help='Carga solo los catálogos base (roles, permisos, deportes y servicios).',
         )
+        parser.add_argument(
+            '--reset',
+            action='store_true',
+            help=(
+                'Da de baja lógica la agenda de los complejos de demostración (excepciones, turnos fijos y reservas, '
+                'también las cargadas después) y la vuelve a generar con fechas relativas a hoy.'
+            ),
+        )
+        parser.add_argument(
+            '--actualizar-claves',
+            action='store_true',
+            help=(
+                'Reemplaza por SEED_PASSWORD_DEMO la clave de las cuentas de demostración que ya existen. '
+                'Sin esta opción, una cuenta existente conserva la suya.'
+            ),
+        )
 
     def handle(self, *args, **opciones):
+        if opciones['sin_demo'] and (opciones['reset'] or opciones['actualizar_claves']):
+            raise CommandError('--reset y --actualizar-claves operan sobre los datos de demostración: no se combinan con --sin-demo.')
+
+        hoy = timezone.localdate()
         with transaction.atomic():
             roles = self._cargar_roles()
             permisos = self._cargar_permisos()
@@ -335,12 +376,15 @@ class Command(BaseCommand):
                         'Definí SEED_PASSWORD_DEMO en el .env para crear los usuarios de demostración '
                         'o ejecutá el comando con --sin-demo.'
                     )
-                usuarios = self._cargar_usuarios(roles, password)
-                canchas = self._cargar_complejos(usuarios, deportes, servicios)
+                usuarios = self._cargar_usuarios(roles, password, opciones['actualizar_claves'])
+                canchas, complejos_nuevos = self._cargar_complejos(usuarios, deportes, servicios)
                 self._vincular_operadores(usuarios)
-                self._cargar_excepciones(canchas, usuarios)
-                self._cargar_turnos_fijos(canchas, usuarios)
-                self._cargar_reservas(canchas, usuarios)
+                if opciones['reset']:
+                    self._dar_de_baja_agenda()
+                    complejos_nuevos = {datos['nombre'] for datos in COMPLEJOS}
+                self._cargar_excepciones(canchas, usuarios, hoy, complejos_nuevos)
+                self._cargar_turnos_fijos(canchas, usuarios, hoy, complejos_nuevos)
+                self._cargar_reservas(canchas, usuarios, hoy, complejos_nuevos)
 
         self._resumen()
 
@@ -383,7 +427,7 @@ class Command(BaseCommand):
     def _cargar_servicios(self):
         return {nombre: Servicio.objects.get_or_create(nombre=nombre)[0] for nombre in SERVICIOS}
 
-    def _cargar_usuarios(self, roles, password):
+    def _cargar_usuarios(self, roles, password, actualizar_claves=False):
         usuarios = {}
         for datos in USUARIOS:
             usuario = Usuario.objects.filter(email=datos['email']).first()
@@ -395,24 +439,31 @@ class Command(BaseCommand):
                     nombre_completo=datos['nombre_completo'],
                     telefono=datos['telefono'],
                 )
+            elif actualizar_claves:
+                usuario.set_password(password)
+                usuario.save(update_fields=['password', 'fecha_modificacion'])
             usuarios[usuario.email] = usuario
         return usuarios
 
     def _cargar_complejos(self, usuarios, deportes, servicios):
         canchas = {}
+        complejos_nuevos = set()
         campos_complejo = (
             'direccion', 'latitud', 'longitud', 'telefono_contacto',
             'horas_limite_cancelacion', 'info_sena', 'estado_contrato',
         )
 
         for datos in COMPLEJOS:
-            complejo, _ = Complejo.objects.get_or_create(
+            complejo, creado = Complejo.objects.get_or_create(
                 nombre=datos['nombre'],
                 defaults={
                     'propietario': usuarios[datos['propietario']],
                     **{campo: datos[campo] for campo in campos_complejo},
                 },
             )
+
+            if creado:
+                complejos_nuevos.add(complejo.nombre)
 
             for nombre_servicio in datos['servicios']:
                 ComplejoServicio.objects.get_or_create(complejo=complejo, servicio=servicios[nombre_servicio])
@@ -437,9 +488,9 @@ class Command(BaseCommand):
                     HorarioApertura.objects.get_or_create(
                         cancha=cancha,
                         dia_semana=dia,
+                        hora_apertura=datos_cancha['apertura'],
                         estado=EstadoRegistro.ACTIVO,
                         defaults={
-                            'hora_apertura': datos_cancha['apertura'],
                             'hora_cierre': datos_cancha['cierre'],
                             'precio_diferenciado': (
                                 Decimal(precio_finde) if precio_finde and dia in FIN_DE_SEMANA else None
@@ -447,7 +498,17 @@ class Command(BaseCommand):
                         },
                     )
 
-        return canchas
+        return canchas, complejos_nuevos
+
+    def _dar_de_baja_agenda(self):
+        nombres = [datos['nombre'] for datos in COMPLEJOS]
+        for modelo, filtro in (
+            (Reserva, 'cancha__complejo__nombre__in'),
+            (TurnoFijo, 'cancha__complejo__nombre__in'),
+            (ExcepcionHoraria, 'complejo__nombre__in'),
+        ):
+            for registro in modelo.objects.filter(**{filtro: nombres}).exclude(estado=EstadoRegistro.BAJA):
+                registro.desactivar()
 
     def _vincular_operadores(self, usuarios):
         for datos in USUARIOS:
@@ -459,81 +520,83 @@ class Command(BaseCommand):
                 usuario.complejo_operado = Complejo.objects.get(nombre=nombre_complejo)
                 usuario.save(update_fields=['complejo_operado', 'fecha_modificacion'])
 
-    def _cargar_excepciones(self, canchas, usuarios):
-        for datos in EXCEPCIONES:
+    def _cargar_excepciones(self, canchas, usuarios, hoy, complejos_nuevos):
+        for datos in _excepciones(hoy):
+            if datos['complejo'] not in complejos_nuevos:
+                continue
             complejo = Complejo.objects.get(nombre=datos['complejo'])
-            cancha = canchas[(complejo.nombre, datos['cancha'])] if datos['cancha'] else None
-            ExcepcionHoraria.objects.get_or_create(
+            ExcepcionHoraria.objects.create(
                 complejo=complejo,
-                cancha=cancha,
+                cancha=canchas[(complejo.nombre, datos['cancha'])] if datos['cancha'] else None,
+                creado_por=usuarios[datos['creado_por']],
                 fecha_inicio=datos['fecha_inicio'],
                 fecha_fin=datos['fecha_fin'],
+                es_dia_completo=datos['es_dia_completo'],
                 hora_inicio=datos['hora_inicio'],
+                hora_fin=datos['hora_fin'],
                 tipo_motivo=datos['tipo_motivo'],
-                defaults={
-                    'creado_por': usuarios[datos['creado_por']],
-                    'es_dia_completo': datos['es_dia_completo'],
-                    'hora_fin': datos['hora_fin'],
-                    'descripcion': datos['descripcion'],
-                },
+                descripcion=datos['descripcion'],
             )
 
-    def _cargar_turnos_fijos(self, canchas, usuarios):
-        for datos in TURNOS_FIJOS:
+    def _cargar_turnos_fijos(self, canchas, usuarios, hoy, complejos_nuevos):
+        for datos in _turnos_fijos(hoy):
+            if datos['complejo'] not in complejos_nuevos:
+                continue
             cancha = canchas[(datos['complejo'], datos['cancha'])]
             usuario = usuarios[datos['usuario']] if datos['usuario'] else None
-            turno, _ = TurnoFijo.objects.get_or_create(
+            turno = TurnoFijo.objects.create(
                 cancha=cancha,
+                usuario=usuario,
+                creado_por=usuarios[datos['creado_por']],
+                nombre_cliente_manual=datos['nombre_cliente_manual'],
+                telefono_cliente_manual=datos['telefono_cliente_manual'],
                 dia_semana=datos['dia_semana'],
                 hora_inicio=datos['hora_inicio'],
+                hora_fin=datos['hora_fin'],
                 fecha_inicio_vigencia=datos['fecha_inicio_vigencia'],
-                defaults={
-                    'usuario': usuario,
-                    'creado_por': usuarios[datos['creado_por']],
-                    'nombre_cliente_manual': datos['nombre_cliente_manual'],
-                    'telefono_cliente_manual': datos['telefono_cliente_manual'],
-                    'hora_fin': datos['hora_fin'],
-                    'fecha_fin_vigencia': datos['fecha_fin_vigencia'],
-                },
+                fecha_fin_vigencia=datos['fecha_fin_vigencia'],
             )
 
             for fecha in datos['reservas']:
-                horario = cancha.horarios.get(dia_semana=fecha.weekday(), estado=EstadoRegistro.ACTIVO)
-                Reserva.objects.get_or_create(
+                # El día puede tener varios rangos: se usa el que contiene al turno.
+                horario = cancha.horarios.get(
+                    dia_semana=fecha.weekday(),
+                    estado=EstadoRegistro.ACTIVO,
+                    hora_apertura__lte=turno.hora_inicio,
+                    hora_cierre__gte=turno.hora_fin,
+                )
+                Reserva.objects.create(
                     cancha=cancha,
                     fecha_turno=fecha,
                     hora_inicio=turno.hora_inicio,
-                    defaults={
-                        'hora_fin': turno.hora_fin,
-                        'usuario': usuario,
-                        'turno_fijo': turno,
-                        'creado_por': turno.creado_por,
-                        'nombre_cliente_manual': turno.nombre_cliente_manual,
-                        'telefono_cliente_manual': turno.telefono_cliente_manual,
-                        'precio_acordado': horario.precio_diferenciado or cancha.precio_base,
-                        'tipo_ocupacion': TipoOcupacion.TURNO_FIJO,
-                        'estado': EstadoReserva.CONFIRMADA,
-                    },
+                    hora_fin=turno.hora_fin,
+                    usuario=usuario,
+                    turno_fijo=turno,
+                    creado_por=turno.creado_por,
+                    nombre_cliente_manual=turno.nombre_cliente_manual,
+                    telefono_cliente_manual=turno.telefono_cliente_manual,
+                    precio_acordado=horario.precio_diferenciado or cancha.precio_base,
+                    tipo_ocupacion=TipoOcupacion.TURNO_FIJO,
+                    estado=EstadoReserva.CONFIRMADA,
                 )
 
-    def _cargar_reservas(self, canchas, usuarios):
-        for datos in RESERVAS:
-            cancha = canchas[(datos['complejo'], datos['cancha'])]
-            Reserva.objects.get_or_create(
-                cancha=cancha,
+    def _cargar_reservas(self, canchas, usuarios, hoy, complejos_nuevos):
+        for datos in _reservas(hoy):
+            if datos['complejo'] not in complejos_nuevos:
+                continue
+            Reserva.objects.create(
+                cancha=canchas[(datos['complejo'], datos['cancha'])],
                 fecha_turno=datos['fecha_turno'],
                 hora_inicio=datos['hora_inicio'],
-                defaults={
-                    'hora_fin': datos['hora_fin'],
-                    'usuario': usuarios[datos['usuario']] if datos['usuario'] else None,
-                    'creado_por': usuarios[datos['creado_por']],
-                    'nombre_cliente_manual': datos.get('nombre_cliente_manual', ''),
-                    'telefono_cliente_manual': datos.get('telefono_cliente_manual', ''),
-                    'precio_acordado': Decimal(datos['precio_acordado']),
-                    'tipo_ocupacion': datos['tipo_ocupacion'],
-                    'estado': datos['estado'],
-                    'observaciones': datos.get('observaciones', ''),
-                },
+                hora_fin=datos['hora_fin'],
+                usuario=usuarios[datos['usuario']] if datos['usuario'] else None,
+                creado_por=usuarios[datos['creado_por']],
+                nombre_cliente_manual=datos.get('nombre_cliente_manual', ''),
+                telefono_cliente_manual=datos.get('telefono_cliente_manual', ''),
+                precio_acordado=Decimal(datos['precio_acordado']),
+                tipo_ocupacion=datos['tipo_ocupacion'],
+                estado=datos['estado'],
+                observaciones=datos.get('observaciones', ''),
             )
 
     def _resumen(self):

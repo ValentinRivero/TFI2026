@@ -1,0 +1,260 @@
+import { jest } from '@jest/globals';
+import mongoose from 'mongoose';
+
+import Evento, { TIPOS_EVENTO } from '../models/Evento.js';
+import Notificacion, {
+  CATEGORIAS_NOTIFICACION,
+  ESTADOS_NOTIFICACION,
+  PRIORIDADES_NOTIFICACION,
+} from '../models/Notificacion.js';
+
+const valida = (cambios = {}) => new Notificacion({
+  complejo_id: 4,
+  categoria: CATEGORIAS_NOTIFICACION.RESERVAS,
+  mensaje: 'Nueva reserva para el martes a las 20:00 en Cancha 2.',
+  ...cambios,
+});
+
+// `validate()` y no `validateSync()`, que Mongoose 9 marca como obsoleto y quita en la versión 10.
+const erroresDe = (documento) => documento.validate().then(() => [], (error) => Object.keys(error.errors ?? {}));
+
+describe('Modelo Notificacion', () => {
+  test('una notificación mínima es válida, normal y nace sin leer', async () => {
+    const notificacion = valida();
+
+    await expect(notificacion.validate()).resolves.toBeUndefined();
+    expect(notificacion.prioridad).toBe(PRIORIDADES_NOTIFICACION.NORMAL);
+    expect(notificacion.estado).toBe(ESTADOS_NOTIFICACION.NO_LEIDA);
+    expect(notificacion.evento).toBeNull();
+    expect(notificacion.usuario_id).toBeNull();
+  });
+
+  test('el ámbito del registro es opcional y solo admite operativo o comercial', async () => {
+    expect(valida().ambito).toBeNull();
+    await expect(valida({ ambito: 1 }).validate()).resolves.toBeUndefined();
+    await expect(valida({ ambito: 2 }).validate()).resolves.toBeUndefined();
+    expect(await erroresDe(valida({ ambito: 3 }))).toContain('ambito');
+  });
+
+  test('categorías, prioridades y estados coinciden con PROJECT.md', () => {
+    expect(CATEGORIAS_NOTIFICACION).toEqual({ RESERVAS: 1, CUENTAS: 2, OPERATORIA: 3, SISTEMA: 4 });
+    expect(PRIORIDADES_NOTIFICACION).toEqual({ NORMAL: 1, URGENTE: 2 });
+    expect(ESTADOS_NOTIFICACION).toEqual({ BAJA: 0, NO_LEIDA: 1, LEIDA: 2 });
+  });
+
+  describe('destinatario', () => {
+    test('sin complejo ni usuario es inválida', async () => {
+      expect(await erroresDe(valida({ complejo_id: null }))).toContain('complejo_id');
+      await expect(valida({ complejo_id: null }).validate()).rejects.toThrow('destinatario');
+    });
+
+    test('puede ir solo a un usuario', async () => {
+      await expect(valida({ complejo_id: null, usuario_id: 12 }).validate()).resolves.toBeUndefined();
+    });
+
+    test('puede ir a un usuario dentro de un complejo', async () => {
+      await expect(valida({ usuario_id: 12 }).validate()).resolves.toBeUndefined();
+    });
+
+    test.each([0, -2, 1.5])('rechaza el destinatario %p', async (id) => {
+      expect(await erroresDe(valida({ complejo_id: id }))).toContain('complejo_id');
+      expect(await erroresDe(valida({ usuario_id: id }))).toContain('usuario_id');
+    });
+  });
+
+  test.each([undefined, 0, 5, 'RESERVAS'])('rechaza la categoría %p', async (categoria) => {
+    expect(await erroresDe(valida({ categoria }))).toContain('categoria');
+  });
+
+  test.each([0, 3])('rechaza la prioridad %p', async (prioridad) => {
+    expect(await erroresDe(valida({ prioridad }))).toContain('prioridad');
+  });
+
+  test.each([-1, 3])('rechaza el estado %p', async (estado) => {
+    expect(await erroresDe(valida({ estado }))).toContain('estado');
+  });
+
+  describe('mensaje', () => {
+    test('es obligatorio y no puede quedar vacío', async () => {
+      expect(await erroresDe(valida({ mensaje: undefined }))).toContain('mensaje');
+      expect(await erroresDe(valida({ mensaje: '   ' }))).toContain('mensaje');
+    });
+
+    test('se guarda sin espacios sobrantes', () => {
+      expect(valida({ mensaje: '  Turno cancelado.  ' }).mensaje).toBe('Turno cancelado.');
+    });
+
+    test('tiene un largo máximo de 280 caracteres', async () => {
+      await expect(valida({ mensaje: 'a'.repeat(280) }).validate()).resolves.toBeUndefined();
+      expect(await erroresDe(valida({ mensaje: 'a'.repeat(281) }))).toContain('mensaje');
+    });
+
+    test.each([
+      'Reserva de juan.perez@gmail.com confirmada.',
+      'Escribir a CONTACTO@COMPLEJO.COM.AR para dudas.',
+    ])('rechaza un mensaje con un email (dato personal): %s', async (mensaje) => {
+      expect(await erroresDe(valida({ mensaje }))).toContain('mensaje');
+    });
+
+    test('admite fechas, horas y números de cancha, que no son datos personales', async () => {
+      await expect(valida({ mensaje: 'Turno del 2026-11-24 a las 20:00 en Cancha 3 cancelado.' }).validate()).resolves.toBeUndefined();
+    });
+  });
+
+  test('rechaza una referencia a evento que no es un ObjectId', async () => {
+    expect(await erroresDe(valida({ evento: 'no-es-un-id' }))).toContain('evento');
+  });
+
+  test('la referencia apunta al modelo Evento', () => {
+    expect(Notificacion.schema.path('evento').options.ref).toBe('Evento');
+  });
+
+  test('con el evento resuelto lo serializa anidado y con el mismo formato', () => {
+    const evento = new Evento({ tipo_evento: TIPOS_EVENTO.RESERVA_REALIZADA, complejo_id: 4 });
+
+    const json = valida({ evento }).toJSON();
+
+    expect(json.evento).toEqual(expect.objectContaining({ id: evento.id, tipo_evento: TIPOS_EVENTO.RESERVA_REALIZADA }));
+    expect(json.evento).not.toHaveProperty('_id');
+    expect(json).not.toHaveProperty('_id');
+    expect(json).not.toHaveProperty('__v');
+  });
+
+  test('sin resolver, el evento se serializa como su id', () => {
+    const id = new mongoose.Types.ObjectId();
+
+    expect(valida({ evento: id }).toJSON().evento).toEqual(id);
+  });
+
+  test('darDeBaja deja la notificación en baja lógica', async () => {
+    const notificacion = valida();
+    jest.spyOn(notificacion, 'save').mockResolvedValue(notificacion);
+
+    await notificacion.darDeBaja();
+
+    expect(notificacion.estado).toBe(ESTADOS_NOTIFICACION.BAJA);
+  });
+
+  test.each(['deleteOne', 'deleteMany', 'findOneAndDelete'])('%s está bloqueado', async (metodo) => {
+    await expect(Notificacion[metodo]({ complejo_id: 4 })).rejects.toThrow('baja lógica');
+  });
+
+  test('tiene índices para la bandeja de un complejo y la de un usuario', () => {
+    const indices = Notificacion.schema.indexes().map(([campos]) => campos);
+
+    expect(indices).toContainEqual({ complejo_id: 1, estado: 1, fecha_creacion: -1 });
+    expect(indices).toContainEqual({ usuario_id: 1, estado: 1, fecha_creacion: -1 });
+  });
+});
+
+describe('Notificacion.bandeja', () => {
+  const VIGENTES = mongoose.trusted({ $in: [ESTADOS_NOTIFICACION.NO_LEIDA, ESTADOS_NOTIFICACION.LEIDA] });
+
+  test('la del complejo trae sus avisos generales, sin los dirigidos a un usuario puntual', () => {
+    expect(Notificacion.bandeja({ complejo_id: 4 }).getFilter()).toEqual({
+      complejo_id: 4, usuario_id: null, estado: VIGENTES,
+    });
+  });
+
+  test('la de un usuario trae todas las suyas, de cualquier complejo', () => {
+    expect(Notificacion.bandeja({ usuario_id: 12 }).getFilter()).toEqual({ usuario_id: 12, estado: VIGENTES });
+  });
+
+  test('cuenta con el mismo filtro que lista', () => {
+    expect(Notificacion.filtroDeBandeja({ complejo_id: 4 })).toEqual(Notificacion.bandeja({ complejo_id: 4 }).getFilter());
+  });
+
+  test('ordena de la más reciente a la más antigua', () => {
+    expect(Notificacion.bandeja({ usuario_id: 12 }).getOptions().sort).toEqual({ fecha_creacion: -1 });
+  });
+
+  test('resuelve el evento con populate, solo si está activo y sin su metadata ni el usuario', () => {
+    const { evento } = Notificacion.bandeja({ complejo_id: 4 })._mongooseOptions.populate;
+
+    expect(evento.match).toEqual({ estado: 1 });
+    expect(evento.select).toBe('tipo_evento complejo_id fecha_creacion');
+  });
+
+  test('sin destinatario no arma una consulta que traería las notificaciones de todos', () => {
+    expect(() => Notificacion.bandeja({})).toThrow('destinatario');
+  });
+
+  describe('con criterios', () => {
+    test('acota por categoría, prioridad y estado sin perder el destinatario', () => {
+      const criterios = { categoria: CATEGORIAS_NOTIFICACION.RESERVAS, prioridad: PRIORIDADES_NOTIFICACION.URGENTE, estado: 1 };
+
+      expect(Notificacion.bandeja({ complejo_id: 4 }, { criterios }).getFilter()).toEqual({
+        complejo_id: 4, usuario_id: null, estado: 1, categoria: 1, prioridad: 2,
+      });
+    });
+
+    test('un criterio ausente no agrega nada al filtro', () => {
+      expect(Notificacion.filtroDeBandeja({ usuario_id: 12 }, { categoria: 3 })).toEqual({
+        usuario_id: 12, estado: VIGENTES, categoria: 3,
+      });
+      expect(Notificacion.filtroDeBandeja({ usuario_id: 12 }, {})).toEqual({ usuario_id: 12, estado: VIGENTES });
+    });
+
+    test('la baja lógica nunca se lista, ni siquiera pidiéndola', () => {
+      expect(() => Notificacion.filtroDeBandeja({ usuario_id: 12 }, { estado: ESTADOS_NOTIFICACION.BAJA }))
+        .toThrow('vigentes');
+      expect(() => Notificacion.filtroDeBandeja({ usuario_id: 12 }, { estado: 7 })).toThrow('vigentes');
+    });
+
+    test('cuenta con el mismo filtro que lista', () => {
+      const criterios = { prioridad: PRIORIDADES_NOTIFICACION.URGENTE };
+
+      expect(Notificacion.filtroDeBandeja({ complejo_id: 4 }, criterios))
+        .toEqual(Notificacion.bandeja({ complejo_id: 4 }, { criterios }).getFilter());
+    });
+  });
+});
+
+// Con `sanitizeFilter` activo (config/db.js) Mongoose trata cualquier operador como valor literal, salvo los marcados
+// con `mongoose.trusted`. Estas pruebas castean la consulta como lo hace `exec()`, sin necesidad de una base real.
+describe('Consultas de notificaciones con sanitizeFilter activo', () => {
+  const sanitizacionPrevia = mongoose.get('sanitizeFilter');
+
+  beforeAll(() => mongoose.set('sanitizeFilter', true));
+  afterAll(() => mongoose.set('sanitizeFilter', sanitizacionPrevia));
+
+  const errorAlCastear = (consulta) => {
+    consulta._castConditions();
+    return consulta.error();
+  };
+
+  test.each([
+    ['la bandeja del complejo sin filtrar por estado (Todas)', () => Notificacion.bandeja({ complejo_id: 4 })],
+    ['la bandeja personal sin filtrar por estado (Todas)', () => Notificacion.bandeja({ usuario_id: 12 })],
+    ['el total de la bandeja sin filtrar por estado', () => Notificacion.countDocuments(Notificacion.filtroDeBandeja({ complejo_id: 4 }))],
+    ['la bandeja filtrada por no leídas', () => Notificacion.bandeja({ complejo_id: 4 }, { criterios: { estado: 1 } })],
+    ['la bandeja filtrada por leídas', () => Notificacion.bandeja({ usuario_id: 12 }, { criterios: { estado: 2 } })],
+    ['la búsqueda de una notificación vigente por id', () => Notificacion.vigentePorId('6af8953c6391980c346f2035')],
+  ])('castea sin error %s', (_descripcion, armar) => {
+    expect(errorAlCastear(armar())).toBeFalsy();
+  });
+
+  test('el registro de un operador excluye lo comercial y castea con sanitizeFilter', () => {
+    const consulta = Notificacion.bandeja({ complejo_id: 4 }, { criterios: { sinComercial: true } });
+
+    consulta._castConditions();
+
+    expect(consulta.error()).toBeFalsy();
+    expect(consulta.getFilter().ambito).toEqual(mongoose.trusted({ $ne: 2 }));
+  });
+
+  test('sin la marca de confianza ese mismo operador no castearía', () => {
+    const consulta = Notificacion.find({ ambito: { $ne: 2 } });
+
+    consulta._castConditions();
+
+    expect(consulta.error()).toBeTruthy();
+  });
+
+  test('sin filtro de estado la consulta sigue acotada a los dos estados vigentes y excluye la baja', () => {
+    const consulta = Notificacion.bandeja({ complejo_id: 4 });
+    consulta._castConditions();
+
+    expect(consulta.getFilter().estado).toEqual(mongoose.trusted({ $in: [1, 2] }));
+  });
+});

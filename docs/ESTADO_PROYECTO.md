@@ -1,4 +1,4 @@
-# Estado de Implementación del Proyecto — TaLibre
+﻿# Estado de Implementación del Proyecto — TaLibre
 
 Documento de seguimiento técnico del desarrollo. Cada objetivo completado y verificado se marca con `[x]`.
 
@@ -17,38 +17,108 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - [x] **2.4.** Matriz de permisos por rol verificada con tests, incluyendo el control de rol en altas (`perform_create`) y la respuesta 404 ante complejos ajenos.
 
 ## Fase 3: Catálogo, Personalización de Complejos, Canchas y Contratos
-- [ ] **3.1.** Repositorios, servicios, serializers (con sanitización `nh3`) y vistas para gestión de contratos de complejos por Superadmin (`CU-13`).
-- [ ] **3.2.** Endpoints públicos de catálogo de complejos activos con filtros dinámicos (deporte, servicios, nombre) y coordenadas para mapa (`CU-04`).
-- [ ] **3.3.** Endpoints de personalización del complejo (`CU-08`) y ABM lógico de canchas, horarios de apertura y precios (`CU-09`).
-- [ ] **3.4.** Filtros, búsqueda y orden con `django-filter` (listas blancas) y helper único de sanitización con `nh3`.
+- [x] **3.1.** Repositorios, servicios, serializers (con sanitización `nh3`) y vistas para gestión de contratos de complejos por Superadmin (`CU-13`).
+- [x] **3.2.** Endpoints públicos de catálogo de complejos activos con filtros dinámicos (deporte, servicios, nombre) y coordenadas para mapa (`CU-04`).
+- [x] **3.3.** Endpoints de personalización del complejo (`CU-08`) y ABM lógico de canchas, horarios de apertura y precios (`CU-09`).
+- [x] **3.4.** Filtros, búsqueda y orden con `django-filter` (listas blancas) y helper único de sanitización con `nh3`.
 
 ## Fase 4: Motor de Grilla, Reservas Atómicas, Excepciones y WebSockets
-- [ ] **4.1.** Lógica de cálculo de grilla diaria cruzando horarios de apertura, duración por cancha (60/90/120 min), excepciones vigentes y reservas (`CU-05`).
-- [ ] **4.2.** Gestión de excepciones horarias por día completo o franja horaria, por complejo o por cancha (`CU-11`).
-- [ ] **4.3.** Motor transaccional de reservas con bloqueo `select_for_update()`, soporte para jugador web (`CU-06`), cancelación con margen horario (`CU-07`), agenda manual telefónica y turnos fijos (`CU-10`).
-- [ ] **4.4.** Configuración de `routing.py` y `consumers.py` para actualización en tiempo real de casilleros por WebSocket al reservar, cancelar o crear excepción (`RF-15`).
-- [ ] **4.5.** Channel layer con Redis (`REDIS_URL` opcional, con respaldo en memoria), `ws_auth.py` permisivo con su edición en `asgi.py`, consumer de lectura pública y publicación de eventos con `transaction.on_commit`.
-- [ ] **4.6.** Test de concurrencia de reservas sobre PostgreSQL en CI (`select_for_update` no bloquea en SQLite).
+- [x] **4.1.** Lógica de cálculo de grilla diaria cruzando horarios de apertura, duración por cancha (60/90/120 min), excepciones vigentes y reservas (`CU-05`).
+- [x] **4.2.** Gestión de excepciones horarias por día completo o franja horaria, por complejo o por cancha (`CU-11`).
+- [x] **4.3.** Motor transaccional de reservas con bloqueo `select_for_update()`, soporte para jugador web (`CU-06`), cancelación con margen horario (`CU-07`), agenda manual telefónica y turnos fijos (`CU-10`).
+- [x] **4.4.** Configuración de `routing.py` y `consumers.py` para actualización en tiempo real de casilleros por WebSocket al reservar, cancelar o crear excepción (`RF-15`).
+- [x] **4.5.** Channel layer con Redis (`REDIS_URL` opcional, con respaldo en memoria), `ws_auth.py` permisivo con su edición en `asgi.py`, consumer de lectura pública y publicación de eventos con `transaction.on_commit`.
+- [x] **4.6.** Test de concurrencia de reservas sobre PostgreSQL en CI (`select_for_update` no bloquea en SQLite).
+- [x] **4.7.** Advertencias de conflicto al modificar la operatoria con reservas futuras: editar o dar de baja un rango horario, cambiar `duracion_turno_min` o pasar una cancha a mantenimiento informa las reservas afectadas (409 con el detalle) y solo se aplica con confirmación explícita. Esos cambios, y los de contrato de un complejo, se anuncian a las grillas abiertas por WebSocket.
+- [x] **4.8.** Baja de cuenta con reservas: vista previa de lo que se cancela, cancelación de las reservas futuras pendientes y confirmadas, conservación de las señadas o pagadas con aviso urgente al complejo, y baja de los turnos fijos del titular.
+- [x] **4.9.** Ajustes de la operatoria de agenda y turnos fijos: reapertura de una reserva cancelada por error, cambio de horario de un turno fijo a otro turno libre (ambos solo por el personal del complejo y con confirmación explícita), y fechas de turnos fijos alcanzadas por una excepción en espera de una decisión del complejo, con aviso, en lugar de rechazar el alta.
 
 ## Fase 5: Reportes, GraphQL y Servicio Complementario Node.js
-- [ ] **5.1.** Endpoint y lógica agregada del Dashboard y Reportes estadísticos filtrables por rangos de fechas (`fecha_turno`, `fecha_creacion`, `fecha_modificacion`), cancha y estado (`CU-12`).
-- [ ] **5.2.** GraphQL mínimo en `/graphql/` (`core/schema.py`, `core/graphql_views.py`, `config/schema.py`) reutilizando los servicios y permisos de la API REST.
-- [ ] **5.3.** Base y seguridad de `backend-node`: ES Modules, `app.js`, `server.js`, un router por módulo, Morgan, Helmet, CORS con lista blanca y middlewares `auth`, `rol`, `rateLimit` y `validarCampos`, validando el JWT de Django.
-- [ ] **5.4.** Persistencia en MongoDB Atlas con Mongoose: `conectarDB`, modelos `Evento` y `Notificacion`, baja lógica y `populate`.
-- [ ] **5.5.** Integración Server-to-Server: `djangoClient.service.js` y clima del complejo con Open-Meteo, con manejo de errores 502.
-- [ ] **5.6.** Pruebas de Node con Jest y Supertest (caminos felices y tristes, sin base real) y job de Node en CI.
+- [x] **5.1.** Endpoint y lógica agregada del Dashboard y Reportes estadísticos filtrables por rangos de fechas (`fecha_turno`, `fecha_creacion`, `fecha_modificacion`), cancha y deporte (`CU-12`).
+  - [x] **5.1.1.** Endpoint `GET /api/reportes/dashboard/` con validación de filtros: rango de hasta 366 días, criterio temporal, cancha del complejo y deporte existente; acceso por `ver_reportes` con 404 ante un complejo ajeno o dado de baja.
+  - [x] **5.1.2.** Recaudación confirmada o completada (estados `2`, `3` y `7`) y recaudación señada (estado `3`), con ceros en un rango vacío.
+  - [x] **5.1.3.** Conteo por estado, con canceladas por el jugador y por el complejo separadas y su subtotal.
+  - [x] **5.1.4.** Porcentaje de ocupación por cancha: minutos de reservas ocupantes sobre minutos ofertables (horarios de apertura menos excepciones), solo con el criterio `fecha_turno`.
+  - [x] **5.1.5.** Ranking de los horarios más solicitados.
+  - [x] **5.1.6.** Cantidad de consultas constante y cierre del punto.
+- [x] **5.2.** GraphQL mínimo en `/graphql/` (`core/schema.py`, `core/graphql_views.py`, `config/schema.py`) reutilizando los servicios y permisos de la API REST.
+  - [x] **5.2.1.** Endpoint `POST /graphql/` con `JWTGraphQLView` (JWT del encabezado, sin sesión ni CSRF, GraphiQL solo con `DEBUG`) y query pública `catalogoComplejos`, que ejecuta el mismo ViewSet que REST.
+  - [x] **5.2.2.** Query `misReservas` con los permisos y filtros del listado de reservas del jugador.
+  - [x] **5.2.3.** Mutation `crearReserva` con las mismas validaciones, bloqueos y errores que el alta por REST.
+  - [x] **5.2.4.** Profundidad máxima de consulta, límite de campos de primer nivel, introspección apagada fuera de desarrollo y limitador propio del endpoint.
+- [x] **5.3.** Base y seguridad de `backend-node`: ES Modules, `app.js`, `server.js`, un router por módulo, Morgan, Helmet, CORS con lista blanca y middlewares `auth`, `rol`, `rateLimit` y `validarCampos`, validando el JWT de Django.
+  - [x] **5.3.1.** Proyecto en ES Modules sobre Node 24, `app.js` separado de `server.js`, ruta pública `GET /api/salud`, formato de errores del servicio y pruebas con Jest y Supertest.
+  - [x] **5.3.2.** Helmet, CORS con lista blanca, Morgan y limitador global (`rateLimit.middleware.js`).
+  - [x] **5.3.3.** `auth.middleware.js`: validación del JWT emitido por Django con la clave compartida (401 sin token, vencido o con firma inválida).
+  - [x] **5.3.4.** `rol.middleware.js` y `validarCampos.middleware.js` (403 por rol y 400 con el detalle de validación).
+- [x] **5.4.** Persistencia en MongoDB Atlas con Mongoose: `conectarDB`, modelos `Evento` y `Notificacion`, baja lógica y `populate`.
+  - [x] **5.4.1.** `conectarDB` (sin credenciales en los logs, filtros saneados contra inyección NoSQL), arranque condicionado a la conexión, plugin de baja lógica que bloquea todo borrado físico y modelo `Evento` con `metadata` validada.
+  - [x] **5.4.2.** Modelo `Notificacion` con referencia a `Evento` resuelta por `populate`, categorías, prioridad y destinatario obligatorio.
+- [x] **5.5.** Integración Server-to-Server: `djangoClient.service.js` y clima del complejo con Open-Meteo, con manejo de errores 502.
+  - [x] **5.5.1.** Django: `GET /api/complejos/<id>/acceso/` para que `backend-node` verifique, reenviando el token del usuario, que administra el complejo (404 si es ajeno).
+  - [x] **5.5.2.** `djangoClient.service.js`: cliente HTTP hacia Django con tiempo máximo, reenvío del token y 502 ante fallas.
+  - [x] **5.5.3.** `POST /api/actividad`: registro público de visitas y consultas de grilla (tipos 1 y 2) con sesión opcional, limitador estricto y verificación del complejo en Django; "reserva realizada" (tipo 3) queda reservado a Django (5.7).
+  - [x] **5.5.4.** Rutas del panel: actividad y bandeja de notificaciones del complejo paginadas de a 20, y cambio de estado, con acceso verificado en Django; bandeja propia de cualquier usuario autenticado, filtrada siempre por el `usuario_id` del token.
+  - [x] **5.5.5.** `GET /api/reportes-aux/visitas`: visitas por día del complejo para el dashboard.
+  - [x] **5.5.6.** `GET /api/externa/clima/:complejoId`: pronóstico con Open-Meteo a partir de las coordenadas del complejo, con 404 y 502.
+- [x] **5.6.** Pruebas de Node con Jest y Supertest (caminos felices y tristes, sin base real) y job de Node en CI.
+- [x] **5.7.** Notificaciones con destinatario (usuario o complejo), categoría y prioridad (normal o urgente), emitidas también por Django mediante una ruta interna de Node autenticada entre servicios.
+  - [x] **5.7.1.** Ruta interna de Node para avisos de Django, con clave compartida entre servicios, limitador propio y registro opcional del evento "reserva realizada".
+  - [x] **5.7.2.** Entrega real de `AvisoComplejoService` desde Django, con destinatario complejo o usuario, tiempo máximo y registro en el log ante una falla.
+  - [x] **5.7.3.** Eventos y avisos de servidor: reserva realizada (evento tipo 3 y aviso al complejo) y cancelación por el complejo (aviso al jugador).
+  - [x] **5.7.4.** Avisos personales por rol: jugador titular, personal del complejo según su permiso, solo el dueño en lo comercial y superadministradores en lo del sistema; recordatorios de turnos con clave de idempotencia y reporte de estado del servidor.
 
 ## Fase 6: Frontend React, PWA y Mapa Interactivo
-- [ ] **6.1.** Base React con Vite: capas `services/`, `components/` y `pages/`, `App.jsx` con React Router y `ProtectedRoute`, instancias de Axios con interceptores para ambos backends, `Login`, `Registro` y job de frontend en CI.
-- [ ] **6.2.** Vistas del Jugador: `Catalogo`, `ComplejoDetalle` con grilla en vivo (`wsService.js`), clima y reserva, y `MisReservas`.
-- [ ] **6.3.** Vistas de Administración: `PanelComplejo`, `GestionCanchas`, `GestionExcepciones`, `Agenda` y `Reportes`; `PanelSistema`, `Contratos` y `Auditoria`.
-- [ ] **6.4.** PWA manual (`public/manifest.json`, `public/sw.js`, sin cachear respuestas autenticadas) y mapa interactivo con `react-leaflet` en `MapaComplejos`.
+- [x] **6.0.** Parámetros operativos del backend en un solo lugar, retención de la auditoría y ajustes de los endpoints previos al frontend.
+  - [x] **6.0.1.** Django: parámetros operativos en `config/settings.py` con lectura estricta del entorno (tasas de login, reservas y grilla, proxies de confianza, anticipación de reservas, rango máximo de días, caché de la grilla, tiempo máximo hacia Node, conservación de contactos, límites de cuerpo, caché y capa de canales).
+  - [x] **6.0.2.** Django: largos, márgenes y coordenadas declarados una sola vez en `core/models.py` y reutilizados por los serializers, sin migraciones nuevas, y `core/tests/test_parametros.py`.
+  - [x] **6.0.3.** Django: comando idempotente `anonimizar_ips_auditoria` con retención de 12 meses.
+  - [x] **6.0.4.** Node: `src/config/parametros.js` con validación estricta al arrancar y módulos que leen de ahí.
+- [x] **6.1.** Base React con Vite: capas `services/`, `components/` y `pages/`, `App.jsx` con React Router y `ProtectedRoute`, instancias de Axios con interceptores para ambos backends, `Login`, `Registro` y job de frontend en CI.
+  - [x] **6.1.1.** Esqueleto con Vite, dependencias, estructura de carpetas y job de frontend en CI.
+  - [x] **6.1.2.** Tema (`styles/tema.css`), `config/parametros.js`, `config/catalogos.js`, `i18n/`, formatos, íconos y logo provisorio.
+  - [x] **6.1.3.** Componentes transversales (`Cargando`, `BotonAccion`, `Paginador`, `Alerta`, `ModalConfirmar`, `Layout`, `hooks/useConsulta`) y guía visual de desarrollo en `/guia`.
+  - [x] **6.1.4.** Capa de red y sesión: `services/api.js`, `services/authService.js` y `hooks/useSesion`.
+  - [x] **6.1.5.** `Login` y `Registro`, con el estado de la sesión en la barra superior.
+  - [x] **6.1.6.** `Privacidad`, aceptación de la política vigente y rutas protegidas por rol.
+- [x] **6.2.** Vistas del Jugador: `Catalogo`, `ComplejoDetalle` con grilla en vivo (`wsService.js`), clima y reserva, `MisReservas` y `Perfil`.
+  - [x] **6.2.1.** `Catalogo` público en `/` y `ComplejoCard`.
+  - [x] **6.2.2.** Filtros del catálogo sincronizados con la URL.
+  - [x] **6.2.3.** `ComplejoDetalle`: ficha, clima con su atribución y registro de la visita.
+  - [x] **6.2.4.** Grilla del día por REST con los cinco estados de casillero.
+  - [x] **6.2.5.** Tiempo real con `wsService.js`.
+  - [x] **6.2.6.** Reserva de un turno.
+  - [x] **6.2.7.** `MisReservas`.
+  - [x] **6.2.8.** `Perfil` y baja de la cuenta con vista previa.
+- [x] **6.3.** Vistas de Administración: `PanelComplejo`, `GestionCanchas`, `GestionExcepciones`, `Agenda` y `Reportes`; `PanelSistema`, `Contratos` y `Auditoria`.
+  - [x] **6.3.1.** Estructura del panel, selector de complejo y `PanelComplejo`.
+  - [x] **6.3.2.** Operadores del complejo.
+  - [x] **6.3.3.** `GestionCanchas` y horarios, con confirmación de conflictos.
+  - [x] **6.3.4.** `GestionExcepciones`.
+  - [x] **6.3.5.** `Agenda` del día.
+  - [x] **6.3.6.** Turnos fijos.
+  - [x] **6.3.7.** `Reportes`.
+  - [x] **6.3.8.** `PanelSistema` y `Contratos`.
+  - [x] **6.3.9.** Usuarios y `Auditoria`.
+- [x] **6.4.** PWA manual (`public/manifest.json`, `public/sw.js`, sin cachear respuestas autenticadas) y mapa interactivo con Leaflet en `MapaComplejos`.
+  - [x] **6.4.1.** Django: `GET /api/complejos/marcadores/`, público y sin paginar, con los filtros del catálogo.
+  - [x] **6.4.2.** `MapaComplejos`.
+  - [x] **6.4.3.** Manifiesto y service worker.
+  - [x] **6.4.4.** `BannerInstalarPWA` y requisitos de compatibilidad.
+- [x] **6.5.** Sección de notificaciones para todos los roles; en los paneles de complejo, separada por categoría y con una bandeja de urgentes.
+  - [x] **6.5.1.** Node: filtros `categoria`, `prioridad` y `estado` en las bandejas de notificaciones.
+  - [x] **6.5.2.** Campana y bandeja personal.
+  - [x] **6.5.3.** Bandeja del complejo por categoría y bandeja de urgentes.
+  - [x] **6.5.4.** Cierre de la Fase 6.
+  - [x] **6.5.5.** Bandeja personal con avisos urgentes pendientes, distinción y filtro por complejo, y registro del complejo en el panel (sin estado de lectura, por categoría y prioridad).
 
 ## Fase 7: Despliegue, Pruebas Integrales y Entrega
-- [ ] **7.1.** Imágenes Docker (`Dockerfile` y `.dockerignore` por servicio) y `docker-compose.yml` con `web`, `node`, `frontend` y `redis`.
-- [ ] **7.2.** Despliegue en VPS: nginx como proxy, HTTPS con dominio, IP real detrás del proxy (`NUM_PROXIES`, `trust proxy`) y `python manage.py check --deploy` sin pendientes.
+- [x] **7.1.** Imágenes Docker (`Dockerfile` y `.dockerignore` por servicio) y `docker-compose.yml` con `web`, `node`, `frontend` y `redis`.
+- [x] **7.2.** Despliegue en VPS: nginx como proxy, HTTPS con dominio, IP real detrás del proxy (`NUM_PROXIES`, `trust proxy`), límite de conexiones WebSocket simultáneas por IP en `/ws/` sin registrar la query string (lleva el token), y `python manage.py check --deploy` sin pendientes.
+  - [x] **7.2.1.** Despliegue continuo: tras el CI en verde sobre `main` (o a mano) el servidor se actualiza solo con las variables de entorno, la reconstrucción de las imágenes, las migraciones y el seed.
+  - [x] **7.2.2.** Seed de demostración con fechas relativas a hoy e idempotente en cada despliegue, con `--reset` para reiniciar la agenda de muestra.
 - [ ] **7.3.** Pruebas de punta a punta de los flujos principales por rol sobre el despliegue.
-- [ ] **7.4.** Documentación de entrega: `docs/API.md`, `docs/DECISIONES_ARQUITECTURA.md` y reporte de cobertura (`pytest --cov=core`), con CI en verde y tag `v1.0.0`.
+- [ ] **7.4.** Documentación de entrega: `docs/API.md` y reporte de cobertura (`pytest --cov=core`), con CI en verde y tag `v1.0.0`.
 
 ## Notas de la Fase 1
 - Modelo de datos alineado a la Sección 3 de `PROJECT.md`: `roles`, `permisos`, `roles_permisos`, `usuarios`, `complejos`, `servicios`, `complejos_servicios`, `deportes`, `canchas`, `horarios_apertura`, `excepciones_horarias`, `turnos_fijos`, `reservas`, `logs_auditoria`.
@@ -58,7 +128,6 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - RBAC con 28 permisos que separan pantallas (`ver_*`) de acciones e incluyen los 8 códigos de ejemplo de la Sección 3 de `PROJECT.md`.
 - Pruebas de Fase 1: 27 tests, migrados a `core/tests/` en el punto 1.5.
 - Migración `0001` y `seed_inicial` verificados sobre Supabase (PostgreSQL).
-- El proyecto no usa `.env.example`: el equipo comparte los `.env` fuera del repositorio.
 - La gestión de roles desde una pantalla queda fuera del alcance actual: se reparten permisos entre los 4 roles existentes.
 - `config/asgi.py` todavía no tiene su forma definitiva: el punto 4.5 le suma `JWTAuthMiddleware`, y los puntos 4.4 y 4.5 completan `core/routing.py` y `core/consumers.py`.
 
@@ -68,7 +137,7 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - El admin registra las 14 tablas sin borrado físico: solo ofrece la baja lógica, y `logs_auditoria` es de solo lectura.
 - El operador ya no tiene `configurar_complejo`: los parámetros comerciales (`info_sena`, `horas_limite_cancelacion`) los editan solo el dueño y el superadmin. Al re-ejecutarse, `seed_inicial` sincroniza `roles_permisos`: las asignaciones que ya no corresponden quedan con `estado = 0` y las vigentes se reactivan. Las consultas de permisos de la Fase 2 deben filtrar asignaciones activas.
 - CORS y CSRF apuntan por defecto a Vite (`localhost:5173`). Los `.env` locales se actualizan por fuera del repositorio.
-- `.github/workflows/ci.yml` corre `makemigrations --check` y `pytest --cov=core` en cada push y pull request a `main`.
+- `.github/workflows/ci.yml` corre `makemigrations --check` y `pytest --cov=core` en cada push y pull request a `main`. Desde la Fase 5 suma el job `node`: `npm ci`, auditoría de dependencias de producción, verificación de sintaxis de `server.js` y `npm run test:cobertura`, que falla por debajo del 95% de cobertura.
 
 ## Notas de la Fase 2
 - Todos los errores de la API responden `{"error": true, "detail": ...}`; `detail` es un texto o un objeto por campo.
@@ -85,10 +154,289 @@ Documento de seguimiento técnico del desarrollo. Cada objetivo completado y ver
 - `AccesoComplejoMixin` (`core/views.py`) concentra la doble capa de acceso para los recursos de complejo de las fases siguientes.
 - Pruebas de Fase 2: 320 tests (362 en total).
 
-## Decisiones de arquitectura (05/11/2026)
+## Notas de la Fase 3
+- Nuevos endpoints: `/api/deportes/`, `/api/servicios/`, `/api/complejos/` (catálogo, `administrados/`, configuración, `servicios/` y `operadores/`), `/api/canchas/`, `/api/horarios/`, `/api/contratos/` y `/api/usuarios/`.
+- El catálogo público solo muestra complejos con `estado = 1` y `estado_contrato = 2`, e ignora el header `Authorization` como el resto de las vistas públicas. Pasar un contrato a Suspendido o Baja lo oculta al instante y el detalle responde 404, sin tocar canchas, reservas ni auditoría; el titular conserva el acceso desde `GET /api/complejos/administrados/`.
+- El catálogo no expone al propietario ni ningún dato personal. Servicios y canchas activas se resuelven con un `Prefetch` cada uno y `precio_desde` con una subconsulta: la cantidad de consultas no crece con la cantidad de complejos.
+- Filtros por lista blanca en `core/filters.py`: `deporte`, `cobertura` y `servicio` (repetible; se exigen todos), más `search` (nombre y dirección) y `ordering` (`nombre`, `precio_desde`). `deporte` y `cobertura` se exigen sobre la misma cancha activa. Un valor inválido responde 400 y un orden fuera de la lista se ignora.
+- `deportes` y `servicios` no paginan: son catálogos maestros chicos y acotados que administra la plataforma.
+- `/api/canchas/` y `/api/horarios/` usan `AccesoComplejoMixin`: lo ajeno responde 404, incluso al filtrar por `?complejo=` o `?cancha=` ajenos. El complejo de una cancha y la cancha de un horario se fijan en el alta.
+- `administrar_precios` se exige al fijar `precio_base` o `precio_diferenciado`, tanto al editar como al dar de alta: de lo contrario, dar de baja y volver a crear el recurso alcanzaría para cambiar el precio sin el permiso.
+- Un día admite varios rangos horarios por cancha (cortes como 08:00 a 12:00 y 16:00 a 23:00), cada uno con su `precio_diferenciado`, siempre que no se superpongan; los rangos contiguos no chocan. La migración `0005_horarios_con_cortes` quita `uq_horario_cancha_dia_activo` y ordena los horarios por `hora_apertura`. Aplicada en Supabase. El solapamiento lo valida `HorarioAperturaService` con la cancha bloqueada (`select_for_update`), que serializa altas y ediciones simultáneas. La grilla del punto 4.1 debe recorrer todos los rangos activos del día.
+- Una cancha con reservas activas o turnos fijos vigentes desde hoy en adelante no admite la baja lógica.
+- Los nombres de cancha son únicos entre las vigentes del complejo (sin distinguir mayúsculas). Ante un alta simultánea decide la restricción de base y la API responde 400.
+- `PUT /api/complejos/<id>/servicios/` deja activos exactamente los servicios pedidos: los quitados pasan a `estado = 0` y los que vuelven se reactivan sobre la misma fila.
+- Operadores: el dueño los vincula por email exacto (sin distinguir mayúsculas) y no por id, para que no se puedan recorrer ids en busca de operadores libres y de sus datos de contacto; el superadmin además puede asignarlos desde `PATCH /api/usuarios/<id>/`. Solo se vinculan cuentas activas con rol de operador y sin otro complejo, con un único mensaje de error para cualquier cuenta no disponible. La desvinculación no da de baja la cuenta.
+- Contratos: `GET /api/contratos/<id>/` devuelve el detalle. El propietario se informa con su `estado`, y `?estado_propietario=` permite listar contratos vigentes cuyo titular está suspendido o dado de baja: suspender al dueño no suspende el contrato, pero queda a la vista del superadmin.
+- Búsqueda (`?search=`) sin distinguir mayúsculas ni tildes en catálogo, contratos y usuarios: «timbos» encuentra «Los Timbós». El lookup `sin_acentos` (`core/filters.py`) usa la extensión `unaccent` en PostgreSQL (migración `0006_extension_unaccent`, aplicada en Supabase) y una función equivalente registrada en SQLite, así las pruebas ejercitan la misma consulta.
+- Administración de usuarios: la suspensión o baja administrativa no anonimiza datos personales, pero revoca los refresh tokens vigentes. Una cuenta anonimizada por su titular no admite cambios. Se bloquea con `select_for_update` el conjunto de superadmins activos antes que la fila afectada (el mismo orden que la baja propia, para evitar deadlocks) y se rechaza suspender, dar de baja o cambiar el rol del último superadmin activo. Un dueño con contratos vigentes no cambia de rol, y solo un operador puede tener complejo asignado.
+- Auditoría: altas y cambios de contrato (`CAMBIO_CONTRATO`), configuración, servicios y operadores (`CAMBIO_CONFIGURACION`), baja administrativa (`BAJA_USUARIO`) y el nuevo evento `CAMBIO_USUARIO` (16) para suspensión, reactivación, cambio de rol y edición de datos. Registran ids y nombres de campos, nunca los valores escritos. La migración `0004_evento_cambio_usuario` solo actualiza los `choices` de `tipo_evento`. Aplicada en Supabase.
+- `limpiar_texto` termina siempre en `nh3.clean(..., tags=set())` cuando agota las pasadas: la salida es un punto fijo de nh3 y conserva escapadas las entidades.
+- `docs/API.md` documenta los endpoints vigentes de Django y se amplía en cada fase; el punto 7.4 lo cierra con Node.
+- `seed_inicial` y los tests usan solo datos ficticios: emails en dominios reservados (`demo.talibre.test`, `talibre.test`), teléfonos `3777 00xxxx` (inexistentes en la numeración local) y nombres, direcciones, complejos y alias bancarios inventados. Ningún dato de muestra corresponde a personas o comercios reales.
+- Pruebas de Fase 3: 282 tests (644 en total).
+
+## Notas de los puntos 4.1 y 4.2
+- `GET /api/complejos/<id>/grilla/?fecha=AAAA-MM-DD` es público, ignora el header `Authorization` y no pagina: la grilla de un día está acotada por las canchas del complejo y sus rangos horarios. Responde 404 si el complejo no tiene `estado = 1` y `estado_contrato = 2`, y 400 si falta la fecha, su formato no es ISO o es anterior a hoy.
+- Toma las canchas activas (con deporte activo) y recorre todos los rangos activos de `horarios_apertura` del día de la semana de la fecha. Cada rango genera sus bloques por separado según `duracion_turno_min`; un resto menor a un turno completo no se ofrece y un corte no se completa con el rango siguiente. El precio es el `precio_diferenciado` del rango o, si es nulo, el `precio_base` de la cancha.
+- Estados de un bloque: `OCUPADO`, `CERRADO_EXCEPCION` (con el `motivo`) o `LIBRE`. La ocupación prevalece sobre la excepción: un turno ya tomado se informa ocupado aunque el complejo cierre después, y queda a la vista para que el complejo lo resuelva.
+- Ocupan una reserva en estado `1`, `2`, `3` o `7` y un turno fijo vigente (`estado = 1`) del mismo día de la semana dentro de su vigencia. Si esa fecha ya tiene una reserva generada por el turno fijo, manda el estado de la reserva: cancelar una fecha puntual del turno fijo libera el casillero.
+- Todos los cruces son intervalos semiabiertos: una reserva o franja que termina a las 14:00 no ocupa ni cierra el bloque de las 14:00.
+- La grilla se calcula con seis consultas fijas, sin importar canchas, reservas ni excepciones. Las ocupaciones se leen solo con columnas de horario (`values()`): los datos de clientes y jugadores no salen de la base, y la respuesta no lleva nombres, teléfonos, emails, observaciones ni la descripción de las excepciones.
+- `/api/excepciones/` usa `AccesoComplejoMixin`: lo ajeno responde 404, también al filtrar por `?complejo=` o `?cancha=` ajenos, y un alta en un complejo ajeno, 403. Filtros: `complejo`, `cancha` (incluye las globales de su complejo, que también la cierran), `vigencia` (`vigentes` o `finalizadas`), `fecha` (excepciones que la cubren) y `tipo_motivo`.
+- Alta: global (`cancha` nula) o de una cancha activa del mismo complejo; día completo (`es_dia_completo = 1`) sin horas o franja (`es_dia_completo = 0`) con `hora_fin > hora_inicio`. `fecha_inicio` no puede ser anterior a hoy y el rango abarca como máximo 366 días. `creado_por` lo fija el servidor y la `descripcion` se sanitiza con `nh3`.
+- Sin edición: una excepción mal cargada se da de baja y se registra otra, así la auditoría conserva cada versión. La baja es lógica y bloquea la fila, así dos bajas simultáneas no se auditan dos veces.
+- Alta y baja se auditan (`ALTA_EXCEPCION`, `BAJA_EXCEPCION`) con el id, el alcance, las fechas, el horario y el motivo. La descripción es texto libre del personal y no se replica en la auditoría ni en `security.log`.
+- `DifusionGrillaService` es el punto único de aviso a las grillas abiertas. Alta y baja de excepciones ya programan el evento `grilla_actualizada` con `transaction.on_commit`, con `cancha_id` (nulo si es global), `fecha_desde`, `fecha_hasta`, `hora_inicio` y `hora_fin`, sin datos personales. El envío al channel layer se conecta en los puntos 4.4 y 4.5.
+- Pruebas de los puntos 4.1 y 4.2: 119 tests (763 en total).
+
+## Notas del punto 4.3
+- Nuevos endpoints: `/api/reservas/` (alta web, `mias/` y `cancelar/`), `/api/agenda/` (listado, detalle, alta manual, cambio de estado y `cancelar/`) y `/api/turnos-fijos/` (ABM lógico y `fechas/`).
+- Motor anti-colisiones único (`ReservaService.crear_reserva`) para la reserva web y la manual: dentro de `transaction.atomic()` bloquea la fila de la cancha con `select_for_update` y recién entonces valida. Exige complejo con `estado = 1` y `estado_contrato = 2`, cancha activa de deporte activo, un turno que no haya empezado y que `hora_inicio` coincida con un bloque de la grilla de esa fecha. `hora_fin` y `precio_acordado` los fija el servidor (`precio_diferenciado` del rango o `precio_base`); el cliente no puede enviarlos.
+- Choques (409, intervalos semiabiertos): reserva en estado `1`, `2`, `3` o `7`; turno fijo vigente de ese día dentro de su vigencia, salvo que la fecha ya tenga su reserva generada; excepción activa global o de la cancha. La restricción `uq_reserva_cancha_turno_activa` queda como última defensa y también responde 409.
+- La grilla y el motor comparten las mismas reglas (`DisponibilidadService`): todo bloque `LIBRE` de la grilla se puede reservar. Figura `NO_DISPONIBLE` un bloque libre de hoy que ya empezó o de una fecha posterior a la anticipación máxima.
+- Anticipación máxima de 2 meses calendario desde hoy (`MESES_DE_ANTICIPACION_MAXIMA`), para la reserva web y la manual; más allá responde 400 con la última fecha reservable. Los turnos fijos y el registro de sus fechas no tienen ese tope, porque son acuerdos de largo plazo.
+- `ReservaRateThrottle` limita las altas web a 20 por hora por cuenta (cuentan también los intentos rechazados) y responde 429; no alcanza a consultas, cancelaciones ni a las altas del personal desde la agenda. Protege al servidor y evita que una cuenta acapare turnos.
+- Toda reserva nace en `1` (pendiente de seña). El jugador cancela (`estado = 4`) una reserva propia en `1`, `2` o `3` solo si faltan más horas que `horas_limite_cancelacion`; la respuesta informa `cancelable_hasta`. El complejo cancela (`estado = 5`) sin margen horario.
+- Cambios de estado desde la agenda: pendiente a confirmada o señada, confirmada a señada, y cualquiera de ellas a ausente o completada una vez iniciado el turno; ausente y completada se corrigen entre sí. Las canceladas no vuelven atrás y la cancelación tiene su propia ruta.
+- `GET /api/reservas/mias/?vigencia=` compara fecha y hora: una reserva es próxima hasta que termina su turno (la de hoy en curso sigue próxima) y pasada desde entonces.
+- Un `PATCH` que envía con otro valor un campo que no se edita responde 400 con el motivo y no aplica nada: en la agenda, cancha, fecha, horario y precio; en turnos fijos, cancha, día, horario e inicio de la vigencia. Reenviar el mismo valor no es error, para que un formulario pueda mandar el registro completo. Los campos que calcula el servidor (`hora_fin` de un turno fijo, o `hora_fin`, `precio_acordado` y `estado` en un alta) se siguen ignorando.
+- `GET /api/turnos-fijos/?fecha=` trae los turnos fijos vigentes y pausados de ese día; sumando `estado=1`, solo los vigentes.
+- La agenda expone el contacto de cada cliente (nombre, teléfono y, si reservó en la web, email) solo a quien administra el complejo; la vista del jugador no incluye las observaciones internas. Las respuestas resuelven sus relaciones con `select_related`: la cantidad de consultas no crece con las reservas.
+- Turnos fijos: `hora_fin` según la duración de la cancha y un bloque válido de la grilla; vigencia desde hoy y con al menos una fecha de ese día. Con la cancha bloqueada, se rechaza (409) el choque en cualquier fecha futura de la vigencia con otro turno fijo vigente, una reserva activa o una excepción activa, informando la fecha. Día, horario y cancha no se editan; pausar libera el horario, reanudar revisa toda la vigencia y extender el fin, solo el tramo agregado. El cliente se carga a mano: la API no vincula la cuenta de un jugador.
+- `POST /api/turnos-fijos/<id>/fechas/` lleva una fecha puntual del turno fijo a la agenda como reserva confirmada, con el precio de su rango: desde ahí se seña, se completa o se cancela, y cancelarla libera solo ese casillero. Una fecha ya registrada responde 409.
+- La baja de un turno fijo es lógica y no toca las fechas ya llevadas a la agenda, que se resuelven como cualquier reserva.
+- Alta, cancelación y cambio de estado de reservas se auditan (`RESERVA_CREADA`, `RESERVA_CANCELADA`, `RESERVA_CAMBIO_ESTADO`) con ids, fecha, horario, origen y estados; nunca con nombres, teléfonos ni observaciones.
+- Cada alta, cancelación o cambio de ocupación programa `grilla_actualizada` con `transaction.on_commit` en el formato unificado (`fecha_desde = fecha_hasta = fecha_turno` en reservas; la vigencia en turnos fijos, con `fecha_hasta` nulo si no tiene fin).
+- Pruebas del punto 4.3: 282 tests (1045 en total). El bloqueo real de `select_for_update` se prueba sobre PostgreSQL en el punto 4.6.
+- El punto 4.9 modifica tres reglas de este punto: las canceladas podrán reabrirse, el horario de un turno fijo podrá cambiarse y una excepción dejará de rechazar el alta de un turno fijo.
+
+## Notas de los puntos 4.4 a 4.6
+- `ws/complejos/<id>/disponibilidad/` (`core/routing.py`) atiende `DisponibilidadConsumer` (`core/consumers.py`):
+  - **Solo lectura:** anónimos y usuarios identificados se unen al grupo `complejo_<id>` y reciben los mismos eventos; los mensajes del cliente se descartan sin decodificarlos.
+  - **Rechazo:** un complejo inexistente, dado de baja o sin contrato activo se rechaza en el handshake, con el mismo criterio que el catálogo. El navegador recibe la conexión rechazada (Daphne responde 403); el código `4404` solo es visible dentro de la aplicación ASGI y en las pruebas.
+- `config/asgi.py` encadena `AllowedHostsOriginValidator(AuthMiddlewareStack(JWTAuthMiddleware(URLRouter(...))))`. El validador de origen corta antes del handshake las conexiones desde sitios ajenos (Cross-Site WebSocket Hijacking).
+- **Identificación permisiva** (`core/ws_auth.py`, `JWTAuthMiddleware`):
+  - Lee `?token=<access>`, lo valida con SimpleJWT, convierte el `usuario_id` de texto a entero y carga al usuario solo si está activo.
+  - Un token ausente, vencido, inválido, un refresh en lugar de un access o una cuenta no activa dejan `AnonymousUser` y la conexión sigue abierta.
+- **Difusión** (`DifusionGrillaService.publicar`): envía al grupo `complejo_<id>` del channel layer desde `transaction.on_commit`, nunca dentro del bloque atómico.
+  - **Qué se anuncia:** alta y cancelación de reservas, cambios de ocupación desde la agenda, fechas de turnos fijos, alta, edición y baja de turnos fijos, y alta y baja de excepciones.
+  - **Tolerancia a fallas:** si el channel layer falla, el error queda en el logger `core.difusion` y la operación ya confirmada no se revierte. Las grillas se resincronizan por REST al reconectar.
+  - **Contexto:** sirve desde código sincrónico (las vistas de DRF, que Daphne ejecuta en un hilo) y desde código asíncrono, donde agenda el envío como tarea en lugar de bloquear el loop y registra igual una falla.
+  - **Fuera de este punto:** los cambios de horarios, canchas y contratos todavía no se anuncian; quedan para 4.7.
+- **Formato del evento:** se mantiene el unificado del punto 4.2: `{"event": "grilla_actualizada", "cancha_id", "fecha_desde", "fecha_hasta", "hora_inicio", "hora_fin"}`.
+  - En una reserva, `fecha_desde = fecha_hasta = fecha_turno`.
+  - `cancha_id` es nulo si afecta a todo el complejo.
+  - Las horas son nulas en un día completo, y `fecha_hasta` es nula en un turno fijo sin fin.
+  - No lleva datos personales.
+- **Redis opcional:** con `REDIS_URL`, el channel layer usa `channels_redis` y la caché usa `RedisCache`, así los limitadores comparten contadores entre procesos. Sin ella, ambos quedan en memoria. `config/settings_test.py` los fuerza siempre en memoria. El cliente `redis` queda fijado en `requirements.txt`, porque la caché lo usa en forma directa.
+- **Pruebas de WebSocket:** solo usan API pública de Django y Channels. El origen permitido sale de `settings.ALLOWED_HOSTS` y cada prueba arranca con un channel layer limpio redefiniendo `CHANNEL_LAYERS`, que dispara `setting_changed`.
+- **Concurrencia** (`core/tests/test_concurrencia.py`, `TransactionTestCase` con hilos reales y barrera):
+  - **Casos:** 8 reservas simultáneas del mismo turno (por servicio y por la API) dejan una sola confirmada (201) y el resto en 409. Reservas contra turnos fijos y turnos fijos entre sí también dejan una sola alta. Canchas distintas no se bloquean entre sí.
+  - **Dónde corre:** sobre SQLite se saltea. En CI corre en un job aparte (`django-concurrencia`) contra un servicio de PostgreSQL descartable, con `config.settings_concurrencia` y `TEST_POSTGRES_URL`; la suite general sigue en SQLite.
+  - **Control:** con el bloqueo de la cancha desactivado, los casos sin restricción de base fallan (turnos fijos duplicados). Eso confirma que los protege `select_for_update` y no la restricción única.
+- Pruebas de los puntos 4.4 a 4.6: 37 tests (32 sobre SQLite y 5 de concurrencia sobre PostgreSQL; 1082 en total).
+
+## Notas de los puntos 4.7 y 4.8
+- **Advertencias de conflicto** (`ConflictoOperatoriaService`):
+  - **Cuándo se revisa:** al editar el día o el horario de un rango, dar de baja un rango, cambiar `duracion_turno_min` o pasar una cancha a mantenimiento. El cálculo corre en la transacción y con la cancha bloqueada (`select_for_update`).
+  - **Qué cuenta como afectado:** reservas por jugar (estados `1`, `2` y `3`, sin turnos ya iniciados) y turnos fijos vigentes o pausados que dejarían de coincidir con un bloque de la grilla.
+  - **Solo lo nuevo:** se comparan los afectados antes y después del cambio. Pide confirmación lo que el cambio afecta por primera vez o con un motivo distinto (por ejemplo, de fuera de turno a mantenimiento); lo ya marcado y sin novedades no vuelve a frenar otro cambio. Agregar un rango o cambiar solo un precio no puede dejar reservas afuera y no se revisa.
+- **Respuesta 409:**
+  - **Formato:** `{"error": true, "detail", "requiere_confirmacion": true, "conflictos": {"cantidad", "reservas": [{"id", "fecha_turno", "hora_inicio", "estado"}], "turnos_fijos": [{"id", "dia_semana", "hora_inicio"}]}}`, sin datos personales.
+  - **Confirmación:** con `confirmar: true` (en el cuerpo o, en un `DELETE`, en la query string) el cambio se aplica, nada se cancela solo y el cambio confirmado se audita (`CAMBIO_CONFIGURACION`) con los ids afectados.
+  - **Baja de cancha:** una cancha con ocupación futura sigue sin poder darse de baja (400), aun con `confirmar`.
+- **Marcas en la agenda:** agenda y turnos fijos informan `conflicto_operatoria` (motivo, o nulo) calculado contra los horarios vigentes, y `GET /api/agenda/?con_conflicto=true` lista lo que espera una decisión. La marca desaparece al resolver la reserva o al restituir la operatoria. Los horarios se precargan con un `Prefetch`, así la cantidad de consultas sigue sin crecer con las reservas.
+- **Difusión de la operatoria:** alta, edición y baja de canchas y horarios anuncian `grilla_actualizada` para esa cancha desde hoy y sin fin. Reactivar un contrato lo anuncia para todo el complejo. Suspenderlo o darlo de baja cierra las grillas abiertas de ese complejo (código `4404`), en `on_commit`.
+- **Vista previa de la baja** (`GET /api/perfil/baja/`): informa reservas a cancelar, señadas que se conservan, turnos fijos a dar de baja, el aviso sobre la conservación del contacto y el impedimento, si lo hay (último superadmin o dueño con contratos vigentes). No modifica nada.
+- **Baja de cuenta** (`DELETE /api/perfil/`), en una única transacción y antes de anonimizar:
+  - Las reservas por jugar en `1` y `2` pasan a `4` y liberan la grilla en `on_commit`.
+  - Las señadas (`3`) se conservan, con una copia del nombre y el teléfono del titular solo en esas filas.
+  - Los turnos fijos vigentes y pausados del titular pasan a baja lógica.
+  - El historial y las reservas de otros no se tocan.
+  - Cada cancelación y el resumen de la baja se auditan sin datos personales.
+- **Avisos al complejo** (`AvisoComplejoService`): uno urgente por las señadas conservadas y uno normal por los turnos fijos dados de baja, con ids y sin datos personales. Se entregan en `on_commit` con `robust=True`, así una falla no revierte la baja. Desde el punto 5.7.2 se entregan a la ruta interna de `backend-node`; si no se pueden entregar, quedan en el log del servidor (`core.avisos`).
+- **Contacto conservado de la seña:**
+  - **Agenda:** muestra la copia y nunca la cuenta anonimizada. Sin copia, el cliente figura como "Titular dado de baja".
+  - **Borrado al resolver:** la copia se borra cuando la reserva se resuelve (completada, ausente o cancelada por el complejo).
+  - **Plazo máximo:** `python manage.py purgar_contactos_de_bajas`, pensado para correr una vez por día, la borra cuando pasaron más de 30 días desde el turno aunque no se haya resuelto.
+- Pruebas de los puntos 4.7 y 4.8: 70 tests. Las suites de reservas, agenda, turnos fijos, conflictos y baja de cuenta pasaron también sobre PostgreSQL.
+
+## Notas del punto 4.9
+- **Confirmación explícita:** reapertura y cambio de horario usan el patrón de 4.7. Sin `confirmar: true` responden 409 con `requiere_confirmacion` y una vista previa; con `confirmar: true` se aplican. Los choques reales se validan primero, con la cancha bloqueada, y responden 409 sin opción de confirmar.
+- **Reapertura** (`POST /api/agenda/<id>/reabrir/`, `gestionar_agenda`, nunca el jugador):
+  - **Qué reabre:** una reserva cancelada (`4` o `5`) de un turno que todavía no empezó vuelve a `1`, `2` o `3`, conservando su precio.
+  - **Validación:** revalida el turno como un alta: grilla vigente, cancha y complejo disponibles, sin otra reserva, turno fijo ni excepción en el horario.
+  - **Cuentas dadas de baja:** sus reservas no se reabren.
+  - **Auditoría y difusión:** se audita como `RESERVA_CAMBIO_ESTADO` ("Reapertura") y se anuncia a la grilla. Funciona también con la fecha cancelada de un turno fijo.
+- **Cambio de horario de un turno fijo** (`PATCH` con `hora_inicio`):
+  - **Qué se cambia:** el día, la cancha y el inicio de la vigencia siguen fijos. El horario nuevo debe ser un turno de la grilla y `hora_fin` se recalcula.
+  - **Validación:** se revisan choques con otros turnos fijos y reservas en toda la vigencia; si el turno está pausado, al reanudarlo.
+  - **Vista previa:** informa el horario actual y el nuevo, desde qué fecha rige y las fechas ya registradas, que conservan el horario anterior.
+  - **Difusión:** el aviso a la grilla cubre el día completo, para refrescar el horario viejo y el nuevo.
+- **Excepciones y turnos fijos:**
+  - **Ya no bloquean:** una excepción no rechaza el alta, la reanudación, la extensión ni el cambio de horario de un turno fijo.
+  - **Fechas en espera:** las fechas que cubre quedan en espera (`fechas_en_espera` en listado y detalle, filtro `?en_espera=`), siguen ocupando la grilla y se deciden con `fechas/` y `accion` (`mantener` o `cancelar`).
+  - **Rendimiento:** el listado las calcula con dos consultas para toda la página.
+  - **Aviso:** una excepción nueva que deja fechas en espera genera un aviso urgente al complejo (`AvisoComplejoService`, que entrega a `backend-node` desde el punto 5.7).
+- Pruebas del punto 4.9 y del ajuste de la regla de confirmación: 59 tests (1211 en total). Las suites de negocio completas (653 tests) pasaron también sobre PostgreSQL.
+
+## Notas de optimización de la Fase 4
+- **Caché de la grilla pública** (`CacheGrillaService`): se cachea la parte que sale de la base, por complejo y fecha.
+  - **Vigencia:** la clave lleva una versión por complejo que `DifusionGrillaService` incrementa después de cada commit, antes de avisar por WebSocket, así un cambio confirmado nunca se sirve viejo. La versión se lee antes de calcular, de modo que un cálculo concurrente no se vuelve a servir.
+  - **Tiempo de vida:** 60 segundos, para cubrir los cambios que no pasan por la difusión (por ejemplo, el admin de Django).
+  - **Marcas del reloj:** las que dependen de la hora (`NO_DISPONIBLE`) se aplican en cada pedido, sobre la copia cacheada.
+  - **Si la caché falla:** la grilla se calcula directo de la base.
+  - **Efecto:** con N grillas abiertas, un evento cuesta un cálculo y N lecturas de caché, en lugar de N cálculos.
+- **Límite propio de la grilla** (`GrillaRateThrottle`, por IP): más amplio que el anónimo general, para no frenar a varios usuarios detrás de una misma IP que recargan con cada evento.
+- **Conflictos de la agenda en SQL** (`ReservaRepository.anotar_conflicto_operatoria`): un `Exists` sobre los rangos activos verifica día, rango, alineación y duración del turno. `?con_conflicto=` filtra en la base y la marca se anota en la misma consulta, sin cargar reservas en Python ni armar listas de ids. Un test de paridad compara la regla en SQL con la de Python en SQLite y PostgreSQL.
+- **Fechas en espera:** `?en_espera=` prefiltra en SQL los turnos fijos con alguna excepción que los alcanza y solo esos pasan por el cálculo exacto. El aviso de una excepción nueva calcula con esa excepción y los turnos que puede alcanzar.
+- **Validación de cambios de operatoria:** lee una sola vez las reservas, los turnos fijos y los horarios (antes, dos veces), y evalúa las dos configuraciones en memoria con los bloques válidos precalculados por día.
+- **Sin cambios, porque ya estaban acotados:** motor de reservas, cancelaciones, baja de cuenta, depuración diaria y WebSocket. Los índices existentes cubren las consultas nuevas y no hizo falta migración.
+- Pruebas de la optimización: 15 tests (1226 en total). Las suites de negocio (668 tests) pasaron también sobre PostgreSQL.
+
+## Notas del bloque 6.0 y de los puntos 6.4.1 y 6.5.1
+- **Parámetros de Django (`config/settings.py`):**
+  - **Lectura estricta:** los helpers `_env_entero` y `_env_tasa` cortan el arranque con el nombre de la variable cuando el valor no es un entero, está fuera de rango o no tiene el formato `cantidad/período`. Los valores por defecto son los que regían antes.
+  - **Cuándo se leen:** los módulos consultan `settings.X` en el momento de uso, no al importar, así las pruebas ajustan un parámetro con `override_settings`. `config/settings_test.py` fija los valores por defecto para que las pruebas no dependan del `.env` local.
+  - **Qué se centralizó:** tasas de login, reservas y grilla, proxies de confianza, anticipación máxima de reserva, rango máximo de días (una sola regla para excepciones y reportes), caché de la grilla, tiempo máximo hacia `backend-node`, conservación de contactos de bajas, límites de cuerpo, tiempo de la caché y capacidad y vencimientos de la capa de canales.
+- **Proxies de confianza:** `NUM_PROXIES` tiene `0` por defecto. Antes no estaba definido y DRF tomaba entero el encabezado `X-Forwarded-For` enviado por el cliente, que podía rotarlo para esquivar los límites por IP. Con `0` se usa la IP de la conexión, igual que la auditoría y `backend-node`. Detrás de nginx se define en `1`.
+- **Límite de cuerpo:** `DATA_UPLOAD_MAX_MEMORY_SIZE` solo rige cuando Django lee el cuerpo completo; los JSON de DRF llegan como flujo. El tope efectivo en producción es el del proxy (7.2).
+- **Largos y límites compartidos:** `core/models.py` declara una vez los largos de nombre, email, teléfono, dirección, aviso de seña, nombre de cancha, texto libre, acción de auditoría y contraseña, las coordenadas máximas y el margen de cancelación (`HORAS_CANCELACION_DEFECTO` y `HORAS_CANCELACION_MAXIMAS`). Modelos y serializers los importan; no hubo migraciones.
+- **Retención de IPs (`anonimizar_ips_auditoria`):**
+  - **Qué hace:** anonimiza `ip_origen` de los registros con más de `AUDITORIA_RETENCION_MESES` meses (12 por defecto) y conserva el evento, la fecha y el `usuario_id`. Es una modificación y no un borrado.
+  - **Frecuencia:** idempotente; una segunda corrida no cambia nada. Está pensado para correr una vez por mes.
+  - **Limitación:** `security.log` conserva las IPs hasta que la rotación de archivos las descarta; no se purga por fecha.
+- **Marcadores del mapa (`GET /api/complejos/marcadores/`):**
+  - **Reglas:** es público, ignora el encabezado `Authorization` y no pagina. Reutiliza `CatalogoComplejoFilter`, la búsqueda y el orden del listado y el mismo criterio de visibilidad (contrato activo y sin baja lógica).
+  - **Rendimiento y límite:** una sola consulta, con `precio_desde` como subconsulta y sin cargar servicios ni canchas. El tope `CATALOGO_MARCADORES_MAXIMO` (500) acota la respuesta.
+  - **Datos expuestos:** devuelve `id`, `nombre`, `latitud`, `longitud` y `precio_desde`, sin propietario ni contacto.
+- **Parámetros de Node (`src/config/parametros.js`):**
+  - **Validación:** `leerParametros(entorno)` valida cada variable con rango y valor por defecto. Un valor inválido corta el arranque con el nombre de la variable en lugar de caer al valor por defecto. Importar el módulo no lee el entorno: `obtenerParametros()` lo lee al usarlo.
+  - **Reglas fijas:** `LIMITES` agrupa tamaño de página y máximo, días de pronóstico, largo máximo del mensaje, bytes de `metadata` y largo mínimo de la clave interna. Los tamaños de página no se ajustan por entorno porque el frontend los replica.
+  - **Lectura por uso:** los secretos y direcciones (`JWT_SIGNING_KEY`, `INTERNAL_API_KEY`, `DJANGO_API_URL`, `MONGO_URI` y `CORS_ALLOWED_ORIGINS`) siguen leyéndose al usarlos.
+- **Filtros de notificaciones:**
+  - **Alcance:** `categoria`, `prioridad` y `estado` en `GET /api/actividad/notificaciones` y en `/mias`. Se combinan con la paginación y sus enlaces `next` y `previous` los conservan.
+  - **Estados:** `estado` admite solo `1` y `2`; la baja lógica no se lista por ninguna vía.
+  - **Índices:** no se agregaron. El filtro se aplica sobre el rango que ya recorre el índice de bandeja.
+- **Licencias del frontend:** el mapa usa Leaflet directamente, con un envoltorio propio de React. `react-leaflet` se publica con una licencia que no es permisiva (Hippocratic-2.1), por lo que queda fuera de las dependencias admitidas.
+- Pruebas del bloque 6.0 y de los puntos 6.4.1 y 6.5.1: 148 tests nuevos en Django (1618 en total, de los cuales 5 de concurrencia se saltean sobre SQLite) y 97 en Node (457 en total).
+
+## Notas de los puntos 6.1.1 a 6.1.3
+- **Base:** Vite 8 y React 19, con `react-router-dom`, `axios`, `bootstrap`, `react-bootstrap` y `leaflet` (sin `react-leaflet`). Vitest se usa solo para funciones puras. Todas las dependencias directas tienen licencia permisiva y `npm audit` de producción no reporta vulnerabilidades.
+- **CI:** el job `frontend` corre `npm ci`, auditoría de producción, `npm run lint`, `npm test` y `npm run build`.
+- **Bloques del build:** React y Leaflet tienen bloques propios; el mapa, cuando exista, no se descarga hasta abrirlo.
+- **Tema:** `styles/tema.css` es la única fuente de colores, tipografía y estados de la grilla. Redefine las variables de los componentes de Bootstrap con color de marca, sin Sass, y define los cinco estados de casillero (`libre`, `ocupado`, `excepcion`, `seleccionado` y `no-disponible`) por fondo, tipo de borde y tipografía.
+- **Tipografía:** Barlow Semi Condensed (SIL OFL 1.1) en pesos 500, 600 y 700, autoalojada en `public/fonts/` con su `OFL.txt`. No se carga nada desde servidores de terceros. El cuerpo usa la pila sans-serif del sistema.
+- **Logo provisorio:** `scripts/generar-iconos.mjs` (`npm run iconos`) dibuja una "T" geométrica sobre el verde de marca y escribe `logo.svg`, `favicon.svg` y los PNG de la PWA en `public/icons/`, sin librerías ni imágenes de terceros. Para usar el logo definitivo alcanza con sobrescribir esos archivos con los mismos nombres y tamaños.
+- **Carga:** `Cargando.jsx` es el único componente que conoce el indicador visual. `BotonAccion` bloquea el doble envío y `useConsulta` cancela la petición anterior con `AbortController`.
+- **Paginador:** la ventana de 5 páginas es una función pura (`utils/paginacion.js`) y el componente oculta "Anterior" en la primera página y "Siguiente" en la última.
+- **Guía visual:** la ruta `/guia` existe solo en desarrollo; en el build de producción no se incluye.
+- **Pruebas del frontend:** 64 tests de Vitest (`t()`, formatos y ventana del paginador).
+
+## Notas de los puntos 6.1.4 a 6.1.6
+- **Capa de red (`services/api.js`, archivo protegido):**
+  - **Instancias:** `apiDjango` y `apiNode` leen URLs y tiempos máximos de `config/parametros.js`.
+  - **Credenciales:** solo las rutas `/api/token/` de Django llevan `withCredentials`, y esas rutas viajan sin `Authorization` (un access vencido haría fallar el login). `apiNode` no envía credenciales.
+  - **Refresh:** ante un 401 con sesión, una única promesa compartida pide el access nuevo y la petición se reintenta una vez. Si el refresh falla, la sesión en memoria se limpia y se informa el 401 original. Las peticiones canceladas pasan sin tocarse.
+  - **Errores:** todo error llega como `ErrorApi` con `status` (0 si no hubo respuesta), `mensaje` en español, `campos` por campo y `extra` con el resto del cuerpo (`conflictos`, `requiere_confirmacion`). Los 429 y los 5xx usan un mensaje general; el resto muestra el texto del backend.
+- **Sesión (`services/authService.js`, `hooks/useSesion.js`):** el access vive solo en memoria; el rol y el id se leen del payload del JWT sin verificar la firma, solo para navegar. Al abrir la app se pide un access con la cookie y luego el perfil. `useSesion` usa `useSyncExternalStore`, sin Context.
+- **Login y registro:** el registro inicia la sesión al terminar; si eso falla, lleva a `/login` con un aviso. La casilla de la política nunca viene marcada. Tras iniciar sesión se vuelve a la ruta de origen o a la pantalla inicial del rol (jugador `/`, dueño y operador `/panel`, superadmin `/sistema`).
+- **Política de privacidad:** `Privacidad.jsx` incluye responsable, finalidades, destinatarios, proveedores (también OpenStreetMap, que recibe la IP de quien abre el mapa), plazos, derechos con sus plazos y la leyenda de la AAIP. `AceptarPolitica.jsx` bloquea las pantallas hasta aceptar la versión vigente y no aparece en `/privacidad` ni en `/perfil`.
+- **Rutas privadas:** `ProtectedRoute` espera la sesión inicial, lleva a `/login` guardando el origen y valida el rol contra `catalogos.js`.- **Pruebas del frontend:** 120 tests de Vitest en total (56 nuevos: decodificación del JWT y normalización de errores de Django y de Node).
+
+## Notas de los puntos 6.2.1 a 6.2.5
+- **Catálogo (`Catalogo.jsx`, `ComplejoCard.jsx`):** portada pública en `/`. La lista crece con "Mostrar más" de a 20 (`hooks/useListaIncremental`), sin descargar la colección completa; una página siguiente que falla conserva lo ya cargado y ofrece reintentar. Estados de carga, vacío (con o sin filtros) y error con reintento.
+- **Filtros (`FiltrosCatalogo.jsx`, `utils/filtrosCatalogo.js`):** deporte, cobertura, servicios (selección múltiple, un parámetro `servicio` por cada uno), búsqueda por texto con pausa al escribir y orden. Viven en la URL: el enlace filtrado se comparte, y un valor inválido escrito a mano se descarta antes de consultar. En móvil se pliegan en un panel con controles de 44 px y "Limpiar filtros". Si los catálogos de deportes o servicios fallan, el catálogo sigue funcionando sin esos controles.
+- **Detalle (`ComplejoDetalle.jsx`, `CanchaCard.jsx`, `ClimaCard.jsx`):** datos comerciales, condiciones de seña, margen de cancelación, servicios y canchas activas. Un complejo sin contrato activo (404) o un id inválido muestra un estado claro de no encontrado. La visita se informa a Node en segundo plano, una vez por pantalla, y nunca muestra errores. El clima se ve en la portada, en la ficha, junto al selector de fecha y en el resumen del turno (`ClimaCard.jsx`, con las variantes `compacto`, `detalle` y `dia`): mientras carga muestra el indicador y, si Node o el proveedor fallan, un aviso discreto con "Reintentar" en el mismo lugar. Lleva siempre la atribución a Open-Meteo.com (CC BY 4.0).
+- **Grilla del día (`GrillaDia.jsx`, `CasilleroGrilla.jsx`, `ResumenTurno.jsx`):** selector de fecha con mínimo hoy y botones de día anterior y siguiente, sin desfasajes por UTC. Los cinco estados del casillero salen de `tema.css`. La consulta anterior se cancela al cambiar de día. Se informa un evento de grilla consultada por cada fecha que llega, no por las recargas en vivo. La elección de un turno libre muestra su resumen; si una actualización lo ocupa, la elección se limpia con un aviso. El botón "Reservar" abre el flujo de reserva (6.2.6).
+- **Tiempo real (`wsService.js`, `hooks/useDisponibilidadEnVivo.js`, `utils/tiempoReal.js`):** el token viaja solo si hay sesión. Reconexión con espera exponencial y jitter; los eventos que no afectan la fecha ni las canchas visibles se descartan; los cercanos se agrupan en una sola recarga REST (ventana de 1 s) y se recarga también al reconectar tras un corte. Si la recarga responde 404 (complejo suspendido o dado de baja) se cierra el canal y no se reintenta. Al salir de la pantalla o cambiar de complejo la conexión se cierra.
+- **Estructura de la interfaz:** las páginas son contenedores de orquestación (hooks, servicios y estado) y toda pieza de interfaz es un componente reutilizable: `CampoFormulario`, `FormularioLogin`, `FormularioRegistro`, `EstadoVacio`, `AlertaReintento`, `HeroPresentacion`, `ListaComplejos`, `EncabezadoComplejo`, `FichaComplejo`, `SeccionCanchas`, `SeccionTurnos`, `SelectorFechaGrilla`, `GrillaCancha`, `ClimaCard`, `BotonVolver` y `PoliticaPrivacidad`. `Login`, `Registro`, `Catalogo`, `ComplejoDetalle` y `Privacidad` se redujeron a su orquestación.
+- **Navegación:** los filtros y la búsqueda reemplazan la entrada del historial, así "Atrás" vuelve a la pantalla anterior y no filtro por filtro. `BotonVolver` retrocede en el historial si la persona llegó navegando por la aplicación (el catálogo conserva sus filtros) y, si abrió el enlace directo, va al catálogo. La barra superior muestra sus secciones como bloques separados, con resalte al pasar y en la sección activa, y suma el acceso a Inicio.
+- **Textos y parámetros:** nuevas secciones de `i18n/es.js` (`catalogo`, `filtros`, `tarjeta`, `complejo`, `cancha`, `clima`, `grilla`); demora de la búsqueda, servicios por tarjeta y atribución del clima en `config/parametros.js`; órdenes y tipos de evento en `config/catalogos.js`.
+- **Pruebas del frontend:** 157 tests de Vitest en total (37 nuevos: filtros y su ida y vuelta con la URL, espera con backoff y jitter, dirección del canal, filtro de eventos por fecha y cancha, pronóstico de una fecha, suma de días, temperatura y día corto).
+
+## Notas de los puntos 6.2.6 a 6.2.8
+- **Reserva (`hooks/useReservaTurno.js`, `ModalReservar.jsx`, `AvisoReserva.jsx`, `services/reservaService.js`):** "Reservar" sin sesión lleva a `/login` guardando complejo, fecha, cancha y horario en la ruta de origen (`utils/retornoReserva.js`); al volver, la elección se restaura y la confirmación se reabre sola si el turno sigue libre, y los parámetros se quitan de la URL. Un valor manipulado en la URL se descarta. El enlace "Crear una cuenta" del login conserva el mismo origen. Con sesión, la confirmación muestra cancha, fecha, horario, precio, pronóstico del día (si entra en la ventana del clima), condiciones de seña y margen de cancelación; `BotonAccion` impide el doble envío. Los roles que no reservan por la web (dueño y operador) ven el botón deshabilitado con el motivo.
+- **Resultados de la reserva:** `201` recarga la grilla y muestra el aviso con acceso a "Mis reservas"; `409` informa que el turno acaba de ocuparse (con el motivo del servidor), limpia la selección y recarga la grilla; `400` y `429` se muestran dentro de la confirmación sin cerrarla. Si el turno se ocupa en vivo con la confirmación abierta, esta se cierra sola.
+- **Mis reservas (`MisReservas.jsx`, `ReservaRow.jsx`, `ListaReservas.jsx`, `PestanasReservas.jsx`, `ModalCancelarReserva.jsx`):** pestañas "Próximas" e "Historial" (parámetro `vigencia`, guardado en la URL con `replace`), lista incremental con "Mostrar más", orden ascendente en las próximas y descendente en el historial. Cada fila muestra complejo con enlace a su ficha, cancha, deporte, fecha, horario, precio y estado. La cancelación se ofrece solo en estados `1`, `2` y `3` mientras no venza `cancelable_hasta` (`utils/reservas.js`); vencido el margen, la fila lo explica y muestra el teléfono del complejo, que se consulta a la ficha pública porque la reserva no lo trae. El servidor valida igual: un `400` queda dentro del diálogo y recarga la lista.
+- **Perfil (`Perfil.jsx`, `FormularioPerfil.jsx`, `SeccionBajaCuenta.jsx`, `ModalBajaCuenta.jsx`, `hooks/useBajaCuenta.js`):** edición de nombre y teléfono con errores por campo; el correo se muestra sin poder editarse. La baja consulta primero `GET /api/perfil/baja/` y muestra cuántas reservas por jugar se cancelan, cuántas señadas o pagadas se conservan (con el plazo de resguardo de nombre y teléfono) y cuántos turnos fijos se dan de baja; si el servidor informa un `impedimento`, lo muestra y no permite confirmar. Solo la confirmación expresa ejecuta `DELETE /api/perfil/`, limpia la sesión en memoria y lleva a `/` con un aviso.
+- **Aviso previo de cancelación (`AvisoSinCancelacion.jsx`, `utils/reservas.js`):** al elegir un turno que ya está dentro del margen de cancelación del complejo (faltan `horas_limite_cancelacion` horas o menos), el resumen y la confirmación advierten que, una vez reservado, solo el complejo puede cancelarlo.
+- **Elección de la cancha (`SeccionCanchas.jsx`, `CanchaCard.jsx`, `hooks/useCanchaElegida.js`):** la reserva es en dos pasos. Las canchas son tarjetas elegibles (`role="button"`, `aria-pressed`, borde verde de 2 px y la marca "Cancha seleccionada") y debajo se muestran el selector de fecha, el resumen de esa cancha y solo su grilla. Con una sola cancha activa queda elegida por defecto; `?cancha=<id>` del retorno desde el login la preselecciona; al cambiar de cancha se limpia el casillero elegido.
+- **Menú móvil y carga entre pantallas (`Layout.jsx`, `Cargando.jsx`):** el botón del menú es verde, con tres barras que se transforman en una X; el límite de `Suspense` vive dentro de `Layout`, así la barra y el menú no se desmontan al cargar una pantalla diferida, y la variante `superpuesto` de `Cargando` aparece con una demora de 150 ms. Su indicador (`IndicadorTransicion`) está separado del de botones y secciones.
+- **Fechas:** `formatearFechaLarga` y `formatearDiaCorto` devuelven solo la primera letra en mayúscula ("Jueves, 12 de noviembre"); ninguna clase de CSS capitaliza fechas.
+- **Barra superior (`Layout.jsx`, `tema.css`):** en escritorio, tres zonas en grilla (marca, secciones centradas en una botonera segmentada y sesión); en móvil, panel flotante anclado bajo el botón del menú, con elementos de 44 px, que se cierra al elegir una sección, al tocar fuera o con Escape.
+- **Salida de la sesión:** `authService` marca la salida deliberada (`cierre`) y `ProtectedRoute` lleva directo a `/` con el aviso, sin pasar por `/login` ni dejar esa entrada en el historial.
+- **Evento de reserva realizada:** el cliente no lo informa a `backend-node`. Lo emite Django al confirmar la reserva por la ruta interna, y la ruta pública de Node rechaza el tipo `3` a propósito: aceptarlo permitiría inflar las métricas de un complejo con reservas inexistentes y duplicaría el registro.
+- **Observaciones de la reserva:** la confirmación no pide observaciones porque la API de alta del jugador no las recibe (las observaciones son internas del complejo). Sumarlas exige cambiar el contrato y declarar el dato en la tabla de datos personales antes de implementarlo.
+- **Componentes y hooks nuevos:** `DatosTurno` (compartido por el resumen y la confirmación), `EncabezadoPantalla`, `ContactoComplejo`, `useCancelarReserva`, `useAvisoDeNavegacion` y `useSeleccionTurno` con elección inicial. `ModalConfirmar` suma `confirmarDeshabilitado`. `/mis-reservas` y `/perfil` dejaron de ser pantallas provisorias.
+- **Pruebas del frontend:** 194 tests de Vitest en total (37 nuevos: descripción de la cancha con el catálogo de códigos, estado de cancelación según estado y margen, aviso previo de cancelación, ida y vuelta del turno a retomar con descarte de valores manipulados, ruta de retorno del login, formato de instantes y mayúsculas de las fechas).
+
+## Notas de los puntos 6.3.5 a 6.3.9
+- **Agenda (`Agenda.jsx`, `hooks/useAgenda.js`, `utils/agenda.js`):** lista paginada de `GET /api/agenda/` con filtros por día (abre en hoy), cancha, estado y reservas con conflicto de operatoria. Cada fila muestra turno, cliente con su contacto, origen, precio, estado, observaciones y las acciones que admite su estado. El alta manual (telefónica o presencial) exige cancha, día, hora de inicio y nombre; el fin y el precio los calcula el servidor. Las transiciones de estado replican las del backend y ausente o completada solo se ofrecen con el turno iniciado; el servidor valida igual.
+- **Cancelación y reapertura:** cancelar pide confirmación y libera el turno. Reabrir elige el estado de vuelta, deja que el servidor revalide el turno y, si está libre, muestra su vista previa (`409` con `requiere_confirmacion`) en `ConfirmarConflicto` antes de ocupar de nuevo el casillero. Un turno tomado, cerrado o fuera de la grilla es un conflicto real y su mensaje se muestra en el diálogo.
+- **Turnos fijos (`SeccionTurnosFijos.jsx`, `hooks/useTurnosFijos.js`, `services/turnoFijoService.js`):** pestaña de la agenda (`?vista=turnos-fijos`, con `replace`) con alta, pausa, reanudación, baja, filtros por cancha, estado y día, y edición del horario de inicio y del fin de la vigencia. El cambio de horario muestra la vista previa (horario actual y nuevo, desde cuándo rige y fechas ya registradas, que conservan el anterior) antes de aplicarse. Las próximas fechas del turno se llevan a la agenda con `mantener` o `cancelar`.
+- **Fechas en espera por excepción (`BandejaFechasEnEspera.jsx`):** `GET /api/turnos-fijos/?en_espera=true` aplanado en una fila por fecha, con el motivo de la excepción y las decisiones mantener o cancelar (cada una con confirmación). La bandeja no aparece si no hay nada pendiente.
+- **Reportes (`Reportes.jsx`, `hooks/useReporte.js`, `utils/reportes.js`):** rango de fechas obligatorio (máximo 366 días, validado antes de consultar), criterio de fecha, cancha y deporte, que se aplican con "Consultar". Resumen de recaudación, señas, reservas del rango y tasa de cancelación; desglose por estado, ocupación por cancha y ranking de horarios como barras proporcionales de CSS puro, sin librerías de gráficos. Las visitas al perfil vienen de `backend-node` en una consulta aparte: si falla, solo esa tarjeta lo informa y ofrece reintentar.
+- **Sistema (`LayoutSistema.jsx`, `PanelSistema.jsx`, `Contratos.jsx`, `Auditoria.jsx`):** `/sistema` (usuarios), `/sistema/contratos` y `/sistema/auditoria` comparten la subnavegación. Contratos lista con búsqueda, estado y orden, da de alta un complejo con su contrato y propietario (búsqueda de dueños activos con pausa al escribir) y cambia el estado del contrato; activar uno con el propietario inactivo lo rechaza el backend y el motivo queda en el diálogo.
+- **Usuarios y auditoría:** edición de nombre, teléfono, rol, complejo operado (solo si el rol es operador) y estado, con las restricciones del backend (último superadministrador activo, dueño con contratos vigentes) mostradas tal cual. La auditoría filtra por tipo, usuario (por id), complejo, IP y rango de fechas, e identifica al titular solo por `usuario_id`.
+- **Reutilización:** `BarraFiltros` y `useFiltrosAplicables` (filtros con borrador), `useConfirmacion`, `ListaBarras`, `CamposComplejo` (compartido con la configuración del complejo) y `VistaPreviaCambio`. `ConfirmarConflicto` suma `titulo`, `textoConfirmar`, `aclaracion`, `mostrarMensaje` e hijos para la vista previa.
+- **Fechas `dd/mm/aaaa` (`CampoFecha.jsx`):** todos los selectores de fecha muestran el valor como `dd/mm/aaaa` con máscara y un botón de calendario que abre el selector nativo (oculto) con `showPicker()`, de modo que nunca aparece `mm/dd/yyyy` según el idioma del navegador. `CampoFormulario` con `type="date"` y `SelectorFechaGrilla` delegan en él; hacia la API la fecha sigue siendo `AAAA-MM-DD`. Las fechas cortas de tablas y avisos se arman por partes en `utils/formatos.js`.
+- **Horarios sin minutos libres:** el alta manual de la agenda elige el horario en una mini-grilla de la cancha y el día (`SelectorSlotCancha`, con la grilla real y el canal de disponibilidad en vivo); el alta y el cambio de horario de un turno fijo eligen entre los bloques que arman los horarios de apertura de la cancha ese día y su duración de turno (`bloquesDeHorarios`, `SelectorBloquesHorarios`).
+- **Sistema:** la tabla de contratos muestra el id del complejo en lugar del límite de cancelación; la de usuarios suma la columna de id. La ficha de una cuenta se abre en modo consulta y recién con "Habilitar edición" permite modificarla. En la auditoría, `Usuario #<id>` muestra un resumen al pasar el mouse (nombre, rol, estado y complejo, consultado una vez por id) y enlaza a `/sistema?verUsuario=<id>`, que abre la ficha en modo consulta.
+- **Pantallas de estado:** `PantallaEstado` muestra el acceso restringido por rol y la página no encontrada con emblema, explicación y botón centrado para volver al inicio. La guía visual dejó de figurar en la navegación (en desarrollo sigue accesible en `/guia`).
+- **Pruebas del frontend:** 330 tests de Vitest en total (80 nuevos: parámetros y transiciones de la agenda, validación del alta manual, próximas fechas y bloques horarios de un turno fijo, filas de espera, rango y métricas del reporte, barras proporcionales, parámetros y validaciones de contratos, usuarios y auditoría, id de usuario en la ruta, y formatos de fecha `dd/mm/aaaa`, máscara, enteros y porcentajes).
+
+## Notas de los puntos 6.4.2 a 6.4.4
+- **Mapa (`MapaComplejos.jsx`, `VistaMapa.jsx`, `utils/mapa.js`):** Leaflet directo, sin `react-leaflet`, con una instancia por montaje que se destruye al desmontar, una pila de teselas que cambia con la capa elegida y una capa de marcadores que se rehace cuando cambia la lista. El popup se arma con nodos del DOM y `textContent` (el nombre viene de la API, nunca se inyecta HTML) y lleva el nombre, el precio mínimo (`Desde $X por turno` o "Sin precio cargado") y un enlace con `href` real a `/complejos/:id`: el clic simple navega dentro de la aplicación y los clics con tecla modificadora los resuelve el navegador.
+- **Limitado a Goya:** `PARAMETROS.mapa.limites` se aplica como `maxBounds` (viscosidad 0,9) y `zoomMinimo` 13 impide alejarse del área urbana y periurbana; el zoom máximo es 19. Los complejos con coordenadas fuera de ese rectángulo no se dibujan. El botón flotante "Centrar en Goya" devuelve la vista al centro y zoom iniciales.
+- **Capas `Mapa` | `Satélite`:** conmutador flotante arriba a la derecha (`ControlCapasMapa`). `Mapa` (por defecto) usa Esri World Street Map, que muestra calles y manzanas con sus nombres sin comercios ajenos. `Satélite` usa Esri World Imagery con los nombres de calles de Esri encima. Ambas se piden sin clave. Cada capa lleva sus atribuciones (Esri y OpenStreetMap, con la licencia en el `title`) y Esri figura en la política de privacidad, porque recibe la IP de quien abre el mapa. Se descartó CARTO porque sus teselas exigen clave de API.
+- **Marcadores y etiquetas:** `L.divIcon` con un pin verde de marca, borde blanco, punto central blanco y sombra de elevación, con efectos de `:hover`, foco y estado activo con el popup abierto. Desde el zoom 15 (`zoomEtiquetasVisibles`) cada marcador muestra siempre una píldora con el nombre y `desde $X`, mediante una clase que se alterna en `zoomend`; con el mapa más lejos solo se ve el pin. El popup es una tarjeta con franja verde de marca, el precio destacado y el botón "Ver turnos" de ancho completo; los controles de Leaflet usan la superficie, los bordes de 6 px y la tipografía del tema.
+- **Carga diferida:** `VistaMapa` importa `MapaComplejos` con `React.lazy`, y el CSS de Leaflet se importa dentro de ese módulo, de modo que el bloque `leaflet` y su hoja de estilos solo se descargan al abrir la vista de mapa. La vista de lista no los pide.
+- **Catálogo (`Catalogo.jsx`, `SelectorVistaCatalogo.jsx`):** conmutador Lista / Mapa. La vista vive en la URL (`?vista=mapa`; la lista es el origen y no se escribe), se conserva al cambiar filtros y se actualiza con `replace`, así "Atrás" no la apila. Los puntos se piden a `GET /api/complejos/marcadores/` con los mismos filtros del catálogo, solo en la vista de mapa. Mientras llegan los de un filtro nuevo el mapa sigue montado con los anteriores. Estados: carga, error con reintento, y vacío con o sin filtros cuando ningún complejo tiene coordenadas válidas (`armarMarcadores` descarta las inválidas).
+- **Accesibilidad y táctil:** marcadores de 44 px operables con teclado (Leaflet les da foco y Enter abre el popup), botones del conmutador de vistas, del de capas y de "Centrar en Goya" de 44 px y controles de zoom de 44 px en pantallas táctiles. El contenedor del mapa crea su propio contexto de apilado para que los controles de Leaflet no pasen por encima de la barra superior ni de los modales.
+- **Manifiesto (`public/manifest.json`):** `name`, `short_name` (`TaLibre`), `start_url` y `scope` en `/`, `display: standalone`, `lang: es-AR`, `background_color` `#15803d`, `theme_color` `#0f172a` y los íconos de `/icons/` de 192 y 512 px más el maskable. `index.html` suma el enlace al manifiesto, `theme-color`, los metadatos de iOS y de Android y el `apple-touch-icon`.
+- **Service worker (`public/sw.js`):** escrito a mano, sin Workbox. Guarda la cáscara (`index.html`, manifiesto e íconos) y los recursos estáticos propios: `/assets/` con hash (primero el caché), y `/icons/`, `/fonts/` y el manifiesto (sirve lo guardado y renueva en segundo plano). La navegación es red primero, con caída al `index.html` guardado sin conexión, y cada navegación exitosa renueva la cáscara solo si el HTML contiene la raíz de la aplicación. Nunca interviene en `/api/`, `/ws/`, métodos distintos de `GET`, peticiones con `Authorization` o `Range`, ni orígenes externos (teselas, Open-Meteo, `backend-node`), así que ninguna respuesta autenticada ni dato personal llega a Cache Storage. En `activate` borra los cachés `talibre-*` de versiones anteriores (se sube `VERSION` al cambiar la estrategia).
+- **Registro (`utils/serviceWorker.js`):** solo con `import.meta.env.PROD` y después de `load`, para no interferir con el HMR de Vite ni competir con la carga inicial. Un fallo del registro no afecta a la aplicación.
+- **Invitación a instalar (`BannerInstalarPWA.jsx`, `hooks/useInstalacionPwa.js`, `utils/pwa.js`):** el estado se guarda a nivel de módulo, porque `beforeinstallprompt` se emite una sola vez y `Layout` se desmonta al cambiar de plantilla. En Chromium y Android muestra "Instalar aplicación", que dispara `prompt()`, y se oculta al instalar (`appinstalled`) o al descartar. En iOS (navegador común, no incrustado en otra app) muestra la indicación manual Compartir y Agregar a pantalla de inicio. No aparece con la aplicación ya instalada (`display-mode: standalone` o `navigator.standalone`) ni después de cerrarlo; la preferencia de cierre es la única que se guarda en `localStorage`, dentro de `try/catch`, sin datos de la sesión.
+- **Requisitos de compatibilidad:** el service worker y la instalación exigen contexto seguro (HTTPS; `localhost` está exceptuado). Para probar en un teléfono antes del despliegue hace falta reenvío de puertos por USB o un túnel HTTPS.
+- **Pruebas del frontend:** 361 tests de Vitest en total (31 nuevos: validación, límites de Goya y encuadre de marcadores, atribuciones escapadas por capa, ruta y clic simple del popup, lectura de la vista en la URL, detección de iOS y de navegadores incrustados, modo instalada y modo del banner). `npm run lint` y `npm run build` sin errores; el bloque `leaflet` no figura en la carga inicial.
+
+## Notas de los puntos 6.5.2 a 6.5.4
+- **Servicio (`services/notificacionService.js`):** consume `GET /api/actividad/notificaciones/mias`, `GET /api/actividad/notificaciones?complejo_id=` y `PATCH /api/actividad/notificaciones/<id>` con `{ "estado": 2 }` contra `apiNode`. Normaliza `id` o `_id` y la página `{ count, next, previous, results }`.
+- **Campana (`CampanaNotificaciones.jsx`, `hooks/useContadorNotificaciones.js`):** en la zona de sesión de la barra, reemplaza al enlace de texto. Cuenta con `mias?estado=1&limit=1` leyendo `count`, sondea cada `PARAMETROS.notificaciones.sondeoMs`, se pausa con la pestaña oculta y se refresca al volver a verla. Falla en silencio si Node no responde. Al marcar una notificación como leída descuenta en el acto (`utils/avisosNotificaciones.js`) y confirma con el servidor. Badge con `.num` y tope `99+` (`PARAMETROS.notificaciones.contadorMaximo`); se resalta en `/notificaciones`.
+- **Bandeja personal (`pages/Notificaciones.jsx`):** filtros de estado, prioridad y categoría en la URL con `replace`, y lista con "Mostrar más". `NotificacionRow` muestra categoría, prioridad (la urgente con borde lateral y etiqueta), mensaje, fecha y hora, y "Marcar como leída" con `BotonAccion`.
+- **Bandeja del complejo (reemplazada en 6.5.5 por el registro del complejo, `pages/RegistroComplejo.jsx` en `/panel/registro`, sin estado de lectura; `/panel/notificaciones` redirige):** bloque `AvisosUrgentes` (`prioridad=2&estado=1`) arriba, pestañas por categoría y filtro de estado debajo. Marcar un aviso lo actualiza en las dos listas.
+- **Listas sin recarga (`hooks/useBandejaNotificaciones.js`):** la notificación marcada pasa a leída en el acto o se oculta si la bandeja muestra solo no leídas; con páginas pendientes se vuelve a pedir la primera, porque las filas que salen del servidor correrían las páginas siguientes.
+- **Retiro de lo provisorio:** `Provisoria.jsx` y su texto se eliminaron, porque `/notificaciones` era la última ruta que lo usaba.
+- **Auditoría transversal de `frontend/src/`:** sin `dangerouslySetInnerHTML`; `localStorage` solo para el cierre del banner de instalación; sin `console` con datos (solo el aviso de clave de texto faltante, en desarrollo); sin colores fuera de `styles/tema.css`; textos fuera de `i18n/es.js` solo en `GuiaVisual.jsx`. `ComplejoNoEncontrado` pasó de `pages/ComplejoDetalle.jsx` a `components/`.
+- **Versión:** `PARAMETROS.app.version` pasa a `0.6.5`.
+- **Pruebas:** 386 tests de Vitest en total (25 nuevos: filtros y URL, parámetros de la API, normalización, marcadas como leídas, contador, tope del badge, pausa del sondeo, estados vacíos y canal de avisos). `npm run lint` y `npm run build` sin errores. Sin cambios en los backends: Django 1613 pasados y 5 salteados de concurrencia, `manage.py check` sin observaciones, Node 457 pasados.
+
+## Notas de las notificaciones personales por rol (5.7.4 y 6.5.5)
+- **Destinatarios (`DestinatariosService`):** cada aviso va a la bandeja personal (`usuario_id`) de quien corresponde. El personal de un complejo es su propietario más los operadores activos que lo operan; de ellos reciben el aviso los que tienen el permiso del tipo de aviso (`ver_agenda` para reservas y turnos fijos, `ver_excepciones` para excepciones). Lo comercial y de titularidad llega solo al propietario si su rol tiene `configurar_complejo`, `administrar_precios` o `ver_operadores`. Los superadministradores activos reciben lo del sistema. Quien realizó la acción no se avisa a sí mismo, salvo en los avisos que piden una decisión (fechas en espera, conflictos de horarios, seña retenida). Un usuario suspendido, dado de baja o sin el permiso no recibe nada.
+- **Entrega (`AvisoComplejoService`):** `al_usuario`, `al_personal`, `al_dueno` y `a_superadmins` programan el aviso con `transaction.on_commit`. Los mensajes de un complejo empiezan con su nombre y nunca llevan emails, teléfonos ni nombres de personas: solo ids, turnos y cantidades. Si una reserva web se registra y el complejo no tiene a quién avisar, el evento de reserva realizada viaja igual, para no perder la actividad.
+- **Estados de la reserva:** confirmada, señada, completada y ausente avisan al jugador cada una con su mensaje. El aviso de reserva pagada (`_avisar_reserva_pagada`) ya está separado del de señada y probado; mientras el estado `3` siga siendo uno solo se emite el de señada, y al separarlo en dos estados alcanza con registrar el nuevo en `_avisar_estado_al_titular`.
+- **Recordatorios (`RecordatorioService`):** avisan el turno de reservas pendientes, confirmadas o señadas que empiezan dentro de `RECORDATORIO_HORAS_ANTICIPACION` horas (24 por defecto). Se emiten con `python manage.py emitir_recordatorios_reservas` (apto para cron) y, sin cron, cuando el jugador consulta sus reservas o la grilla de un complejo, como mucho una vez cada `RECORDATORIO_VERIFICACION_SEGUNDOS`; esa entrega va en segundo plano para no demorar la consulta y una falla nunca rompe la respuesta. La repetición no duplica avisos: cada recordatorio lleva la clave `recordatorio-reserva-<id>` y Node la descarta si ese usuario ya la tiene.
+- **Node (`interno.controller.js`, `Notificacion`):** la ruta interna acepta `usuarios_ids` (hasta 50) y crea una notificación personal por usuario, con el evento registrado una sola vez. `clave_unica` es opcional y tiene un índice único parcial por usuario y clave; el segundo intento se descarta y se informa en `omitidas` (respuesta `200` en lugar de `201`). `GET /api/actividad/notificaciones/mias` suma el filtro `complejo_id`.
+- **Estado del servidor:** Node publica `GET /api/interno/estado` (memoria, latencia de MongoDB, actividad de 24 horas, fallas recientes de servicios externos y su veredicto `ok` o `degradado`). Como Node no conoce a los usuarios, el aviso lo emite Django: `python manage.py reportar_estado_sistema` (con `--solo-degradado` para correrlo cada pocos minutos) suma la latencia de la base de datos y la actividad de reservas, y avisa a cada superadministrador en la categoría Sistema; es urgente si algo se degradó y lleva una clave por hora para no repetirse. Un bloqueo por exceso de intentos (`429`) genera además una alerta por ruta y ventana (`ALERTA_LIMITE_VENTANA_SEGUNDOS`), sin IP ni usuario en el mensaje.
+- **Dos vistas con funciones distintas:** `/notificaciones` es la bandeja personal (lo que hay que atender, con estado de lectura): arriba el bloque de avisos urgentes pendientes (solo si los hay) y debajo la lista con filtros. Quien opera más de un complejo ve a cuál pertenece cada aviso y puede filtrar por uno (`useComplejosDeNotificaciones`, `?complejo=`). `/panel/registro` es el registro del complejo activo, para dueño, operador y superadmin: historial compartido, sin "leído", con pestañas por categoría y filtro de prioridad (`RegistroComplejo`). `/panel/notificaciones` redirige al registro. El ítem sigue dentro de 5.7 y 6.5, por lo que la versión de la aplicación no cambia.
+- **Registro del complejo (`AvisoComplejoService.al_personal` y `al_dueno`):** además de los avisos personales, cada hecho del complejo guarda una entrada sin destinatario en el mismo pedido a Node (`registro: { ambito, mensaje }`). El texto suma los ids que identifican lo ocurrido: la cancha, el titular de la reserva, el turno fijo y quien hizo el cambio (`Hecho por usuario id`), además de los de la reserva, la excepción u operador que ya trae el mensaje. A diferencia de la bandeja, el registro incluye las acciones del propio autor y queda aunque no haya personal a quien avisar. El ámbito `1` (operativo) lo ven los tres roles; el `2` (comercial: precios, configuración, operadores, contrato, seña retenida) solo el dueño y el superadmin, por un filtro de `GET /api/actividad/notificaciones` según el rol del token. Las entradas sin ámbito (anteriores a esta marca) se tratan como operativas. Los avisos al jugador y los del sistema no generan registro.
+- **Favicon:** `index.html` declara el SVG, los PNG de 32 y 192 píxeles, el `apple-touch-icon` y `/favicon.ico`, todos generados por `npm run iconos`; no hay recursos por defecto de Vite.
+- **Pruebas:** Django con las pruebas de destinatarios, avisos al jugador, al personal, al dueño y a los superadministradores, recordatorios y reporte de estado; Node con lotes, idempotencia, estado interno y el filtro por complejo (incluido el casteo real de `$gte` con `sanitizeFilter`); frontend con el filtro de complejo y los urgentes de la bandeja.
+
+## Notas de la Fase 7
+- **Un solo origen:** nginx sirve el build de Vite y reparte las rutas entre Django (`/api/`, `/graphql`, `/ws/`) y Node (`/api/actividad`, `/api/reportes-aux`, `/api/externa`). El frontend se compila con las tres variables `VITE_*` vacías: las llamadas son rutas relativas y el WebSocket usa el origen de la página (`wss://` bajo HTTPS).
+- **Rutas internas:** `/api/interno` devuelve 404 desde internet; solo Django la usa, por la red privada de Docker.
+- **Acceso al origen:** nginx rechaza toda conexión que no provenga de los rangos de Cloudflare y recupera la IP real del visitante desde `CF-Connecting-IP`. Docker publica los puertos sin pasar por las reglas del cortafuegos del host, de modo que esta lista es la barrera efectiva del servidor web.
+- **HTTPS en Django:** `SECURE_PROXY_SSL_HEADER`, redirección a HTTPS, HSTS y conexiones persistentes a la base (`DB_CONN_MAX_AGE`, 60 por defecto) se activan fuera de `DEBUG`. `check --deploy --fail-level WARNING` queda sin pendientes y lo cubre una prueba automática.
+- **Registros:** los accesos de nginx omiten la query string (el WebSocket lleva el token) y los errores solo guardan fallas críticas. `security.log` vive en un volumen para sobrevivir a cada reconstrucción.
+- **Seed:** la agenda de muestra se calcula respecto de la fecha de carga y se crea solo junto con su complejo; repetir el comando no duplica ni pisa turnos cargados después. `seed_inicial --reset` da de baja lógica la agenda de los complejos de muestra y la regenera.
+
+## Decisiones de arquitectura
 - **Frontend:** React con Vite y PWA manual, en capas `services/`, `components/` y `pages/`: solo la capa de servicios conoce las URLs de la API, lo que separa el acceso a datos de la presentación. El access token vive en memoria y el refresh en una cookie HttpOnly, `Secure` y `SameSite=Strict`: un script inyectado por XSS no puede leer el refresh, y `SameSite=Strict` mitiga CSRF. Nada de la sesión se guarda en `localStorage`.
 - **`backend-node`:** persiste sus eventos en MongoDB Atlas con Mongoose y consulta a Django por HTTP. No accede a las 14 tablas.
-- **WebSocket de disponibilidad:** lectura pública con identificación opcional, porque el catálogo y la grilla son públicos (`CU-04`, `CU-05`). El canal es de solo lectura: no procesa mensajes del cliente, sus eventos no llevan datos personales y rechaza complejos sin contrato activo. La decisión se documenta en `docs/DECISIONES_ARQUITECTURA.md`.
+- **WebSocket de disponibilidad:** lectura pública con identificación opcional, porque el catálogo y la grilla son públicos (`CU-04`, `CU-05`). El canal es de solo lectura: no procesa mensajes del cliente, sus eventos no llevan datos personales y rechaza complejos sin contrato activo.
 - **Pruebas:** `pytest --cov=core` en Django y `npm test` en Node, ambas en CI.
 - **Despliegue:** VPS propio con `docker compose`, nginx y HTTPS.
 

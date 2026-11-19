@@ -18,6 +18,26 @@ class ConflictoNegocio(exceptions.APIException):
     default_code = 'conflicto'
 
 
+class ConflictoConConfirmacion(ConflictoNegocio):
+    """
+    La operación es válida pero tiene consecuencias que el usuario debe aceptar: se informa el detalle (los
+    conflictos o una vista previa) y el cliente puede repetirla con `confirmar: true` para aplicarla.
+    """
+
+    def __init__(self, detail, conflictos=None, vista_previa=None):
+        super().__init__(detail)
+        self.conflictos = conflictos
+        self.vista_previa = vista_previa
+
+    def datos_extra(self):
+        extra = {'requiere_confirmacion': True}
+        if self.conflictos is not None:
+            extra['conflictos'] = self.conflictos
+        if self.vista_previa is not None:
+            extra['vista_previa'] = self.vista_previa
+        return extra
+
+
 class ServicioNoDisponible(exceptions.APIException):
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     default_detail = 'El servicio no está disponible en este momento.'
@@ -127,6 +147,8 @@ def custom_exception_handler(exc, context):
         'error': True,
         'detail': mensaje if mensaje is not None else _detalle(respuesta.data),
     }
+    if isinstance(exc, ConflictoConConfirmacion):
+        respuesta.data.update(exc.datos_extra())
 
     if respuesta.status_code in (status.HTTP_403_FORBIDDEN, status.HTTP_429_TOO_MANY_REQUESTS):
         _auditar(respuesta, context)

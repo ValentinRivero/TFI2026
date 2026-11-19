@@ -1,9 +1,10 @@
 import os
+from datetime import date, time, timedelta
 from io import StringIO
 from unittest import mock
 
 from django.apps import apps
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.test import TestCase
 
 from core.models import (
@@ -14,6 +15,7 @@ from core.models import (
     EstadoRegistro,
     EstadoReserva,
     ExcepcionHoraria,
+    HorarioApertura,
     Permiso,
     Reserva,
     Rol,
@@ -157,10 +159,24 @@ class SeedInicialTests(TestCase):
         conteos_repetidos = [modelo.objects.count() for modelo in apps.get_app_config('core').get_models()]
         self.assertEqual(conteos, conteos_repetidos)
 
-    def test_correos_demo_usan_dominio_irracional(self):
+    def test_es_idempotente_aunque_un_dia_tenga_cortes(self):
         self._ejecutar_seed()
-        self.assertTrue(Usuario.objects.filter(email='talibre@irracional.net', rol__nombre='SUPERADMIN').exists())
-        self.assertFalse(Usuario.objects.exclude(email__endswith='@irracional.net').exists())
+        cancha = Reserva.objects.filter(turno_fijo__isnull=False).first().cancha
+        primero = HorarioApertura.objects.filter(cancha=cancha, dia_semana=0, estado=EstadoRegistro.ACTIVO).get()
+        corte = time(primero.hora_apertura.hour - 1, 0)
+        HorarioApertura.objects.create(
+            cancha=cancha, dia_semana=0, hora_apertura=time(corte.hour - 2, 0), hora_cierre=corte,
+        )
+        horarios = HorarioApertura.objects.count()
+
+        self._ejecutar_seed()
+
+        self.assertEqual(HorarioApertura.objects.count(), horarios)
+
+    def test_correos_demo_usan_un_dominio_reservado(self):
+        self._ejecutar_seed()
+        self.assertTrue(Usuario.objects.filter(email='superadmin@demo.talibre.test', rol__nombre='SUPERADMIN').exists())
+        self.assertFalse(Usuario.objects.exclude(email__endswith='@demo.talibre.test').exists())
 
     def test_complejos_tienen_propietario_y_contratos(self):
         self._ejecutar_seed()
@@ -170,9 +186,9 @@ class SeedInicialTests(TestCase):
 
     def test_operador_queda_vinculado_a_su_complejo(self):
         self._ejecutar_seed()
-        operador = Usuario.objects.get(email='lucas.benitez@irracional.net')
+        operador = Usuario.objects.get(email='elias.mendieta@demo.talibre.test')
         self.assertEqual(operador.rol.nombre, 'OPERADOR_COMPLEJO')
-        self.assertEqual(operador.complejo_operado.nombre, 'Complejo El Potrero')
+        self.assertEqual(operador.complejo_operado.nombre, 'Complejo El Yacaré')
         self.assertIn(operador, operador.complejo_operado.operadores.all())
 
     def test_turnos_fijos_generan_reservas_vinculadas(self):
@@ -187,7 +203,7 @@ class SeedInicialTests(TestCase):
     def test_login_con_usuario_demo(self):
         self._ejecutar_seed()
         self.assertTrue(
-            self.client.login(email='talibre@irracional.net', password='ClaveDemoTest2026')
+            self.client.login(email='superadmin@demo.talibre.test', password='ClaveDemoTest2026')
         )
 
     def test_sin_demo_carga_solo_catalogos(self):
@@ -196,3 +212,117 @@ class SeedInicialTests(TestCase):
         self.assertTrue(Deporte.objects.exists())
         self.assertFalse(Usuario.objects.exists())
         self.assertFalse(Complejo.objects.exists())
+
+
+@mock.patch.dict(os.environ, {'SEED_PASSWORD_DEMO': 'ClaveDemoTest2026'})
+class SeedAgendaRelativaTests(TestCase):
+    def _ejecutar(self, hoy, *argumentos):
+        with mock.patch('core.management.commands.seed_inicial.timezone.localdate', return_value=hoy):
+            call_command('seed_inicial', *argumentos, stdout=StringIO())
+
+    def _agenda_activa(self):
+        return (
+            Reserva.objects.exclude(estado=EstadoReserva.BAJA).count(),
+            TurnoFijo.objects.exclude(estado=EstadoRegistro.BAJA).count(),
+            ExcepcionHoraria.objects.exclude(estado=EstadoRegistro.BAJA).count(),
+        )
+
+    def test_las_fechas_de_la_agenda_se_calculan_a_partir_de_hoy(self):
+        hoy = date(2027, 3, 10)
+        self._ejecutar(hoy)
+
+        fechas = list(Reserva.objects.values_list('fecha_turno', flat=True))
+        fechas += list(ExcepcionHoraria.objects.values_list('fecha_inicio', flat=True))
+        fechas += list(TurnoFijo.objects.values_list('fecha_inicio_vigencia', flat=True))
+        self.assertTrue(fechas)
+        for fecha in fechas:
+            self.assertLessEqual(abs((fecha - hoy).days), 30)
+        self.assertTrue(Reserva.objects.filter(estado=EstadoReserva.COMPLETADA, fecha_turno__lt=hoy).exists())
+        self.assertTrue(Reserva.objects.filter(estado=EstadoReserva.CONFIRMADA, fecha_turno__gt=hoy).exists())
+
+    def test_cada_dia_de_la_semana_genera_la_misma_agenda_sin_choques(self):
+        self._ejecutar(date(2027, 3, 8))
+        esperada = self._agenda_activa()
+        for dia in range(9, 16):
+            with self.subTest(hoy=date(2027, 3, dia)):
+                self._ejecutar(date(2027, 3, dia), '--reset')
+                self.assertEqual(self._agenda_activa(), esperada)
+                for turno in TurnoFijo.objects.exclude(estado=EstadoRegistro.BAJA):
+                    reservas = Reserva.objects.filter(turno_fijo=turno).exclude(estado=EstadoReserva.BAJA)
+                    self.assertTrue(reservas.exists())
+                    for reserva in reservas:
+                        self.assertEqual(reserva.fecha_turno.weekday(), turno.dia_semana)
+
+    def test_los_turnos_fijos_caen_en_su_dia_de_la_semana(self):
+        self._ejecutar(date(2027, 3, 10))
+        for turno in TurnoFijo.objects.all():
+            self.assertEqual(turno.fecha_inicio_vigencia.weekday(), turno.dia_semana)
+
+    def test_repetir_el_seed_conserva_las_reservas_cargadas_despues(self):
+        self._ejecutar(date(2027, 3, 10))
+        base = Reserva.objects.count()
+        cancha = Reserva.objects.filter(turno_fijo__isnull=False).first().cancha
+        nueva = Reserva.objects.create(
+            cancha=cancha, fecha_turno=date(2027, 3, 12), hora_inicio=time(15, 0), hora_fin=time(16, 0),
+            usuario=Usuario.objects.get(email='hugo.caceres@demo.talibre.test'),
+            creado_por=Usuario.objects.get(email='hugo.caceres@demo.talibre.test'),
+            precio_acordado='38000.00', estado=EstadoReserva.CONFIRMADA,
+        )
+
+        self._ejecutar(date(2027, 3, 11))
+
+        nueva.refresh_from_db()
+        self.assertEqual(nueva.estado, EstadoReserva.CONFIRMADA)
+        self.assertEqual(Reserva.objects.count(), base + 1)
+
+    def test_reset_da_de_baja_la_agenda_vieja_y_la_regenera(self):
+        self._ejecutar(date(2027, 3, 10))
+        esperada = self._agenda_activa()
+        anteriores = list(Reserva.objects.values_list('pk', flat=True))
+        cancha = Reserva.objects.filter(turno_fijo__isnull=False).first().cancha
+        suelta = Reserva.objects.create(
+            cancha=cancha, fecha_turno=date(2027, 3, 12), hora_inicio=time(15, 0), hora_fin=time(16, 0),
+            usuario=Usuario.objects.get(email='hugo.caceres@demo.talibre.test'),
+            creado_por=Usuario.objects.get(email='hugo.caceres@demo.talibre.test'),
+            precio_acordado='38000.00', estado=EstadoReserva.CONFIRMADA,
+        )
+
+        self._ejecutar(date(2027, 3, 20), '--reset')
+
+        suelta.refresh_from_db()
+        self.assertEqual(suelta.estado, EstadoReserva.BAJA)
+        self.assertFalse(Reserva.objects.filter(pk__in=anteriores).exclude(estado=EstadoReserva.BAJA).exists())
+        self.assertEqual(self._agenda_activa(), esperada)
+        self.assertEqual(Usuario.objects.count(), 9)
+
+    def test_reset_repetido_el_mismo_dia_no_deja_la_agenda_vacia(self):
+        hoy = date(2027, 3, 10)
+        self._ejecutar(hoy)
+        esperada = self._agenda_activa()
+        self._ejecutar(hoy, '--reset')
+        self._ejecutar(hoy, '--reset')
+        self.assertEqual(self._agenda_activa(), esperada)
+
+    def test_reset_no_se_combina_con_sin_demo(self):
+        with self.assertRaises(CommandError):
+            call_command('seed_inicial', '--sin-demo', '--reset', stdout=StringIO())
+
+    def test_actualizar_claves_reemplaza_la_clave_de_las_cuentas_existentes(self):
+        self._ejecutar(date(2027, 3, 10))
+        self._ejecutar(date(2027, 3, 10))
+        usuario = Usuario.objects.get(email='superadmin@demo.talibre.test')
+        self.assertTrue(usuario.check_password('ClaveDemoTest2026'))
+
+        with mock.patch.dict(os.environ, {'SEED_PASSWORD_DEMO': 'ClaveNuevaTest2026'}):
+            self._ejecutar(date(2027, 3, 10))
+            usuario.refresh_from_db()
+            self.assertTrue(usuario.check_password('ClaveDemoTest2026'))
+
+            self._ejecutar(date(2027, 3, 10), '--actualizar-claves')
+        usuario.refresh_from_db()
+        self.assertTrue(usuario.check_password('ClaveNuevaTest2026'))
+        self.assertEqual(Usuario.objects.count(), 9)
+
+    def test_actualizar_claves_no_se_combina_con_sin_demo(self):
+        with self.assertRaises(CommandError):
+            call_command('seed_inicial', '--sin-demo', '--actualizar-claves', stdout=StringIO())
