@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { PARAMETROS } from '../config/parametros.js';
 import { contarMisNoLeidas } from '../services/notificacionService.js';
-import { alMarcarLeida } from '../utils/avisosNotificaciones.js';
+import { alMarcarLeida, alMarcarTodasLeidas } from '../utils/avisosNotificaciones.js';
 import { ajustarContador, debeSondear } from '../utils/notificaciones.js';
 
 /**
  * Cantidad de notificaciones propias sin leer para la campana de la barra. Consulta al montar y cada
  * `PARAMETROS.notificaciones.sondeoMs`, se pausa con la pestaña oculta y se actualiza al volver a verla. Cuando la
- * bandeja marca una notificación como leída, descuenta el contador en el acto y confirma con el servidor.
+ * bandeja marca una notificación como leída, descuenta el contador en el acto y confirma con el servidor; si las
+ * marca todas, lo lleva a cero.
  *
  * Si `backend-node` no responde conserva el último valor y no muestra errores: la campana nunca rompe la barra.
  * Sin `usuarioId` (sin sesión) devuelve `null`; el valor de una sesión anterior nunca se atribuye a la siguiente.
@@ -39,11 +40,17 @@ export default function useContadorNotificaciones(usuarioId) {
       refrescar();
     });
 
+    const dejarDeEscucharTodas = alMarcarTodasLeidas(() => {
+      setEstado((previo) => (previo.de === usuarioId ? { de: usuarioId, valor: 0 } : previo));
+      refrescar();
+    });
+
     return () => {
       controlador.abort();
       clearInterval(intervalo);
       document.removeEventListener('visibilitychange', consultar);
       dejarDeEscuchar();
+      dejarDeEscucharTodas();
     };
   }, [usuarioId]);
 

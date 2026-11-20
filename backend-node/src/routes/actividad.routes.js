@@ -7,6 +7,7 @@ import {
   listarActividad,
   listarMisNotificaciones,
   listarNotificacionesDelComplejo,
+  marcarMisNotificacionesLeidas,
 } from '../controllers/panel.controller.js';
 import { autenticar, autenticarOpcional } from '../middlewares/auth.middleware.js';
 import { crearLimitadorActividad } from '../middlewares/rateLimit.middleware.js';
@@ -81,6 +82,9 @@ router.get(
   validarCampos,
   listarMisNotificaciones,
 );
+
+// El destinatario sale siempre del token: no hay parámetro que permita tocar las de otra cuenta.
+router.patch('/notificaciones/mias/leidas', autenticar, marcarMisNotificacionesLeidas);
 
 router.patch(
   '/notificaciones/:id',

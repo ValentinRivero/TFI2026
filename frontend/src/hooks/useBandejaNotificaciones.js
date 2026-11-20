@@ -8,7 +8,7 @@ import useListaIncremental from './useListaIncremental.js';
  * marcan como leídas, sin volver a pedir la lista: `registrarLeida(id)` las pasa a leídas o, si la bandeja muestra
  * solo no leídas, las oculta. En ese caso, si quedan páginas por traer, se vuelve a pedir la primera: al desaparecer
  * filas del servidor las páginas siguientes se corren y se saltearían avisos. Una notificación que esta bandeja no
- * tiene cargada se ignora.
+ * tiene cargada se ignora. `registrarTodasLeidas()` hace lo mismo con todas las cargadas.
  *
  * `filtros` son los de la URL (ver `utils/notificaciones.js`) y `pedirPagina(filtros, pagina, signal)` hace la consulta.
  */
@@ -29,10 +29,17 @@ export default function useBandejaNotificaciones(pedirPagina, filtros, dependenc
     if (soloNoLeidas && lista.hayMas) lista.recargar();
   };
 
+  // Las que quedan sin cargar se resuelven solas: el servidor ya las tiene leídas cuando se piden.
+  const registrarTodasLeidas = () => {
+    setMarcadas({ clave, ids: lista.items.map((item) => item.id) });
+    if (soloNoLeidas && lista.hayMas) lista.recargar();
+  };
+
   return {
     ...lista,
     items,
     total: Math.max(0, lista.total - (lista.items.length - items.length)),
     registrarLeida,
+    registrarTodasLeidas,
   };
 }

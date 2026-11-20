@@ -397,6 +397,7 @@ Servicio de actividad y notificaciones, con su propia URL base. Sus errores sigu
 | `GET /api/reportes-aux/visitas?complejo_id=&fecha_desde=&fecha_hasta=` | Panel del complejo | Visitas al perfil y consultas de la grilla, en total y por día |
 | `GET /api/externa/clima/<complejo_id>` | Público | Clima actual y pronóstico de tres días en la ubicación del complejo |
 | `PATCH /api/actividad/notificaciones/<id>` | Titular, o panel del complejo para sus avisos generales | `{ "estado" }`: `1` no leída, `2` leída. Responde la notificación actualizada |
+| `PATCH /api/actividad/notificaciones/mias/leidas` | Cualquier usuario con sesión | Sin cuerpo ni parámetros: alcanza solo las notificaciones sin leer de la cuenta autenticada. Responde `{ "actualizadas" }` con la cantidad modificada (`0` si no había pendientes) |
 
 - Una ruta inexistente responde `404`, un JSON mal formado `400` y un cuerpo demasiado grande `413`.
 - Las rutas privadas usan el mismo access token que Django, en `Authorization: Bearer <access>`. Sin token responde `401` con "Debés iniciar sesión para acceder a este recurso."; con un token inválido, vencido o que no sea de acceso (por ejemplo, un refresh), `401` con "El token es inválido o expiró.", los mismos mensajes que la API principal.
