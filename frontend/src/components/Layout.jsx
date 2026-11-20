@@ -33,7 +33,7 @@ const SECCIONES_DE_SESION = [
 
 /**
  * Estructura común de las pantallas: barra superior en pizarra con tres zonas (marca, secciones centradas y sesión),
- * que en móvil pasa a un panel flotante anclado bajo el botón del menú y que acompaña el desplazamiento (`sticky`),
+ * que por debajo de `xl` (1200 px) pasa a un panel flotante anclado bajo el botón del menú y que acompaña el desplazamiento (`sticky`),
  * contenido principal y pie de página (`PiePagina`). El límite de
  * `Suspense` envuelve solo el contenido: mientras carga una pantalla diferida la barra y el menú siguen en su lugar. `enlaces` suma accesos propios de la pantalla (`{ a, texto }`);
  * `ancho` admite `panel` para los paneles de administración (contenedor fluido y densidad de escritorio) y `completo`
@@ -62,6 +62,9 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
     ...(autenticado ? [RUTA_NOTIFICACIONES] : []),
   ]);
   const sinLeer = useContadorNotificaciones(usuario?.id);
+  const textoUsuario = autenticado
+    ? t('sesion.comoRol', { nombre: usuario.nombre_completo, rol: ETIQUETA_ROL[rol] ?? rol ?? '' })
+    : '';
 
   // Al cambiar de ruta (logo, "Atrás") el foco puede quedar en el enlace anterior: se suelta si ya no es el activo.
   useEffect(() => {
@@ -97,7 +100,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
       <a className="salto-contenido" href="#contenido">{t('navegacion.saltar')}</a>
       <Navbar
         ref={barra}
-        expand="lg"
+        expand="xl"
         className={`barra-superior${desplazado ? ' barra-superior-translucida' : ''}`}
         variant="dark"
         expanded={menuAbierto}
@@ -109,12 +112,12 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
             <img src="/icons/logo.svg" alt="" width="32" height="32" />
             {t('marca.nombre')}
           </Navbar.Brand>
-          <BotonTema className="boton-tema-movil d-lg-none" />
+          <BotonTema className="boton-tema-movil d-xl-none" />
           <Navbar.Toggle
             aria-controls="menu-principal"
             aria-label={t('navegacion.menu')}
             aria-expanded={menuAbierto}
-            className="barra-hamburguesa d-lg-none"
+            className="barra-hamburguesa d-xl-none"
           >
             <span className="barra-hamburguesa-icono" aria-hidden="true">
               <span />
@@ -123,7 +126,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
             </span>
           </Navbar.Toggle>
           <Navbar.Collapse id="menu-principal" className="menu-principal">
-            <Nav className="barra-secciones" aria-label={t('navegacion.principal')}>
+            <Nav className="barra-secciones text-nowrap" aria-label={t('navegacion.principal')}>
               <Nav.Link as={Link} to="/" eventKey="/" active={activo === '/'} aria-current={activo === '/' ? 'page' : undefined}>
                 {t('navegacion.inicio')}
               </Nav.Link>
@@ -140,14 +143,18 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
             </Nav>
             {autenticado ? (
               <div className="barra-sesion">
-                <BotonTema className="d-none d-lg-inline-flex" />
+                <BotonTema className="d-none d-xl-inline-flex" />
                 <CampanaNotificaciones
                   contador={sinLeer}
                   activa={activo === RUTA_NOTIFICACIONES}
                   onNavegar={() => setMenuAbierto(false)}
                 />
-                <span className="barra-usuario" aria-label={t('navegacion.sesionDe', { nombre: usuario.nombre_completo })}>
-                  {t('sesion.comoRol', { nombre: usuario.nombre_completo, rol: ETIQUETA_ROL[rol] ?? rol ?? '' })}
+                <span
+                  className="barra-usuario"
+                  title={textoUsuario}
+                  aria-label={t('navegacion.sesionDe', { nombre: usuario.nombre_completo })}
+                >
+                  {textoUsuario}
                 </span>
                 <BotonAccion variant="outline-light" size="sm" onClick={cerrarSesion}>
                   {t('navegacion.cerrarSesion')}
@@ -155,7 +162,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
               </div>
             ) : (
               <div className="barra-sesion">
-                <BotonTema className="d-none d-lg-inline-flex" />
+                <BotonTema className="d-none d-xl-inline-flex" />
                 <Button as={Link} to="/login" variant="outline-light" size="sm">{t('navegacion.ingresar')}</Button>
                 <Button as={Link} to="/registro" variant="primary" size="sm">{t('navegacion.registrarse')}</Button>
               </div>
