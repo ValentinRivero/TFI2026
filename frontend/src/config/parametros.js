@@ -86,13 +86,15 @@ export const PARAMETROS = Object.freeze({
   }),
   // `paginasMaximas` acota los selectores que necesitan todos los registros de una colección chica (complejos
   // administrados, canchas de un complejo, rangos horarios de una cancha). Los demás valores son espejos de
-  // HORAS_CANCELACION_DEFECTO, HORAS_CANCELACION_MAXIMAS, LATITUD_MAXIMA y LONGITUD_MAXIMA de Django (core/models.py).
+  // HORAS_CANCELACION_DEFECTO, HORAS_CANCELACION_MAXIMAS, LATITUD_MAXIMA y LONGITUD_MAXIMA de Django (core/models.py);
+  // `coordenadasDecimales` replica los `decimal_places` de `Complejo.latitud` y `Complejo.longitud`.
   panel: Object.freeze({
     paginasMaximas: 10,
     horasCancelacionDefecto: 4,
     horasCancelacionMaximas: 168,
     latitudMaxima: 90,
     longitudMaxima: 180,
+    coordenadasDecimales: 6,
   }),
   // Espejo de POLITICA_PRIVACIDAD_VERSION de Django.
   politica: Object.freeze({

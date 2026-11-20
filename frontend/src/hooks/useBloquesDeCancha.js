@@ -24,7 +24,8 @@ export default function useBloquesDeCancha({ complejoId, canchaId, fecha, hoy, h
 
   useDisponibilidadEnVivo({
     complejoId,
-    habilitado: listo && consulta.error?.status !== 404,
+    // El canal depende solo del complejo: cambiar de cancha o de fecha en el formulario no reabre la conexión.
+    habilitado: Boolean(habilitado) && consulta.error?.status !== 404,
     fecha,
     canchaIds: listo ? [Number(clave)] : null,
     alRecargar: consulta.recargar,

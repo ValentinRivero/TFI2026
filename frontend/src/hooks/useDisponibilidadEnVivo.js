@@ -1,14 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { PARAMETROS } from '../config/parametros.js';
 import { conectarDisponibilidad } from '../services/wsService.js';
 import { eventoAfectaGrilla } from '../utils/tiempoReal.js';
-
-const ESTADOS = Object.freeze({
-  conectando: 'conectando',
-  conectado: 'conectado',
-  reconectando: 'reconectando',
-  inactivo: 'inactivo',
-});
 
 /**
  * Mantiene abierto el canal de disponibilidad de un complejo y avisa cuándo volver a pedir la grilla visible.
@@ -17,10 +10,10 @@ const ESTADOS = Object.freeze({
  * - Al reconectar después de un corte se recarga de inmediato, porque pudo cambiar algo sin aviso.
  * - Con `habilitado` en falso (por ejemplo, el complejo dejó de estar disponible) se cierra y no se reintenta.
  *
- * Devuelve `{ estado }`: `conectando` (primer intento), `conectado`, `reconectando` (hubo un corte) o `inactivo`.
+ * La conexión solo se reabre si cambia `complejoId` o `habilitado`; la fecha y las canchas visibles no la tocan. Los
+ * cortes se reintentan en silencio, sin mostrar nada al usuario.
  */
 export default function useDisponibilidadEnVivo({ complejoId, habilitado, fecha, canchaIds, alRecargar }) {
-  const [estado, setEstado] = useState(ESTADOS.conectando);
   const vigente = useRef({ fecha, canchaIds, alRecargar });
 
   // Los eventos se evalúan con lo último que muestra la pantalla, sin reabrir la conexión al cambiar de día.
@@ -47,18 +40,13 @@ export default function useDisponibilidadEnVivo({ complejoId, habilitado, fecha,
         }
       },
       alConectar: (reconectada) => {
-        setEstado(ESTADOS.conectado);
         if (reconectada) recargar();
       },
-      alDesconectar: () => setEstado(ESTADOS.reconectando),
     });
 
     return () => {
       clearTimeout(agrupador);
       conexion.cerrar();
-      setEstado(ESTADOS.conectando);
     };
   }, [complejoId, habilitado]);
-
-  return { estado: habilitado ? estado : ESTADOS.inactivo };
 }
