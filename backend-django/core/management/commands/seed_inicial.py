@@ -70,6 +70,7 @@ PERMISOS = {
     'editar_usuarios': ('Editar los perfiles de otros usuarios', 'sistema'),
     'desactivar_usuarios': ('Suspender o dar de baja a otros usuarios', 'sistema'),
     'administrar_catalogos': ('Administrar los catálogos de deportes y servicios', 'sistema'),
+    'administrar_roles': ('Administrar los roles personalizados y consultar el catálogo de permisos', 'sistema'),
     'auditar_seguridad': ('Consultar la auditoría global del sistema', 'sistema'),
 }
 

@@ -47,12 +47,16 @@ from .serializers import (
     LogAuditoriaSerializer,
     MarcadorComplejoSerializer,
     OperadorSerializer,
+    PermisoAdminSerializer,
     ReaperturaSerializer,
     ReservaAgendaEdicionSerializer,
     ReservaAgendaSerializer,
     ReservaAltaSerializer,
     ReservaManualSerializer,
     ReservaPropiaSerializer,
+    RolAdminSerializer,
+    RolAltaSerializer,
+    RolEdicionSerializer,
     ServicioAltaSerializer,
     ServicioEdicionSerializer,
     ServiciosComplejoSerializer,
@@ -80,6 +84,7 @@ from .services import (
     RecordatorioService,
     ReporteService,
     ReservaService,
+    RolAdminService,
     ServicioService,
     SesionService,
     TurnoFijoService,
@@ -400,6 +405,33 @@ class ServicioAdminViewSet(CatalogoMaestroAdminViewSet):
     servicio = ServicioService
     serializer_alta = ServicioAltaSerializer
     serializer_edicion = ServicioEdicionSerializer
+
+
+class RolAdminViewSet(CatalogoMaestroAdminViewSet):
+    """Roles del sistema: los base son de solo lectura y la baja se rechaza mientras haya cuentas con el rol."""
+
+    permisos_requeridos = {
+        accion: ('administrar_roles',)
+        for accion in ('list', 'retrieve', 'create', 'partial_update', 'destroy')
+    }
+    serializer_class = RolAdminSerializer
+    servicio = RolAdminService
+    serializer_alta = RolAltaSerializer
+    serializer_edicion = RolEdicionSerializer
+
+
+class PermisoAdminViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    """Catálogo de permisos para armar el selector de un rol."""
+
+    permission_classes = [TienePermisoRBAC]
+    permisos_requeridos = {'list': ('administrar_roles',)}
+    serializer_class = PermisoAdminSerializer
+    # Catálogo acotado por naturaleza (decenas de filas, solo crece al sumar funciones al sistema).
+    pagination_class = None
+    filter_backends = []
+
+    def get_queryset(self):
+        return RolAdminService.permisos()
 
 
 BACKENDS_DE_LISTADO = (DjangoFilterBackend, BusquedaFlexibleFilter, OrderingFilter)

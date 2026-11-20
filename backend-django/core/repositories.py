@@ -38,6 +38,7 @@ from .models import (
     ExcepcionHoraria,
     HorarioApertura,
     LogAuditoria,
+    Permiso,
     Reserva,
     Rol,
     RolPermiso,
@@ -228,6 +229,75 @@ class PermisoRepository:
             rol__nombre__in=nombres_roles,
         ).values_list('permiso__codigo', flat=True)
         return set(codigos)
+
+    @staticmethod
+    def activos():
+        return Permiso.objects.filter(estado=EstadoRegistro.ACTIVO)
+
+    @staticmethod
+    def activos_por_ids(permiso_ids):
+        return list(PermisoRepository.activos().filter(id__in=permiso_ids))
+
+
+class RolAdminRepository:
+    """
+    Consultas administrativas de roles. A diferencia de RolRepository, que solo ve los activos, acá se ven
+    también las bajas, con la cantidad de usuarios vigentes y los permisos asignados de cada rol.
+    """
+
+    @staticmethod
+    def listar():
+        asignaciones_activas = RolPermiso.objects.filter(
+            estado=EstadoRegistro.ACTIVO, permiso__estado=EstadoRegistro.ACTIVO,
+        ).select_related('permiso').order_by('permiso__modulo', 'permiso__codigo')
+        return (
+            Rol.objects
+            .annotate(usos=Count('usuarios', filter=~Q(usuarios__estado=EstadoUsuario.BAJA)))
+            .prefetch_related(Prefetch('asignaciones', queryset=asignaciones_activas, to_attr='asignaciones_activas'))
+            .order_by('id')
+        )
+
+    @staticmethod
+    def obtener(rol_id):
+        return RolAdminRepository.listar().filter(id=rol_id).first()
+
+    @staticmethod
+    def bloquear(rol_id):
+        return Rol.objects.select_for_update().filter(id=rol_id).first()
+
+    @staticmethod
+    def nombres():
+        """Id, nombre y estado de todos los roles, bajas incluidas: el nombre es único en la tabla."""
+        return list(Rol.objects.values_list('id', 'nombre', 'estado'))
+
+    @staticmethod
+    def crear(nombre, descripcion):
+        return Rol.objects.create(nombre=nombre, descripcion=descripcion)
+
+    @staticmethod
+    def actualizar(rol, **campos):
+        for campo, valor in campos.items():
+            setattr(rol, campo, valor)
+        rol.save(update_fields=[*campos, 'fecha_modificacion'])
+        return rol
+
+    @staticmethod
+    def contar_usos(rol_id):
+        return Usuario.objects.filter(rol_id=rol_id).exclude(estado=EstadoUsuario.BAJA).count()
+
+    @staticmethod
+    def asignaciones(rol_id):
+        """Todas las asignaciones del rol, también las dadas de baja, para reactivarlas en lugar de duplicarlas."""
+        return list(RolPermiso.objects.filter(rol_id=rol_id).select_related('permiso'))
+
+    @staticmethod
+    def asignar(rol, permiso):
+        return RolPermiso.objects.create(rol=rol, permiso=permiso)
+
+    @staticmethod
+    def reactivar(asignacion):
+        asignacion.estado = EstadoRegistro.ACTIVO
+        asignacion.save(update_fields=['estado', 'fecha_modificacion'])
 
 
 class ComplejoRepository:

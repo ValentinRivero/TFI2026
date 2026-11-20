@@ -53,6 +53,7 @@ from .repositories import (
     PermisoRepository,
     ReporteRepository,
     ReservaRepository,
+    RolAdminRepository,
     RolRepository,
     ServicioRepository,
     SesionRepository,
@@ -66,6 +67,11 @@ ROL_SUPERADMIN = 'SUPERADMIN'
 ROL_DUENO = 'DUENO_COMPLEJO'
 ROL_OPERADOR = 'OPERADOR_COMPLEJO'
 ROL_JUGADOR = 'JUGADOR'
+# Roles que carga seed_inicial: el código decide el acceso por su nombre y el seed reescribe sus permisos en cada despliegue.
+ROLES_BASE = (ROL_SUPERADMIN, ROL_DUENO, ROL_OPERADOR, ROL_JUGADOR)
+# Los permisos de estos módulos gobiernan la plataforma entera: solo los tiene el superadministrador y un rol
+# personalizado nunca los recibe, para que crear un rol no sea una vía de escalación de privilegios.
+MODULOS_EXCLUSIVOS_DE_PLATAFORMA = frozenset({'sistema'})
 
 CATEGORIA_AVISO_RESERVAS = 1
 CATEGORIA_AVISO_CUENTAS = 2
@@ -852,6 +858,170 @@ class ServicioService(CatalogoMaestroService):
     @classmethod
     def _describir_uso(cls, usos):
         return f'{usos} complejo' if usos == 1 else f'{usos} complejos'
+
+
+class RolAdminService:
+    """
+    Administración de roles por el superadministrador. Los roles base (`ROLES_BASE`) son de solo lectura: el acceso
+    por complejo se decide por su nombre y `seed_inicial` reescribe sus permisos en cada despliegue, así que una
+    edición se perdería o dejaría la matriz de permisos distinta de la documentada. Un rol personalizado solo recibe
+    permisos fuera de `MODULOS_EXCLUSIVOS_DE_PLATAFORMA` y no se da de baja mientras lo usen cuentas vigentes.
+    """
+
+    @staticmethod
+    def listar():
+        return RolAdminRepository.listar()
+
+    @staticmethod
+    def permisos():
+        return PermisoRepository.activos()
+
+    @staticmethod
+    def es_asignable(permiso):
+        return permiso.modulo not in MODULOS_EXCLUSIVOS_DE_PLATAFORMA
+
+    @staticmethod
+    def _clave(nombre):
+        """Forma comparable de un nombre: sin mayúsculas, espacios ni guiones bajos ("Encargado Turno" = "ENCARGADO_TURNO")."""
+        return re.sub(r'[\s_]+', '', nombre).casefold()
+
+    @staticmethod
+    def _validar_nombre(nombre, excluir_id=None):
+        clave = RolAdminService._clave(nombre)
+        for rol_id, existente, estado in RolAdminRepository.nombres():
+            if rol_id == excluir_id or RolAdminService._clave(existente) != clave:
+                continue
+            if estado == EstadoRegistro.BAJA:
+                mensaje = 'Ya existe un rol con ese nombre dado de baja. Reactivalo en lugar de crear otro.'
+            else:
+                mensaje = 'Ya existe un rol con ese nombre.'
+            raise ValidationError({'nombre': mensaje})
+
+    @staticmethod
+    def _exigir_rol_personalizado(rol, operacion):
+        if rol.nombre in ROLES_BASE:
+            raise ValidationError(
+                f'«{rol.nombre}» es un rol base del sistema: no se puede {operacion}. '
+                'Su nombre y sus permisos se definen en la carga inicial.'
+            )
+
+    @staticmethod
+    def _resolver_permisos(permiso_ids):
+        permisos = PermisoRepository.activos_por_ids(permiso_ids)
+        inexistentes = sorted(set(permiso_ids) - {permiso.pk for permiso in permisos})
+        if inexistentes:
+            raise ValidationError({'permisos': f'No existen estos permisos: {", ".join(map(str, inexistentes))}.'})
+        reservados = sorted(permiso.codigo for permiso in permisos if not RolAdminService.es_asignable(permiso))
+        if reservados:
+            raise ValidationError({
+                'permisos': 'Un rol personalizado no puede tener permisos exclusivos de la plataforma: '
+                            f'{", ".join(reservados)}.',
+            })
+        return permisos
+
+    @staticmethod
+    def _sincronizar_permisos(rol, permisos):
+        """Deja asignados exactamente `permisos`: reactiva las bajas, desactiva las sobrantes y devuelve los cambios."""
+        actuales = {asignacion.permiso_id: asignacion for asignacion in RolAdminRepository.asignaciones(rol.pk)}
+        deseados = {permiso.pk: permiso for permiso in permisos}
+        agregados, quitados = [], []
+        for permiso_id, permiso in deseados.items():
+            asignacion = actuales.get(permiso_id)
+            if asignacion is None:
+                RolAdminRepository.asignar(rol, permiso)
+                agregados.append(permiso.codigo)
+            elif asignacion.estado != EstadoRegistro.ACTIVO:
+                RolAdminRepository.reactivar(asignacion)
+                agregados.append(permiso.codigo)
+        for permiso_id, asignacion in actuales.items():
+            if permiso_id not in deseados and asignacion.estado == EstadoRegistro.ACTIVO:
+                asignacion.desactivar()
+                quitados.append(asignacion.permiso.codigo)
+        return sorted(agregados), sorted(quitados)
+
+    @staticmethod
+    def _describir_permisos(agregados, quitados):
+        partes = []
+        if agregados:
+            partes.append(f' Permisos agregados: {", ".join(agregados)}.')
+        if quitados:
+            partes.append(f' Permisos quitados: {", ".join(quitados)}.')
+        return ''.join(partes)
+
+    @staticmethod
+    def _auditar(accion, rol, actor, ip_origen, extra=''):
+        AuditoriaService.registrar(
+            TipoEventoAuditoria.CAMBIO_CATALOGO, f'{accion} de rol',
+            detalle=f'Rol id {rol.pk}: «{rol.nombre}».{extra}',
+            usuario=actor, ip_origen=ip_origen,
+        )
+
+    @staticmethod
+    def crear(datos, actor, ip_origen):
+        try:
+            with transaction.atomic():
+                RolAdminService._validar_nombre(datos['nombre'])
+                permisos = RolAdminService._resolver_permisos(datos.get('permisos', []))
+                rol = RolAdminRepository.crear(datos['nombre'], datos.get('descripcion', ''))
+                agregados, _ = RolAdminService._sincronizar_permisos(rol, permisos)
+        except IntegrityError:
+            # Alta simultánea con el mismo nombre: la unicidad de la tabla decide.
+            raise ValidationError({'nombre': 'Ya existe un rol con ese nombre.'})
+        RolAdminService._auditar('Alta', rol, actor, ip_origen, RolAdminService._describir_permisos(agregados, []))
+        return RolAdminRepository.obtener(rol.pk)
+
+    @staticmethod
+    def actualizar(rol_id, datos, actor, ip_origen):
+        try:
+            with transaction.atomic():
+                rol = RolAdminRepository.bloquear(rol_id)
+                if rol is None:
+                    raise NotFound()
+                RolAdminService._exigir_rol_personalizado(rol, 'modificar')
+                campos = _campos_modificados(rol, {c: datos[c] for c in ('nombre', 'descripcion', 'estado') if c in datos})
+                nombre_anterior = rol.nombre
+                if 'nombre' in campos:
+                    RolAdminService._validar_nombre(campos['nombre'], excluir_id=rol.pk)
+                permisos = RolAdminService._resolver_permisos(datos['permisos']) if 'permisos' in datos else None
+                if campos:
+                    RolAdminRepository.actualizar(rol, **campos)
+                agregados, quitados = (
+                    RolAdminService._sincronizar_permisos(rol, permisos) if permisos is not None else ([], [])
+                )
+        except IntegrityError:
+            raise ValidationError({'nombre': 'Ya existe un rol con ese nombre.'})
+
+        if not (campos or agregados or quitados):
+            return RolAdminRepository.obtener(rol_id)
+        cambios = []
+        if 'nombre' in campos:
+            cambios.append(f' Antes: «{nombre_anterior}».')
+        if 'descripcion' in campos:
+            cambios.append(' Descripción modificada.')
+        if 'estado' in campos:
+            cambios.append(' Reactivado.')
+        cambios.append(RolAdminService._describir_permisos(agregados, quitados))
+        RolAdminService._auditar('Modificación', rol, actor, ip_origen, ''.join(cambios))
+        return RolAdminRepository.obtener(rol_id)
+
+    @staticmethod
+    def dar_de_baja(rol_id, actor, ip_origen):
+        with transaction.atomic():
+            rol = RolAdminRepository.bloquear(rol_id)
+            if rol is None:
+                raise NotFound()
+            RolAdminService._exigir_rol_personalizado(rol, 'dar de baja')
+            if rol.estado == EstadoRegistro.BAJA:
+                raise ValidationError('El rol ya está dado de baja.')
+            usos = RolAdminRepository.contar_usos(rol.pk)
+            if usos:
+                uso = 'lo usa 1 usuario' if usos == 1 else f'lo usan {usos} usuarios'
+                raise ValidationError(
+                    f'No se puede dar de baja el rol «{rol.nombre}»: {uso}. '
+                    'Reasigná el rol de esas cuentas antes de darlo de baja.'
+                )
+            rol.desactivar()
+        RolAdminService._auditar('Baja', rol, actor, ip_origen)
 
 
 class ComplejoService:
