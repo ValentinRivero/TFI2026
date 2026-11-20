@@ -10,6 +10,10 @@ LARGO_TELEFONO = 30
 LARGO_DIRECCION = 160
 LARGO_INFO_SENA = 200
 LARGO_NOMBRE_CANCHA = 80
+LARGO_NOMBRE_DEPORTE = 60
+LARGO_NOMBRE_SERVICIO = 80
+LARGO_NOMBRE_ROL = 50
+LARGO_DESCRIPCION_ROL = 150
 LARGO_TEXTO_LIBRE = 255  # observaciones y descripciones
 LARGO_ACCION_AUDITORIA = 120
 LARGO_MAXIMO_PASSWORD = 128  # solo se aplica en la API; la base guarda el hash
@@ -154,11 +158,12 @@ class TipoEventoAuditoria(models.IntegerChoices):
     CAMBIO_CONFIGURACION = 14, 'Cambio de configuración del complejo'
     ACEPTACION_POLITICA = 15, 'Aceptación de la política de privacidad'
     CAMBIO_USUARIO = 16, 'Cambio administrativo de usuario'
+    CAMBIO_CATALOGO = 17, 'Cambio de catálogo del sistema'
 
 
 class Rol(ModeloBase):
-    nombre = models.CharField(max_length=50, unique=True)
-    descripcion = models.CharField(max_length=150, blank=True)
+    nombre = models.CharField(max_length=LARGO_NOMBRE_ROL, unique=True)
+    descripcion = models.CharField(max_length=LARGO_DESCRIPCION_ROL, blank=True)
 
     class Meta:
         db_table = 'roles'
@@ -342,7 +347,7 @@ class Complejo(ModeloBase):
 
 
 class Servicio(ModeloBase):
-    nombre = models.CharField(max_length=80, unique=True)
+    nombre = models.CharField(max_length=LARGO_NOMBRE_SERVICIO, unique=True)
 
     class Meta:
         db_table = 'servicios'
@@ -374,7 +379,7 @@ class ComplejoServicio(ModeloBase):
 
 
 class Deporte(ModeloBase):
-    nombre = models.CharField(max_length=60, unique=True)
+    nombre = models.CharField(max_length=LARGO_NOMBRE_DEPORTE, unique=True)
 
     class Meta:
         db_table = 'deportes'

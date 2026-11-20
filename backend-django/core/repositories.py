@@ -38,6 +38,7 @@ from .models import (
     ExcepcionHoraria,
     HorarioApertura,
     LogAuditoria,
+    Permiso,
     Reserva,
     Rol,
     RolPermiso,
@@ -229,6 +230,84 @@ class PermisoRepository:
         ).values_list('permiso__codigo', flat=True)
         return set(codigos)
 
+    @staticmethod
+    def activos():
+        return Permiso.objects.filter(estado=EstadoRegistro.ACTIVO)
+
+    @staticmethod
+    def activos_por_ids(permiso_ids):
+        return list(PermisoRepository.activos().filter(id__in=permiso_ids))
+
+
+class RolAdminRepository:
+    """
+    Consultas administrativas de roles. A diferencia de RolRepository, que solo ve los activos, acá se ven
+    también las bajas, con la cantidad de usuarios vigentes y los permisos asignados de cada rol.
+    """
+
+    @staticmethod
+    def listar():
+        asignaciones_activas = RolPermiso.objects.filter(
+            estado=EstadoRegistro.ACTIVO, permiso__estado=EstadoRegistro.ACTIVO,
+        ).select_related('permiso').order_by('permiso__modulo', 'permiso__codigo')
+        return (
+            Rol.objects
+            .annotate(usos=Count('usuarios', filter=~Q(usuarios__estado=EstadoUsuario.BAJA)))
+            .prefetch_related(Prefetch('asignaciones', queryset=asignaciones_activas, to_attr='asignaciones_activas'))
+            .order_by('id')
+        )
+
+    @staticmethod
+    def obtener(rol_id):
+        return RolAdminRepository.listar().filter(id=rol_id).first()
+
+    @staticmethod
+    def bloquear(rol_id):
+        return Rol.objects.select_for_update().filter(id=rol_id).first()
+
+    @staticmethod
+    def nombres():
+        """Id, nombre y estado de todos los roles, bajas incluidas: el nombre es único en la tabla."""
+        return list(Rol.objects.values_list('id', 'nombre', 'estado'))
+
+    @staticmethod
+    def crear(nombre, descripcion):
+        return Rol.objects.create(nombre=nombre, descripcion=descripcion)
+
+    @staticmethod
+    def actualizar(rol, **campos):
+        for campo, valor in campos.items():
+            setattr(rol, campo, valor)
+        rol.save(update_fields=[*campos, 'fecha_modificacion'])
+        return rol
+
+    @staticmethod
+    def _usuarios_vigentes(rol_id):
+        return Usuario.objects.filter(rol_id=rol_id).exclude(estado=EstadoUsuario.BAJA)
+
+    @staticmethod
+    def contar_usos(rol_id):
+        return RolAdminRepository._usuarios_vigentes(rol_id).count()
+
+    @staticmethod
+    def detalle_de_usos(rol_id):
+        """Cuentas activas o suspendidas con el rol: las mismas que cuenta `contar_usos`."""
+        return RolAdminRepository._usuarios_vigentes(rol_id).order_by('nombre_completo', 'id')
+
+    @staticmethod
+    def asignaciones(rol_id):
+        """Todas las asignaciones del rol, también las dadas de baja, para reactivarlas en lugar de duplicarlas."""
+        return list(RolPermiso.objects.filter(rol_id=rol_id).select_related('permiso'))
+
+    @staticmethod
+    def asignar(rol, permiso):
+        return RolPermiso.objects.create(rol=rol, permiso=permiso)
+
+    @staticmethod
+    def reactivar(asignacion):
+        asignacion.estado = EstadoRegistro.ACTIVO
+        asignacion.save(update_fields=['estado', 'fecha_modificacion'])
+
 
 class ComplejoRepository:
     @staticmethod
@@ -377,6 +456,104 @@ class CatalogoRepository:
     def existe_deporte(deporte_id):
         # Incluye los dados de baja: sus reservas siguen formando parte del historial de los reportes.
         return Deporte.objects.filter(id=deporte_id).exists()
+
+
+class CatalogoMaestroRepository:
+    """
+    Consultas administrativas de un catálogo maestro. A diferencia de CatalogoRepository, que sirve la lectura
+    pública, acá se ven también los registros dados de baja, con la cantidad de usos vigentes de cada uno.
+    """
+
+    modelo = None
+
+    @classmethod
+    def _usos(cls):
+        raise NotImplementedError
+
+    @classmethod
+    def listar(cls):
+        return cls.modelo.objects.annotate(usos=cls._usos()).order_by('nombre', 'id')
+
+    @classmethod
+    def obtener(cls, registro_id):
+        return cls.listar().filter(id=registro_id).first()
+
+    @classmethod
+    def bloquear(cls, registro_id):
+        return cls.modelo.objects.select_for_update().filter(id=registro_id).first()
+
+    @classmethod
+    def con_nombre(cls, nombre, excluir_id=None):
+        """Incluye las bajas: el nombre es único en la tabla, así que una baja también lo ocupa."""
+        registros = cls.modelo.objects.filter(nombre__iexact=nombre)
+        if excluir_id is not None:
+            registros = registros.exclude(id=excluir_id)
+        return registros.first()
+
+    @classmethod
+    def crear(cls, nombre):
+        return cls.modelo.objects.create(nombre=nombre)
+
+    @classmethod
+    def actualizar(cls, registro, **campos):
+        for campo, valor in campos.items():
+            setattr(registro, campo, valor)
+        registro.save(update_fields=[*campos, 'fecha_modificacion'])
+        return registro
+
+    @classmethod
+    def contar_usos(cls, registro_id):
+        return cls.modelo.objects.filter(id=registro_id).annotate(usos=cls._usos()).values_list('usos', flat=True).get()
+
+    @classmethod
+    def detalle_de_usos(cls, registro_id):
+        """Complejos que usan el registro, con los mismos filtros de estado que `_usos`: lo que bloquea su baja."""
+        raise NotImplementedError
+
+
+class DeporteRepository(CatalogoMaestroRepository):
+    modelo = Deporte
+
+    @classmethod
+    def _usos(cls):
+        return Count('canchas', filter=~Q(canchas__estado=EstadoCancha.BAJA))
+
+    @staticmethod
+    def complejos_con_canchas(deporte_id):
+        """Complejos cuya grilla pública muestra el nombre del deporte."""
+        return list(
+            Cancha.objects.filter(deporte_id=deporte_id).exclude(estado=EstadoCancha.BAJA)
+            .order_by().values_list('complejo_id', flat=True).distinct()
+        )
+
+    @classmethod
+    def detalle_de_usos(cls, registro_id):
+        """Complejos con canchas vigentes del deporte (en mantenimiento también cuentan), con esas canchas en `canchas_del_deporte`."""
+        canchas = Cancha.objects.filter(deporte_id=registro_id).exclude(estado=EstadoCancha.BAJA).order_by('nombre', 'id')
+        return (
+            Complejo.objects.filter(Exists(canchas.filter(complejo=OuterRef('pk')).order_by()))
+            .prefetch_related(Prefetch('canchas', queryset=canchas, to_attr='canchas_del_deporte'))
+            .order_by('nombre', 'id')
+        )
+
+
+class ServicioRepository(CatalogoMaestroRepository):
+    modelo = Servicio
+
+    @classmethod
+    def _usos(cls):
+        return Count(
+            'ofrecido_en',
+            filter=Q(ofrecido_en__estado=EstadoRegistro.ACTIVO) & ~Q(ofrecido_en__complejo__estado=EstadoRegistro.BAJA),
+        )
+
+    @classmethod
+    def detalle_de_usos(cls, registro_id):
+        """Complejos sin baja lógica que tienen el servicio activo."""
+        ofrecido = ComplejoServicio.objects.filter(
+            servicio_id=registro_id, estado=EstadoRegistro.ACTIVO, complejo=OuterRef('pk'),
+        )
+        return Complejo.objects.exclude(estado=EstadoRegistro.BAJA).filter(Exists(ofrecido)).order_by('nombre', 'id')
 
 
 class ComplejoServicioRepository:

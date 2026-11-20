@@ -9,9 +9,9 @@ const ESTADO_ACTIVO = 1;
 
 /**
  * Fila de un contrato: id del complejo, nombre y dirección, propietario (con una advertencia si su cuenta no está activa), estado del contrato,
- * fecha de alta y la acción de cambiar el estado.
+ * fecha de alta y las acciones: cambiar el estado del contrato y administrar el complejo en el panel.
  */
-export default function ContratoRow({ contrato, onCambiarEstado }) {
+export default function ContratoRow({ contrato, onCambiarEstado, onAdministrar }) {
   const estado = describir(ESTADO_CONTRATO, contrato.estado_contrato);
   const { propietario } = contrato;
   const cuenta = describir(ESTADO_USUARIO, propietario?.estado);
@@ -35,9 +35,14 @@ export default function ContratoRow({ contrato, onCambiarEstado }) {
       </CeldaTabla>
       <CeldaTabla etiqueta={t(`${columnas}.alta`)} className="num">{formatearFechaHora(contrato.fecha_creacion)}</CeldaTabla>
       <CeldaTabla etiqueta="" className="text-lg-end">
-        <Button size="sm" variant="outline-secondary" onClick={() => onCambiarEstado(contrato)}>
-          {t('contratos.cambiarEstado')}
-        </Button>
+        <div className="d-flex flex-wrap gap-2 justify-content-lg-end">
+          <Button size="sm" variant="outline-secondary" onClick={() => onAdministrar(contrato)}>
+            {t('contratos.administrar')}
+          </Button>
+          <Button size="sm" variant="outline-secondary" onClick={() => onCambiarEstado(contrato)}>
+            {t('contratos.cambiarEstado')}
+          </Button>
+        </div>
       </CeldaTabla>
     </tr>
   );

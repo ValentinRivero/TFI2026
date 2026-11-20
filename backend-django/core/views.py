@@ -6,6 +6,7 @@ from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.filters import OrderingFilter
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.settings import api_settings
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
@@ -25,6 +26,7 @@ from .filters import (
 from .permissions import AdministraComplejo, TienePermisoRBAC
 from .serializers import (
     CanchaSerializer,
+    CatalogoMaestroAdminSerializer,
     CatalogoMaestroSerializer,
     ComplejoAdminSerializer,
     ComplejoCatalogoSerializer,
@@ -34,6 +36,8 @@ from .serializers import (
     ContratoAltaSerializer,
     ContratoEstadoSerializer,
     ContratoSerializer,
+    DeporteAltaSerializer,
+    DeporteEdicionSerializer,
     ExcepcionHorariaSerializer,
     FechaTurnoFijoSerializer,
     FiltroAuditoriaSerializer,
@@ -44,14 +48,23 @@ from .serializers import (
     LogAuditoriaSerializer,
     MarcadorComplejoSerializer,
     OperadorSerializer,
+    PermisoAdminSerializer,
     ReaperturaSerializer,
     ReservaAgendaEdicionSerializer,
     ReservaAgendaSerializer,
     ReservaAltaSerializer,
     ReservaManualSerializer,
     ReservaPropiaSerializer,
+    RolAdminSerializer,
+    RolAltaSerializer,
+    RolEdicionSerializer,
+    ServicioAltaSerializer,
+    ServicioEdicionSerializer,
     ServiciosComplejoSerializer,
     TurnoFijoSerializer,
+    UsoDeporteSerializer,
+    UsoRolSerializer,
+    UsoServicioSerializer,
     UsuarioAdminEdicionSerializer,
     UsuarioAdminSerializer,
     VincularOperadorSerializer,
@@ -66,6 +79,7 @@ from .services import (
     ConflictoOperatoriaService,
     ComplejoService,
     ContratoService,
+    DeporteService,
     ExcepcionHorariaService,
     GrillaService,
     HorarioAperturaService,
@@ -74,6 +88,8 @@ from .services import (
     RecordatorioService,
     ReporteService,
     ReservaService,
+    RolAdminService,
+    ServicioService,
     SesionService,
     TurnoFijoService,
     UsuarioAdminService,
@@ -336,6 +352,102 @@ class DeporteViewSet(CatalogoMaestroViewSet):
 class ServicioViewSet(CatalogoMaestroViewSet):
     def get_queryset(self):
         return CatalogoService.servicios()
+
+
+class CatalogoMaestroAdminViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    """
+    Administración de un catálogo maestro. Vive en /sistema/ y no en la ruta pública, que sigue sirviendo
+    solo los registros activos. Las subclases declaran su servicio y sus serializers de alta y de edición.
+    """
+
+    permission_classes = [TienePermisoRBAC]
+    permisos_requeridos = {
+        accion: ('administrar_catalogos',)
+        for accion in ('list', 'retrieve', 'create', 'partial_update', 'destroy', 'usos')
+    }
+    serializer_class = CatalogoMaestroAdminSerializer
+    # Catálogos chicos y acotados (unas pocas filas): la pantalla de administración los recibe completos.
+    pagination_class = None
+    filter_backends = []
+    lookup_value_regex = r'\d+'
+    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
+    servicio = None
+    serializer_alta = None
+    serializer_edicion = None
+    serializer_usos = None
+
+    def get_queryset(self):
+        return self.servicio.listar()
+
+    def create(self, request):
+        entrada = self.serializer_alta(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        registro = self.servicio.crear(entrada.validated_data, request.user, AuditoriaService.ip_de_request(request))
+        return Response(self.get_serializer(registro).data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, pk=None):
+        registro = self.get_object()
+        entrada = self.serializer_edicion(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        registro = self.servicio.actualizar(
+            registro.pk, entrada.validated_data, request.user, AuditoriaService.ip_de_request(request),
+        )
+        return Response(self.get_serializer(registro).data)
+
+    def destroy(self, request, pk=None):
+        registro = self.get_object()
+        self.servicio.dar_de_baja(registro.pk, request.user, AuditoriaService.ip_de_request(request))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['get'])
+    def usos(self, request, pk=None):
+        """Dónde está en uso el registro, paginado: es lo que bloquea su baja (la cantidad puede crecer con el sistema)."""
+        usos = self.servicio.listar_usos(int(pk))
+        paginador = api_settings.DEFAULT_PAGINATION_CLASS()
+        pagina = paginador.paginate_queryset(usos, request, view=self)
+        return paginador.get_paginated_response(self.serializer_usos(pagina, many=True).data)
+
+
+class DeporteAdminViewSet(CatalogoMaestroAdminViewSet):
+    servicio = DeporteService
+    serializer_alta = DeporteAltaSerializer
+    serializer_edicion = DeporteEdicionSerializer
+    serializer_usos = UsoDeporteSerializer
+
+
+class ServicioAdminViewSet(CatalogoMaestroAdminViewSet):
+    servicio = ServicioService
+    serializer_alta = ServicioAltaSerializer
+    serializer_edicion = ServicioEdicionSerializer
+    serializer_usos = UsoServicioSerializer
+
+
+class RolAdminViewSet(CatalogoMaestroAdminViewSet):
+    """Roles del sistema: los base son de solo lectura y la baja se rechaza mientras haya cuentas con el rol."""
+
+    permisos_requeridos = {
+        accion: ('administrar_roles',)
+        for accion in ('list', 'retrieve', 'create', 'partial_update', 'destroy', 'usos')
+    }
+    serializer_class = RolAdminSerializer
+    servicio = RolAdminService
+    serializer_alta = RolAltaSerializer
+    serializer_edicion = RolEdicionSerializer
+    serializer_usos = UsoRolSerializer
+
+
+class PermisoAdminViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    """Catálogo de permisos para armar el selector de un rol."""
+
+    permission_classes = [TienePermisoRBAC]
+    permisos_requeridos = {'list': ('administrar_roles',)}
+    serializer_class = PermisoAdminSerializer
+    # Catálogo acotado por naturaleza (decenas de filas, solo crece al sumar funciones al sistema).
+    pagination_class = None
+    filter_backends = []
+
+    def get_queryset(self):
+        return RolAdminService.permisos()
 
 
 BACKENDS_DE_LISTADO = (DjangoFilterBackend, BusquedaFlexibleFilter, OrderingFilter)

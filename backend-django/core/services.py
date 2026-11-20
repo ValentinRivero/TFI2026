@@ -46,13 +46,16 @@ from .repositories import (
     CatalogoRepository,
     ComplejoRepository,
     ComplejoServicioRepository,
+    DeporteRepository,
     ExcepcionHorariaRepository,
     GrillaRepository,
     HorarioAperturaRepository,
     PermisoRepository,
     ReporteRepository,
     ReservaRepository,
+    RolAdminRepository,
     RolRepository,
+    ServicioRepository,
     SesionRepository,
     TurnoFijoRepository,
     UsuarioRepository,
@@ -64,6 +67,11 @@ ROL_SUPERADMIN = 'SUPERADMIN'
 ROL_DUENO = 'DUENO_COMPLEJO'
 ROL_OPERADOR = 'OPERADOR_COMPLEJO'
 ROL_JUGADOR = 'JUGADOR'
+# Roles que carga seed_inicial: el código decide el acceso por su nombre y el seed reescribe sus permisos en cada despliegue.
+ROLES_BASE = (ROL_SUPERADMIN, ROL_DUENO, ROL_OPERADOR, ROL_JUGADOR)
+# Los permisos de estos módulos gobiernan la plataforma entera: solo los tiene el superadministrador y un rol
+# personalizado nunca los recibe, para que crear un rol no sea una vía de escalación de privilegios.
+MODULOS_EXCLUSIVOS_DE_PLATAFORMA = frozenset({'sistema'})
 
 CATEGORIA_AVISO_RESERVAS = 1
 CATEGORIA_AVISO_CUENTAS = 2
@@ -728,6 +736,306 @@ class CatalogoService:
     @staticmethod
     def marcadores_publicos():
         return ComplejoRepository.marcadores_publicos()
+
+
+class CatalogoMaestroService:
+    """
+    Administración de un catálogo maestro (deportes, servicios) por el superadministrador. La baja es lógica y se
+    rechaza mientras el registro esté en uso, para no dejar canchas o complejos apuntando a algo que el catálogo
+    público ya no muestra. Las subclases declaran el repositorio y cómo se describe el uso.
+    """
+
+    repositorio = None
+    etiqueta = ''
+
+    @classmethod
+    def _describir_uso(cls, usos):
+        raise NotImplementedError
+
+    @classmethod
+    def _al_renombrar(cls, registro):
+        """Gancho para invalidar lo que guarda una copia del nombre. Corre dentro de la transacción."""
+
+    @classmethod
+    def listar(cls):
+        return cls.repositorio.listar()
+
+    @classmethod
+    def listar_usos(cls, registro_id):
+        """Dónde está en uso el registro (lo que impide su baja). 404 si no existe."""
+        if cls.repositorio.obtener(registro_id) is None:
+            raise NotFound()
+        return cls.repositorio.detalle_de_usos(registro_id)
+
+    @classmethod
+    def _validar_nombre(cls, nombre, excluir_id=None):
+        existente = cls.repositorio.con_nombre(nombre, excluir_id)
+        if existente is None:
+            return
+        if existente.estado == EstadoRegistro.BAJA:
+            mensaje = f'Ya existe un {cls.etiqueta} con ese nombre dado de baja. Reactivalo en lugar de crear otro.'
+        else:
+            mensaje = f'Ya existe un {cls.etiqueta} con ese nombre.'
+        raise ValidationError({'nombre': mensaje})
+
+    @classmethod
+    def _auditar(cls, accion, registro, actor, ip_origen, extra=''):
+        AuditoriaService.registrar(
+            TipoEventoAuditoria.CAMBIO_CATALOGO, f'{accion} de {cls.etiqueta}',
+            detalle=f'{cls.etiqueta.capitalize()} id {registro.pk}: «{registro.nombre}».{extra}',
+            usuario=actor, ip_origen=ip_origen,
+        )
+
+    @classmethod
+    def crear(cls, datos, actor, ip_origen):
+        try:
+            with transaction.atomic():
+                cls._validar_nombre(datos['nombre'])
+                registro = cls.repositorio.crear(datos['nombre'])
+        except IntegrityError:
+            # Alta simultánea con el mismo nombre: la unicidad de la tabla decide.
+            raise ValidationError({'nombre': f'Ya existe un {cls.etiqueta} con ese nombre.'})
+        cls._auditar('Alta', registro, actor, ip_origen)
+        return cls.repositorio.obtener(registro.pk)
+
+    @classmethod
+    def actualizar(cls, registro_id, datos, actor, ip_origen):
+        try:
+            with transaction.atomic():
+                registro = cls.repositorio.bloquear(registro_id)
+                if registro is None:
+                    raise NotFound()
+                campos = _campos_modificados(registro, datos)
+                if not campos:
+                    return cls.repositorio.obtener(registro_id)
+                nombre_anterior = registro.nombre
+                if 'nombre' in campos:
+                    cls._validar_nombre(campos['nombre'], excluir_id=registro.pk)
+                cls.repositorio.actualizar(registro, **campos)
+                if 'nombre' in campos:
+                    cls._al_renombrar(registro)
+        except IntegrityError:
+            raise ValidationError({'nombre': f'Ya existe un {cls.etiqueta} con ese nombre.'})
+
+        cambios = []
+        if 'nombre' in campos:
+            cambios.append(f' Antes: «{nombre_anterior}».')
+        if 'estado' in campos:
+            cambios.append(' Reactivado.')
+        cls._auditar('Modificación', registro, actor, ip_origen, ''.join(cambios))
+        return cls.repositorio.obtener(registro_id)
+
+    @classmethod
+    def dar_de_baja(cls, registro_id, actor, ip_origen):
+        with transaction.atomic():
+            registro = cls.repositorio.bloquear(registro_id)
+            if registro is None:
+                raise NotFound()
+            if registro.estado == EstadoRegistro.BAJA:
+                raise ValidationError(f'El {cls.etiqueta} ya está dado de baja.')
+            usos = cls.repositorio.contar_usos(registro.pk)
+            if usos:
+                raise ValidationError(
+                    f'No se puede dar de baja el {cls.etiqueta} «{registro.nombre}»: está en uso en '
+                    f'{cls._describir_uso(usos)}. Quitalo de ahí antes de darlo de baja.'
+                )
+            registro.desactivar()
+        cls._auditar('Baja', registro, actor, ip_origen)
+
+
+class DeporteService(CatalogoMaestroService):
+    repositorio = DeporteRepository
+    etiqueta = 'deporte'
+
+    @classmethod
+    def _describir_uso(cls, usos):
+        return f'{usos} cancha' if usos == 1 else f'{usos} canchas'
+
+    @classmethod
+    def _al_renombrar(cls, registro):
+        # La grilla pública cacheada lleva el nombre del deporte: se invalida la de cada complejo que lo usa.
+        for complejo_id in DeporteRepository.complejos_con_canchas(registro.pk):
+            transaction.on_commit(lambda complejo_id=complejo_id: CacheGrillaService.invalidar(complejo_id))
+
+
+class ServicioService(CatalogoMaestroService):
+    repositorio = ServicioRepository
+    etiqueta = 'servicio'
+
+    @classmethod
+    def _describir_uso(cls, usos):
+        return f'{usos} complejo' if usos == 1 else f'{usos} complejos'
+
+
+class RolAdminService:
+    """
+    Administración de roles por el superadministrador. Los roles base (`ROLES_BASE`) son de solo lectura: el acceso
+    por complejo se decide por su nombre y `seed_inicial` reescribe sus permisos en cada despliegue, así que una
+    edición se perdería o dejaría la matriz de permisos distinta de la documentada. Un rol personalizado solo recibe
+    permisos fuera de `MODULOS_EXCLUSIVOS_DE_PLATAFORMA` y no se da de baja mientras lo usen cuentas vigentes.
+    """
+
+    @staticmethod
+    def listar():
+        return RolAdminRepository.listar()
+
+    @staticmethod
+    def permisos():
+        return PermisoRepository.activos()
+
+    @staticmethod
+    def listar_usos(rol_id):
+        """Cuentas vigentes con el rol (lo que impide su baja). 404 si no existe."""
+        if RolAdminRepository.obtener(rol_id) is None:
+            raise NotFound()
+        return RolAdminRepository.detalle_de_usos(rol_id)
+
+    @staticmethod
+    def es_asignable(permiso):
+        return permiso.modulo not in MODULOS_EXCLUSIVOS_DE_PLATAFORMA
+
+    @staticmethod
+    def _clave(nombre):
+        """Forma comparable de un nombre: sin mayúsculas, espacios ni guiones bajos ("Encargado Turno" = "ENCARGADO_TURNO")."""
+        return re.sub(r'[\s_]+', '', nombre).casefold()
+
+    @staticmethod
+    def _validar_nombre(nombre, excluir_id=None):
+        clave = RolAdminService._clave(nombre)
+        for rol_id, existente, estado in RolAdminRepository.nombres():
+            if rol_id == excluir_id or RolAdminService._clave(existente) != clave:
+                continue
+            if estado == EstadoRegistro.BAJA:
+                mensaje = 'Ya existe un rol con ese nombre dado de baja. Reactivalo en lugar de crear otro.'
+            else:
+                mensaje = 'Ya existe un rol con ese nombre.'
+            raise ValidationError({'nombre': mensaje})
+
+    @staticmethod
+    def _exigir_rol_personalizado(rol, operacion):
+        if rol.nombre in ROLES_BASE:
+            raise ValidationError(
+                f'«{rol.nombre}» es un rol base del sistema: no se puede {operacion}. '
+                'Su nombre y sus permisos se definen en la carga inicial.'
+            )
+
+    @staticmethod
+    def _resolver_permisos(permiso_ids):
+        permisos = PermisoRepository.activos_por_ids(permiso_ids)
+        inexistentes = sorted(set(permiso_ids) - {permiso.pk for permiso in permisos})
+        if inexistentes:
+            raise ValidationError({'permisos': f'No existen estos permisos: {", ".join(map(str, inexistentes))}.'})
+        reservados = sorted(permiso.codigo for permiso in permisos if not RolAdminService.es_asignable(permiso))
+        if reservados:
+            raise ValidationError({
+                'permisos': 'Un rol personalizado no puede tener permisos exclusivos de la plataforma: '
+                            f'{", ".join(reservados)}.',
+            })
+        return permisos
+
+    @staticmethod
+    def _sincronizar_permisos(rol, permisos):
+        """Deja asignados exactamente `permisos`: reactiva las bajas, desactiva las sobrantes y devuelve los cambios."""
+        actuales = {asignacion.permiso_id: asignacion for asignacion in RolAdminRepository.asignaciones(rol.pk)}
+        deseados = {permiso.pk: permiso for permiso in permisos}
+        agregados, quitados = [], []
+        for permiso_id, permiso in deseados.items():
+            asignacion = actuales.get(permiso_id)
+            if asignacion is None:
+                RolAdminRepository.asignar(rol, permiso)
+                agregados.append(permiso.codigo)
+            elif asignacion.estado != EstadoRegistro.ACTIVO:
+                RolAdminRepository.reactivar(asignacion)
+                agregados.append(permiso.codigo)
+        for permiso_id, asignacion in actuales.items():
+            if permiso_id not in deseados and asignacion.estado == EstadoRegistro.ACTIVO:
+                asignacion.desactivar()
+                quitados.append(asignacion.permiso.codigo)
+        return sorted(agregados), sorted(quitados)
+
+    @staticmethod
+    def _describir_permisos(agregados, quitados):
+        partes = []
+        if agregados:
+            partes.append(f' Permisos agregados: {", ".join(agregados)}.')
+        if quitados:
+            partes.append(f' Permisos quitados: {", ".join(quitados)}.')
+        return ''.join(partes)
+
+    @staticmethod
+    def _auditar(accion, rol, actor, ip_origen, extra=''):
+        AuditoriaService.registrar(
+            TipoEventoAuditoria.CAMBIO_CATALOGO, f'{accion} de rol',
+            detalle=f'Rol id {rol.pk}: «{rol.nombre}».{extra}',
+            usuario=actor, ip_origen=ip_origen,
+        )
+
+    @staticmethod
+    def crear(datos, actor, ip_origen):
+        try:
+            with transaction.atomic():
+                RolAdminService._validar_nombre(datos['nombre'])
+                permisos = RolAdminService._resolver_permisos(datos.get('permisos', []))
+                rol = RolAdminRepository.crear(datos['nombre'], datos.get('descripcion', ''))
+                agregados, _ = RolAdminService._sincronizar_permisos(rol, permisos)
+        except IntegrityError:
+            # Alta simultánea con el mismo nombre: la unicidad de la tabla decide.
+            raise ValidationError({'nombre': 'Ya existe un rol con ese nombre.'})
+        RolAdminService._auditar('Alta', rol, actor, ip_origen, RolAdminService._describir_permisos(agregados, []))
+        return RolAdminRepository.obtener(rol.pk)
+
+    @staticmethod
+    def actualizar(rol_id, datos, actor, ip_origen):
+        try:
+            with transaction.atomic():
+                rol = RolAdminRepository.bloquear(rol_id)
+                if rol is None:
+                    raise NotFound()
+                RolAdminService._exigir_rol_personalizado(rol, 'modificar')
+                campos = _campos_modificados(rol, {c: datos[c] for c in ('nombre', 'descripcion', 'estado') if c in datos})
+                nombre_anterior = rol.nombre
+                if 'nombre' in campos:
+                    RolAdminService._validar_nombre(campos['nombre'], excluir_id=rol.pk)
+                permisos = RolAdminService._resolver_permisos(datos['permisos']) if 'permisos' in datos else None
+                if campos:
+                    RolAdminRepository.actualizar(rol, **campos)
+                agregados, quitados = (
+                    RolAdminService._sincronizar_permisos(rol, permisos) if permisos is not None else ([], [])
+                )
+        except IntegrityError:
+            raise ValidationError({'nombre': 'Ya existe un rol con ese nombre.'})
+
+        if not (campos or agregados or quitados):
+            return RolAdminRepository.obtener(rol_id)
+        cambios = []
+        if 'nombre' in campos:
+            cambios.append(f' Antes: «{nombre_anterior}».')
+        if 'descripcion' in campos:
+            cambios.append(' Descripción modificada.')
+        if 'estado' in campos:
+            cambios.append(' Reactivado.')
+        cambios.append(RolAdminService._describir_permisos(agregados, quitados))
+        RolAdminService._auditar('Modificación', rol, actor, ip_origen, ''.join(cambios))
+        return RolAdminRepository.obtener(rol_id)
+
+    @staticmethod
+    def dar_de_baja(rol_id, actor, ip_origen):
+        with transaction.atomic():
+            rol = RolAdminRepository.bloquear(rol_id)
+            if rol is None:
+                raise NotFound()
+            RolAdminService._exigir_rol_personalizado(rol, 'dar de baja')
+            if rol.estado == EstadoRegistro.BAJA:
+                raise ValidationError('El rol ya está dado de baja.')
+            usos = RolAdminRepository.contar_usos(rol.pk)
+            if usos:
+                uso = 'lo usa 1 usuario' if usos == 1 else f'lo usan {usos} usuarios'
+                raise ValidationError(
+                    f'No se puede dar de baja el rol «{rol.nombre}»: {uso}. '
+                    'Reasigná el rol de esas cuentas antes de darlo de baja.'
+                )
+            rol.desactivar()
+        RolAdminService._auditar('Baja', rol, actor, ip_origen)
 
 
 class ComplejoService:

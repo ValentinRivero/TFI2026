@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
+import { t } from '../i18n/index.js';
 import {
-  FILTROS_VACIOS, aParametros, conVista, contarFiltros, hayFiltros, leerFiltros, leerVista, mostrarGuiaDeUso,
+  FILTROS_VACIOS, alternarElegido, aParametros, conVista, contarFiltros, hayFiltros, leerFiltros, leerVista, mostrarGuiaDeUso,
 } from './filtrosCatalogo.js';
 
 const desde = (consulta) => leerFiltros(new URLSearchParams(consulta));
@@ -117,5 +118,45 @@ describe('mostrarGuiaDeUso', () => {
 
   test('una búsqueda de solo espacios no cuenta como filtro', () => {
     expect(mostrarGuiaDeUso({ ...FILTROS_VACIOS, search: '   ' }, 'lista')).toBe(true);
+  });
+});
+
+describe('alternarElegido', () => {
+  test('agrega un id que no estaba, como texto y al final', () => {
+    expect(alternarElegido(['2'], 5)).toEqual(['2', '5']);
+  });
+
+  test('quita un id que ya estaba, sea número o texto', () => {
+    expect(alternarElegido(['2', '5'], 2)).toEqual(['5']);
+    expect(alternarElegido(['2', '5'], '5')).toEqual(['2']);
+  });
+
+  test('no modifica la lista original', () => {
+    const original = Object.freeze(['1']);
+
+    expect(alternarElegido(original, 3)).toEqual(['1', '3']);
+    expect(original).toEqual(['1']);
+  });
+
+  test('la selección múltiple viaja como servicio repetido y vuelve igual de la URL', () => {
+    const elegidos = alternarElegido(alternarElegido([], 4), 7);
+    const parametros = aParametros({ ...FILTROS_VACIOS, servicios: elegidos });
+
+    expect(parametros.toString()).toBe('servicio=4&servicio=7');
+    expect(leerFiltros(parametros).servicios).toEqual(['4', '7']);
+  });
+
+  test('desmarcar el último deja la selección vacía y sin parámetros', () => {
+    expect(aParametros({ ...FILTROS_VACIOS, servicios: alternarElegido(['4'], 4) }).toString()).toBe('');
+  });
+});
+
+describe('textos del filtro de servicios', () => {
+  test('etiquetas del desplegable', () => {
+    expect(t('filtros.servicios')).toBe('Servicios');
+    expect(t('filtros.cualquierServicio')).toBe('Cualquier servicio');
+    expect(t('filtros.serviciosConCantidad', { cantidad: 2 })).toBe('Servicios (2)');
+    expect(t('filtros.limpiarServicios')).toBe('Limpiar selección');
+    expect(t('filtros.seleccionados', { cantidad: 3 })).toBe('Seleccionados: 3');
   });
 });

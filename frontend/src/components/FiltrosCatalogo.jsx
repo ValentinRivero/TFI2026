@@ -4,10 +4,18 @@ import Form from 'react-bootstrap/Form';
 import { COBERTURA, ORDENES_CATALOGO } from '../config/catalogos.js';
 import { PARAMETROS } from '../config/parametros.js';
 import { t } from '../i18n/index.js';
-import { contarFiltros, hayFiltros } from '../utils/filtrosCatalogo.js';
+import { alternarElegido, contarFiltros, hayFiltros } from '../utils/filtrosCatalogo.js';
+import FiltroSelect from './FiltroSelect.jsx';
+import FiltroServicios from './FiltroServicios.jsx';
 import Icono from './Icono.jsx';
 
 const ORDEN_PREDETERMINADO = ORDENES_CATALOGO[0].valor;
+
+const opcionesCobertura = [
+  { valor: '', etiqueta: t('filtros.todasCoberturas') },
+  ...Object.entries(COBERTURA).map(([codigo, { etiqueta }]) => ({ valor: codigo, etiqueta })),
+];
+const opcionesOrden = ORDENES_CATALOGO.map(({ valor, clave }) => ({ valor, etiqueta: t(clave) }));
 
 /**
  * Filtros del catálogo. El estado vive en la URL (lo administra `Catalogo`): este componente muestra los filtros
@@ -32,14 +40,12 @@ export default function FiltrosCatalogo({ filtros, deportes, servicios, onCambia
     return () => clearTimeout(espera);
   }, [texto, filtros.search, onCambiar]);
 
-  const alternarServicio = (id) => {
-    const clave = String(id);
-    const elegidos = filtros.servicios.includes(clave)
-      ? filtros.servicios.filter((elegido) => elegido !== clave)
-      : [...filtros.servicios, clave];
-    onCambiar({ servicios: elegidos });
-  };
+  const alternarServicio = (id) => onCambiar({ servicios: alternarElegido(filtros.servicios, id) });
 
+  const opcionesDeporte = [
+    { valor: '', etiqueta: t('filtros.todosDeportes') },
+    ...deportes.map(({ id, nombre }) => ({ valor: String(id), etiqueta: nombre })),
+  ];
   const activos = contarFiltros(filtros);
 
   return (
@@ -71,52 +77,37 @@ export default function FiltrosCatalogo({ filtros, deportes, servicios, onCambia
 
       <div id={`${idPanel}-panel`} className={`${abierto ? '' : 'd-none'} d-md-block mt-3`}>
         <div className="row g-3">
-          <Form.Group className="col-md-4" controlId={`${idPanel}-deporte`}>
-            <Form.Label>{t('filtros.deporte')}</Form.Label>
-            <Form.Select value={filtros.deporte} onChange={(evento) => onCambiar({ deporte: evento.target.value })}>
-              <option value="">{t('filtros.todosDeportes')}</option>
-              {deportes.map(({ id, nombre }) => <option key={id} value={String(id)}>{nombre}</option>)}
-            </Form.Select>
-          </Form.Group>
-          <Form.Group className="col-md-4" controlId={`${idPanel}-cobertura`}>
-            <Form.Label>{t('filtros.cobertura')}</Form.Label>
-            <Form.Select value={filtros.cobertura} onChange={(evento) => onCambiar({ cobertura: evento.target.value })}>
-              <option value="">{t('filtros.todasCoberturas')}</option>
-              {Object.entries(COBERTURA).map(([codigo, { etiqueta }]) => <option key={codigo} value={codigo}>{etiqueta}</option>)}
-            </Form.Select>
-          </Form.Group>
-          <Form.Group className="col-md-4" controlId={`${idPanel}-orden`}>
-            <Form.Label>{t('filtros.orden')}</Form.Label>
-            <Form.Select
-              value={filtros.ordering || ORDEN_PREDETERMINADO}
-              onChange={(evento) => onCambiar({ ordering: evento.target.value === ORDEN_PREDETERMINADO ? '' : evento.target.value })}
-            >
-              {ORDENES_CATALOGO.map(({ valor, clave }) => <option key={valor} value={valor}>{t(clave)}</option>)}
-            </Form.Select>
-          </Form.Group>
+          <FiltroSelect
+            className="col-md-6 col-lg-3"
+            etiqueta={t('filtros.deporte')}
+            valor={filtros.deporte}
+            opciones={opcionesDeporte}
+            onCambiar={(deporte) => onCambiar({ deporte })}
+          />
+          <FiltroSelect
+            className="col-md-6 col-lg-3"
+            etiqueta={t('filtros.cobertura')}
+            valor={filtros.cobertura}
+            opciones={opcionesCobertura}
+            onCambiar={(cobertura) => onCambiar({ cobertura })}
+          />
+          {servicios.length > 0 && (
+            <FiltroServicios
+              className="col-md-6 col-lg-3"
+              servicios={servicios}
+              elegidos={filtros.servicios}
+              onAlternar={alternarServicio}
+              onLimpiar={() => onCambiar({ servicios: [] })}
+            />
+          )}
+          <FiltroSelect
+            className="col-md-6 col-lg-3"
+            etiqueta={t('filtros.orden')}
+            valor={filtros.ordering || ORDEN_PREDETERMINADO}
+            opciones={opcionesOrden}
+            onCambiar={(orden) => onCambiar({ ordering: orden === ORDEN_PREDETERMINADO ? '' : orden })}
+          />
         </div>
-
-        {servicios.length > 0 && (
-          <fieldset className="mt-3">
-            <legend className="form-label fs-6 mb-2">{t('filtros.servicios')}</legend>
-            <div className="d-flex flex-wrap gap-2">
-              {servicios.map(({ id, nombre }) => {
-                const elegido = filtros.servicios.includes(String(id));
-                return (
-                  <Button
-                    key={id}
-                    variant={elegido ? 'primary' : 'outline-primary'}
-                    aria-pressed={elegido}
-                    onClick={() => alternarServicio(id)}
-                  >
-                    {elegido && <Icono nombre="check" tamano={16} />}
-                    {nombre}
-                  </Button>
-                );
-              })}
-            </div>
-          </fieldset>
-        )}
 
         {hayFiltros(filtros) && (
           <div className="mt-3">

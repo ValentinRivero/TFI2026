@@ -12,7 +12,7 @@ const COLUMNAS = [
 ];
 
 /** Contratos en una tabla paginada con sus estados (carga, error, vacío). `lista` viene de `useListaPaginada`. */
-export default function TablaContratos({ lista, onCambiarEstado }) {
+export default function TablaContratos({ lista, onCambiarEstado, onAdministrar }) {
   return (
     <ListaAdmin
       lista={lista}
@@ -21,7 +21,9 @@ export default function TablaContratos({ lista, onCambiarEstado }) {
       resumen={t('contratos.resumen', { total: lista.total })}
       errorTitulo={t('contratos.errorTitulo')}
       vacio={{ titulo: t('contratos.vacioTitulo'), descripcion: t('contratos.vacioDescripcion') }}
-      renderFila={(contrato) => <ContratoRow key={contrato.id} contrato={contrato} onCambiarEstado={onCambiarEstado} />}
+      renderFila={(contrato) => (
+        <ContratoRow key={contrato.id} contrato={contrato} onCambiarEstado={onCambiarEstado} onAdministrar={onAdministrar} />
+      )}
     />
   );
 }

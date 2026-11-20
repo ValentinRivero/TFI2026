@@ -9,12 +9,16 @@ from rest_framework import serializers
 from .models import (
     HORAS_CANCELACION_DEFECTO,
     HORAS_CANCELACION_MAXIMAS,
+    LARGO_DESCRIPCION_ROL,
     LARGO_DIRECCION,
     LARGO_EMAIL,
     LARGO_INFO_SENA,
     LARGO_MINIMO_NOMBRE,
     LARGO_NOMBRE,
     LARGO_NOMBRE_CANCHA,
+    LARGO_NOMBRE_DEPORTE,
+    LARGO_NOMBRE_ROL,
+    LARGO_NOMBRE_SERVICIO,
     LARGO_TELEFONO,
     LARGO_TEXTO_LIBRE,
     LATITUD_MAXIMA,
@@ -24,6 +28,7 @@ from .models import (
     Complejo,
     EstadoCancha,
     EstadoContrato,
+    EstadoRegistro,
     EstadoReserva,
     EstadoTurnoFijo,
     EstadoUsuario,
@@ -41,8 +46,10 @@ from .services import (
     ACCION_CANCELAR_FECHA,
     ACCION_MANTENER_FECHA,
     CRITERIOS_REPORTE,
+    ROLES_BASE,
     ConflictoOperatoriaService,
     ReservaService,
+    RolAdminService,
     TurnoFijoService,
 )
 
@@ -189,6 +196,141 @@ class FiltroReporteSerializer(serializers.Serializer):
 class CatalogoMaestroSerializer(serializers.Serializer):
     id = serializers.IntegerField(read_only=True)
     nombre = serializers.CharField(read_only=True)
+
+
+class NombreCatalogoField(TextoLimpioField):
+    """Nombre de un catálogo maestro: sin etiquetas, sin espacios de más y con espacios internos simples."""
+
+    def to_internal_value(self, data):
+        return ' '.join(super().to_internal_value(data).split())
+
+
+def _nombre_de_catalogo(largo_maximo, **opciones):
+    return NombreCatalogoField(min_length=LARGO_MINIMO_NOMBRE, max_length=largo_maximo, **opciones)
+
+
+class CatalogoMaestroAdminSerializer(serializers.Serializer):
+    """Vista administrativa: incluye las bajas y cuántos registros vigentes usan cada ítem."""
+
+    id = serializers.IntegerField(read_only=True)
+    nombre = serializers.CharField(read_only=True)
+    estado = serializers.IntegerField(read_only=True)
+    estado_nombre = serializers.CharField(source='get_estado_display', read_only=True)
+    usos = serializers.IntegerField(read_only=True)
+    fecha_creacion = serializers.DateTimeField(read_only=True)
+    fecha_modificacion = serializers.DateTimeField(read_only=True)
+
+
+class CatalogoMaestroEdicionSerializer(serializers.Serializer):
+    """`estado` solo admite reactivar: la baja pasa por DELETE, que valida que el ítem no esté en uso."""
+
+    estado = serializers.ChoiceField(choices=[EstadoRegistro.ACTIVO], required=False)
+
+    def validate(self, attrs):
+        return _exigir_algun_campo(attrs)
+
+
+class UsoDeporteSerializer(serializers.Serializer):
+    """Un complejo que usa el deporte, con sus canchas vigentes de ese deporte."""
+
+    complejo_id = serializers.IntegerField(source='id', read_only=True)
+    complejo_nombre = serializers.CharField(source='nombre', read_only=True)
+    canchas = serializers.SerializerMethodField()
+
+    def get_canchas(self, complejo):
+        return [{'id': cancha.id, 'nombre': cancha.nombre} for cancha in complejo.canchas_del_deporte]
+
+
+class UsoServicioSerializer(serializers.Serializer):
+    complejo_id = serializers.IntegerField(source='id', read_only=True)
+    complejo_nombre = serializers.CharField(source='nombre', read_only=True)
+
+
+class UsoRolSerializer(serializers.Serializer):
+    """Cuenta con el rol: lo justo para identificarla y abrirla en la gestión de usuarios (que ya expone estos datos)."""
+
+    id = serializers.IntegerField(read_only=True)
+    nombre = serializers.CharField(source='nombre_completo', read_only=True)
+    email = serializers.CharField(read_only=True)
+    estado = serializers.IntegerField(read_only=True)
+    estado_nombre = serializers.CharField(source='get_estado_display', read_only=True)
+
+
+class DeporteAltaSerializer(serializers.Serializer):
+    nombre = _nombre_de_catalogo(LARGO_NOMBRE_DEPORTE)
+
+
+class DeporteEdicionSerializer(CatalogoMaestroEdicionSerializer):
+    nombre = _nombre_de_catalogo(LARGO_NOMBRE_DEPORTE, required=False)
+
+
+class ServicioAltaSerializer(serializers.Serializer):
+    nombre = _nombre_de_catalogo(LARGO_NOMBRE_SERVICIO)
+
+
+class ServicioEdicionSerializer(CatalogoMaestroEdicionSerializer):
+    nombre = _nombre_de_catalogo(LARGO_NOMBRE_SERVICIO, required=False)
+
+
+class IdsPermisoField(serializers.ListField):
+    child = serializers.IntegerField(min_value=1)
+
+    def to_internal_value(self, data):
+        ids = super().to_internal_value(data)
+        repetidos = sorted({permiso_id for permiso_id in ids if ids.count(permiso_id) > 1})
+        if repetidos:
+            raise serializers.ValidationError(f'No repitas permisos: {", ".join(map(str, repetidos))}.')
+        return ids
+
+
+class PermisoAdminSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    codigo = serializers.CharField(read_only=True)
+    nombre = serializers.CharField(read_only=True)
+    modulo = serializers.CharField(read_only=True)
+    asignable = serializers.SerializerMethodField(help_text='False si es exclusivo de la plataforma.')
+
+    def get_asignable(self, permiso):
+        return RolAdminService.es_asignable(permiso)
+
+
+class AsignacionPermisoSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source='permiso_id', read_only=True)
+    codigo = serializers.CharField(source='permiso.codigo', read_only=True)
+    nombre = serializers.CharField(source='permiso.nombre', read_only=True)
+    modulo = serializers.CharField(source='permiso.modulo', read_only=True)
+
+
+class RolAdminSerializer(serializers.Serializer):
+    """Vista administrativa: incluye las bajas, los permisos vigentes y cuántas cuentas usan cada rol."""
+
+    id = serializers.IntegerField(read_only=True)
+    nombre = serializers.CharField(read_only=True)
+    descripcion = serializers.CharField(read_only=True)
+    estado = serializers.IntegerField(read_only=True)
+    estado_nombre = serializers.CharField(source='get_estado_display', read_only=True)
+    es_base = serializers.SerializerMethodField(help_text='True en los roles protegidos de la carga inicial.')
+    usos = serializers.IntegerField(read_only=True)
+    permisos = AsignacionPermisoSerializer(many=True, source='asignaciones_activas', read_only=True)
+    fecha_creacion = serializers.DateTimeField(read_only=True)
+    fecha_modificacion = serializers.DateTimeField(read_only=True)
+
+    def get_es_base(self, rol):
+        return rol.nombre in ROLES_BASE
+
+
+class RolAltaSerializer(serializers.Serializer):
+    nombre = _nombre_de_catalogo(LARGO_NOMBRE_ROL)
+    descripcion = TextoLimpioField(max_length=LARGO_DESCRIPCION_ROL, required=False, allow_blank=True)
+    permisos = IdsPermisoField(required=False)
+
+
+class RolEdicionSerializer(CatalogoMaestroEdicionSerializer):
+    """`permisos` reemplaza la lista completa; `estado` solo admite reactivar (la baja pasa por DELETE)."""
+
+    nombre = _nombre_de_catalogo(LARGO_NOMBRE_ROL, required=False)
+    descripcion = TextoLimpioField(max_length=LARGO_DESCRIPCION_ROL, required=False, allow_blank=True)
+    permisos = IdsPermisoField(required=False)
 
 
 class CanchaPublicaSerializer(serializers.ModelSerializer):

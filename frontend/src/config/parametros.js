@@ -115,6 +115,10 @@ export const PARAMETROS = Object.freeze({
     direccion: 160,
     infoSena: 200,
     nombreCancha: 80,
+    nombreDeporte: 60,
+    nombreServicio: 80,
+    nombreRol: 50,
+    descripcionRol: 150,
     descripcion: 255,
   }),
   // `proximasFechas`: cuántas fechas futuras de un turno fijo se ofrecen al llevarlas a la agenda.

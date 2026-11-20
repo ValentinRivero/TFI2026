@@ -61,6 +61,9 @@ export const cuerpoComplejoNuevo = (valores) => {
 /** Id de usuario de un parámetro de la ruta (`?verUsuario=`): un entero positivo, o `null` si falta o es inválido. */
 export const idDeUsuarioEnRuta = (texto) => (/^[1-9]\d{0,9}$/.test(texto ?? '') ? Number(texto) : null);
 
+/** Ruta de `/sistema` que abre la ficha de una cuenta en modo consulta. */
+export const rutaDeFichaUsuario = (id) => `/sistema?verUsuario=${encodeURIComponent(id)}`;
+
 export const FILTROS_USUARIOS_INICIALES = Object.freeze({ rol: '', estado: '', busqueda: '' });
 
 /** Parámetros de `GET /api/usuarios/` con los filtros y la página. */

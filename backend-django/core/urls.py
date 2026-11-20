@@ -7,6 +7,7 @@ from .views import (
     CanchaViewSet,
     ComplejoViewSet,
     ContratoViewSet,
+    DeporteAdminViewSet,
     DeporteViewSet,
     ExcepcionHorariaViewSet,
     HorarioAperturaViewSet,
@@ -14,11 +15,14 @@ from .views import (
     LogoutView,
     PerfilBajaView,
     PerfilView,
+    PermisoAdminViewSet,
     RefreshView,
     RegistroView,
     ReporteDashboardView,
     ReservaViewSet,
+    RolAdminViewSet,
     SaludView,
+    ServicioAdminViewSet,
     ServicioViewSet,
     TurnoFijoViewSet,
     UsuarioViewSet,
@@ -28,6 +32,10 @@ router = SimpleRouter()
 router.register('auditoria', AuditoriaViewSet, basename='auditoria')
 router.register('deportes', DeporteViewSet, basename='deporte')
 router.register('servicios', ServicioViewSet, basename='servicio')
+router.register('sistema/deportes', DeporteAdminViewSet, basename='deporte-admin')
+router.register('sistema/servicios', ServicioAdminViewSet, basename='servicio-admin')
+router.register('sistema/roles', RolAdminViewSet, basename='rol-admin')
+router.register('sistema/permisos', PermisoAdminViewSet, basename='permiso-admin')
 router.register('complejos', ComplejoViewSet, basename='complejo')
 router.register('canchas', CanchaViewSet, basename='cancha')
 router.register('horarios', HorarioAperturaViewSet, basename='horario')
