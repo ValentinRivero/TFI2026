@@ -18,6 +18,21 @@ function Atribucion({ className = '' }) {
   );
 }
 
+// Datos sin significado con la misma forma que los reales: con ellos la franja compacta reserva en pantalla el alto que
+// va a ocupar, así que al llegar el pronóstico no se corre nada de lo que hay alrededor (la cancha de fondo de la portada).
+const ESPACIO = ' ';
+const DATOS_DE_RESERVA = Object.freeze({
+  actual: Object.freeze({ temperatura: 0, descripcion: ESPACIO, viento_kmh: 0 }),
+  pronostico: Object.freeze(
+    Array.from({ length: PARAMETROS.clima.diasDePronostico }, (_, indice) => Object.freeze({
+      fecha: `2000-01-0${indice + 1}`,
+      temperatura_max: 0,
+      temperatura_min: 0,
+      descripcion: ESPACIO,
+    })),
+  ),
+});
+
 const lluvia = (dia) => (
   dia.probabilidad_lluvia === null || dia.probabilidad_lluvia === undefined
     ? ''
@@ -117,6 +132,16 @@ function DelDia({ datos, fecha }) {
   );
 }
 
+// Estado de carga o de error de la franja compacta: conserva el alto de la tarjeta con datos y muestra el aviso encima.
+function EstadoCompacto({ children, ...atributos }) {
+  return (
+    <div className="clima-reserva" {...atributos}>
+      <div aria-hidden="true"><Compacto datos={DATOS_DE_RESERVA} /></div>
+      <div className="clima-reserva-estado clima-estado">{children}</div>
+    </div>
+  );
+}
+
 const VARIANTES = { compacto: Compacto, detalle: Detalle, dia: DelDia };
 
 /**
@@ -131,23 +156,27 @@ export default function ClimaCard({ datos, error, cargando, recargar, variante =
   const Variante = VARIANTES[variante] ?? Detalle;
   const envoltorio = variante === 'dia' ? 'clima-estado clima-estado-chico' : 'superficie p-3 clima-estado';
 
+  // La franja compacta reserva su alto; las demás variantes son livianas y se muestran en su propia caja.
+  const Envoltorio = variante === 'compacto' ? EstadoCompacto : 'div';
+  const claseDeEnvoltorio = variante === 'compacto' ? undefined : envoltorio;
+
   if (cargando && !datos) {
     return (
-      <div className={envoltorio} aria-busy="true">
+      <Envoltorio className={claseDeEnvoltorio} aria-busy="true">
         <Cargando variante="inline" texto={t('clima.cargando')} />
-      </div>
+      </Envoltorio>
     );
   }
 
   if (error || !datos) {
     return (
-      <div className={envoltorio} role="status">
+      <Envoltorio className={claseDeEnvoltorio} role="status">
         <span className="d-inline-flex align-items-center gap-2 text-secondary">
           <Icono nombre="alerta" tamano={18} className="flex-shrink-0" />
           {t('clima.noDisponible')}
         </span>
         <Button variant="outline-secondary" size="sm" onClick={recargar}>{t('comun.reintentar')}</Button>
-      </div>
+      </Envoltorio>
     );
   }
 

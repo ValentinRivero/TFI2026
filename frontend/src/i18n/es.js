@@ -62,6 +62,10 @@ const es = {
     panelReportes: 'Reportes',
     panelRegistro: 'Registro',
   },
+  tema: {
+    cambiarAOscuro: 'Cambiar a modo oscuro',
+    cambiarAClaro: 'Cambiar a modo claro',
+  },
   pie: {
     etiqueta: 'Información del sitio',
     descripcion: 'Plataforma de reservas y gestión de complejos deportivos.',

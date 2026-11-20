@@ -13,6 +13,7 @@ import { t } from '../i18n/index.js';
 import { enlaceActivo } from '../utils/navegacion.js';
 import { logout } from '../services/authService.js';
 import BotonAccion from './BotonAccion.jsx';
+import BotonTema from './BotonTema.jsx';
 import Cargando from './Cargando.jsx';
 import BannerInstalarPWA from './BannerInstalarPWA.jsx';
 import CampanaNotificaciones from './CampanaNotificaciones.jsx';
@@ -108,6 +109,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
             <img src="/icons/logo.svg" alt="" width="32" height="32" />
             {t('marca.nombre')}
           </Navbar.Brand>
+          <BotonTema className="boton-tema-movil d-lg-none" />
           <Navbar.Toggle
             aria-controls="menu-principal"
             aria-label={t('navegacion.menu')}
@@ -138,6 +140,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
             </Nav>
             {autenticado ? (
               <div className="barra-sesion">
+                <BotonTema className="d-none d-lg-inline-flex" />
                 <CampanaNotificaciones
                   contador={sinLeer}
                   activa={activo === RUTA_NOTIFICACIONES}
@@ -152,6 +155,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
               </div>
             ) : (
               <div className="barra-sesion">
+                <BotonTema className="d-none d-lg-inline-flex" />
                 <Button as={Link} to="/login" variant="outline-light" size="sm">{t('navegacion.ingresar')}</Button>
                 <Button as={Link} to="/registro" variant="primary" size="sm">{t('navegacion.registrarse')}</Button>
               </div>

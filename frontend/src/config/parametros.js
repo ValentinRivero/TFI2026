@@ -123,5 +123,15 @@ export const PARAMETROS = Object.freeze({
   // Espejo de LARGO_MINIMO_NOMBRE, LARGO_MINIMO_EMAIL y SIMBOLOS_PASSWORD de Django (core/models.py): reglas de los campos
   // de cuenta. El largo mínimo de la contraseña es `password.largoMinimo` y los máximos están en `limitesCampos`.
   cuenta: Object.freeze({ nombreLargoMinimo: 2, emailLargoMinimo: 6, passwordSimbolos: '!@#$%^&*()_+-=.,:;?/' }),
+  // Espejo de `diasDePronostico` de backend-node: la franja compacta del clima reserva el alto de esa cantidad de días.
+  clima: Object.freeze({ diasDePronostico: 3 }),
   pwa: Object.freeze({ claveBannerCerrado: 'talibre.bannerPwaCerrado', rutaServiceWorker: '/sw.js' }),
+  // Espejo del script de arranque de index.html (que aplica el tema antes de montar React) y de `--tema-pizarra` en
+  // tema.css: la clave del almacenamiento, la consulta de preferencia del sistema y el color de la barra del navegador
+  // coinciden con los de ese script. `utils/tema.test.js` verifica que sigan siendo iguales.
+  tema: Object.freeze({
+    claveAlmacenamiento: 'talibre_tema',
+    consultaOscuro: '(prefers-color-scheme: dark)',
+    colorBarra: Object.freeze({ light: '#0f172a', dark: '#0b1322' }),
+  }),
 });
