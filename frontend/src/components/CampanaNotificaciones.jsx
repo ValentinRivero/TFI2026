@@ -21,7 +21,7 @@ export default function CampanaNotificaciones({ contador, activa, onNavegar }) {
       onClick={onNavegar}
     >
       <Icono nombre="campana" />
-      <span className="campana-texto d-lg-none">{t('navegacion.notificaciones')}</span>
+      <span className="campana-texto d-xl-none">{t('navegacion.notificaciones')}</span>
       {sinLeer && <span className="campana-badge num" aria-hidden="true">{textoContador(contador)}</span>}
     </Link>
   );

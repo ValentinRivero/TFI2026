@@ -912,7 +912,7 @@ a {
 }
 
 /*
- * Barra superior. En escritorio (>= lg) tiene tres zonas en una grilla: marca a la izquierda, secciones centradas en
+ * Barra superior. En escritorio (>= xl) tiene tres zonas en una grilla: marca a la izquierda, secciones centradas en
  * una botonera segmentada y sesión a la derecha. En móvil, el menú es un panel flotante anclado bajo el botón.
  */
 .barra-superior {
@@ -986,6 +986,16 @@ a {
   overflow-wrap: anywhere;
 }
 
+/* En la barra expandida el nombre se trunca con elipsis: un nombre largo no puede empujar la sesión fuera de la ventana. El texto completo va en el `title`. */
+@media (min-width: 1200px) {
+  .barra-superior .barra-usuario {
+    max-width: 13rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 /* Campana de notificaciones: mismo lenguaje que los enlaces de la barra; el verde queda para la ruta actual */
 .barra-superior .campana {
   position: relative;
@@ -1030,7 +1040,7 @@ a {
   text-align: center;
 }
 
-@media (min-width: 992px) {
+@media (min-width: 1200px) {
   .barra-superior .campana-badge {
     position: absolute;
     top: 0.1rem;
@@ -1180,7 +1190,7 @@ a {
   }
 }
 
-@media (min-width: 992px) {
+@media (min-width: 1200px) {
   .barra-superior > .container,
   .barra-superior > .container-fluid {
     display: grid;
@@ -1224,7 +1234,7 @@ a {
   }
 }
 
-@media (max-width: 991.98px) {
+@media (max-width: 1199.98px) {
   /* La hamburguesa queda pegada al extremo derecho de la barra. */
   .barra-superior .barra-hamburguesa {
     margin-left: auto;
