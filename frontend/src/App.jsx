@@ -22,7 +22,9 @@ const Reportes = lazy(() => import('./pages/Reportes.jsx'));
 const RegistroComplejo = lazy(() => import('./pages/RegistroComplejo.jsx'));
 const LayoutSistema = lazy(() => import('./components/LayoutSistema.jsx'));
 const PanelSistema = lazy(() => import('./pages/PanelSistema.jsx'));
+const Roles = lazy(() => import('./pages/Roles.jsx'));
 const Contratos = lazy(() => import('./pages/Contratos.jsx'));
+const CatalogoSistema = lazy(() => import('./pages/CatalogoSistema.jsx'));
 const Auditoria = lazy(() => import('./pages/Auditoria.jsx'));
 const MisReservas = lazy(() => import('./pages/MisReservas.jsx'));
 const Perfil = lazy(() => import('./pages/Perfil.jsx'));
@@ -102,7 +104,10 @@ export default function App() {
           </Route>
           <Route path="/sistema" element={<ProtectedRoute seccion="sistema"><LayoutSistema /></ProtectedRoute>}>
             <Route index element={<PanelSistema />} />
+            <Route path="roles" element={<Roles />} />
             <Route path="contratos" element={<Contratos />} />
+            <Route path="deportes" element={<CatalogoSistema recurso="deportes" />} />
+            <Route path="servicios" element={<CatalogoSistema recurso="servicios" />} />
             <Route path="auditoria" element={<Auditoria />} />
           </Route>
         </Route>

@@ -5,16 +5,19 @@ import FiltrosContratos from '../components/FiltrosContratos.jsx';
 import FormularioComplejoNuevo from '../components/FormularioComplejoNuevo.jsx';
 import ModalEstadoContrato from '../components/ModalEstadoContrato.jsx';
 import TablaContratos from '../components/TablaContratos.jsx';
+import useAdministrarComplejo from '../hooks/useAdministrarComplejo.js';
 import useContratos from '../hooks/useContratos.js';
 import { t } from '../i18n/index.js';
 
 /**
  * Contratos de los complejos (superadmin): alta de un complejo con su propietario, listado con filtros y cambio de
- * estado del contrato. Un contrato suspendido o dado de baja oculta el complejo del catálogo público.
+ * estado del contrato. Un contrato suspendido o dado de baja oculta el complejo del catálogo público. Desde cada
+ * fila se entra al panel con ese complejo ya elegido.
  */
 export default function Contratos() {
   const contratos = useContratos();
   const { alta } = contratos;
+  const administrar = useAdministrarComplejo();
 
   return (
     <div>
@@ -30,7 +33,7 @@ export default function Contratos() {
       )}
 
       <FiltrosContratos filtros={contratos.filtros} />
-      <TablaContratos lista={contratos.lista} onCambiarEstado={contratos.cambio.pedir} />
+      <TablaContratos lista={contratos.lista} onCambiarEstado={contratos.cambio.pedir} onAdministrar={administrar} />
       <ModalEstadoContrato cambio={contratos.cambio} />
     </div>
   );

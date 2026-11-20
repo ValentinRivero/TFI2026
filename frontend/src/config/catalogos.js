@@ -124,6 +124,30 @@ export const ORDENES_CONTRATO = Object.freeze([
 /** Estados con los que se da de alta un contrato (los demás se alcanzan cambiando el estado). */
 export const ESTADOS_CONTRATO_INICIALES = Object.freeze([1, 2]);
 
+/** Estado de un registro con baja lógica (deportes, servicios y roles): la reactivación vuelve al estado activo. */
+export const ESTADO_REGISTRO = Object.freeze({
+  0: entrada('De baja', neutro),
+  1: entrada('Activo', ok),
+});
+
+export const REGISTRO_ACTIVO = 1;
+export const REGISTRO_BAJA = 0;
+
+/** Módulo de cada permiso del catálogo de roles, con su etiqueta. Un módulo nuevo del backend se muestra con su código. */
+export const ETIQUETA_MODULO_PERMISO = Object.freeze({
+  perfil: 'Perfil',
+  reservas: 'Reservas',
+  complejos: 'Complejos',
+  canchas: 'Canchas',
+  agenda: 'Agenda',
+  excepciones: 'Excepciones',
+  personal: 'Personal',
+  reportes: 'Reportes',
+  sistema: 'Sistema',
+});
+
+export const describirModulo = (modulo) => ETIQUETA_MODULO_PERMISO[modulo] ?? modulo;
+
 export const ESTADO_USUARIO = Object.freeze({
   0: entrada('Baja', neutro),
   1: entrada('Activo', ok),
@@ -225,6 +249,7 @@ export const TIPO_EVENTO_AUDITORIA = Object.freeze({
   14: entrada('Cambio de configuración', info),
   15: entrada('Aceptación de la política', ok),
   16: entrada('Cambio de usuario', aviso),
+  17: entrada('Cambio de catálogo', aviso),
 });
 
 export const CATEGORIA_NOTIFICACION = Object.freeze({
