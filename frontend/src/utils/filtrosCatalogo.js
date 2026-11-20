@@ -41,6 +41,12 @@ export const aParametros = (filtros) => {
   return parametros;
 };
 
+/** Lista de ids elegidos (texto) con `id` agregado o quitado, sin tocar la original. */
+export const alternarElegido = (elegidos, id) => {
+  const clave = String(id);
+  return elegidos.includes(clave) ? elegidos.filter((elegido) => elegido !== clave) : [...elegidos, clave];
+};
+
 /** Cantidad de criterios de filtrado activos; el orden no filtra, así que no cuenta. */
 export const contarFiltros = (filtros) => (
   Number(Boolean(filtros.deporte)) + Number(Boolean(filtros.cobertura)) + filtros.servicios.length

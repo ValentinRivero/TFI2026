@@ -478,3 +478,37 @@ Servicio de actividad y notificaciones, con su propia URL base. Sus errores sigu
 | `GET /api/usuarios/<id>/` | Superadmin | Detalle |
 | `PATCH /api/usuarios/<id>/` | Superadmin | `nombre_completo`, `telefono`, `rol`, `complejo_operado`, `estado` |
 | `GET /api/auditoria/` | Superadmin | Registro de eventos de seguridad, filtrable por tipo, usuario, complejo y rango de fechas |
+
+### Catálogos del sistema
+
+Administración de deportes, servicios y roles. Es la vista administrativa de los catálogos: a diferencia de `GET /api/deportes/` y `GET /api/servicios/`, que solo publican los registros activos, estas rutas incluyen las bajas y la cantidad de usos vigentes de cada ítem. Las listas son completas, sin paginar (catálogos chicos y acotados); las consultas de usos sí paginan.
+
+| Método y ruta | Acceso | Uso |
+|---|---|---|
+| `GET /api/sistema/deportes/` | Superadmin | Deportes con su estado, `usos` (canchas vigentes que lo usan) y fechas, incluidos los dados de baja |
+| `GET /api/sistema/deportes/<id>/` | Superadmin | Detalle de un deporte |
+| `POST /api/sistema/deportes/` | Superadmin | Alta: `{ "nombre" }` (de 2 a 60 caracteres, único sin distinguir mayúsculas) |
+| `PATCH /api/sistema/deportes/<id>/` | Superadmin | `nombre` y/o `estado: 1` (reactivar un deporte de baja) |
+| `DELETE /api/sistema/deportes/<id>/` | Superadmin | Baja lógica; `204`. Se rechaza con `400` si alguna cancha vigente lo usa |
+| `GET /api/sistema/deportes/<id>/usos/` | Superadmin | Complejos que usan el deporte, paginado: `complejo_id`, `complejo_nombre` y sus `canchas` (`id`, `nombre`) de ese deporte |
+| `GET /api/sistema/servicios/` | Superadmin | Servicios con su estado y `usos` (complejos vigentes que lo ofrecen), incluidos los dados de baja |
+| `GET /api/sistema/servicios/<id>/` | Superadmin | Detalle de un servicio |
+| `POST /api/sistema/servicios/` | Superadmin | Alta: `{ "nombre" }` (de 2 a 80 caracteres, único) |
+| `PATCH /api/sistema/servicios/<id>/` | Superadmin | `nombre` y/o `estado: 1` (reactivar) |
+| `DELETE /api/sistema/servicios/<id>/` | Superadmin | Baja lógica; `204`. Se rechaza con `400` si algún complejo vigente lo ofrece |
+| `GET /api/sistema/servicios/<id>/usos/` | Superadmin | Complejos que ofrecen el servicio, paginado: `complejo_id` y `complejo_nombre` |
+| `GET /api/sistema/permisos/` | Superadmin | Catálogo de permisos para armar un rol: `id`, `codigo`, `nombre`, `modulo` y `asignable` (`false` si es exclusivo de la plataforma). Sin paginar |
+| `GET /api/sistema/roles/` | Superadmin | Roles con `estado`, `es_base`, `usos` (cuentas vigentes con el rol) y `permisos` asignados, incluidos los dados de baja |
+| `GET /api/sistema/roles/<id>/` | Superadmin | Detalle de un rol |
+| `POST /api/sistema/roles/` | Superadmin | Alta: `nombre` (de 2 a 50 caracteres), `descripcion` opcional (hasta 150) y `permisos` opcional (lista de ids del catálogo, sin repetir) |
+| `PATCH /api/sistema/roles/<id>/` | Superadmin | `nombre`, `descripcion`, `permisos` (reemplaza la lista completa) y/o `estado: 1` (reactivar) |
+| `DELETE /api/sistema/roles/<id>/` | Superadmin | Baja lógica; `204`. Se rechaza con `400` si hay cuentas vigentes con el rol |
+| `GET /api/sistema/roles/<id>/usos/` | Superadmin | Cuentas vigentes con el rol, paginado: `id`, `nombre`, `email`, `estado` y `estado_nombre` |
+
+- Las respuestas de deportes y servicios traen `id`, `nombre`, `estado`, `estado_nombre`, `usos`, `fecha_creacion` y `fecha_modificacion`. Las de roles suman `descripcion`, `es_base` y `permisos` (`id`, `codigo`, `nombre`, `modulo`).
+- `estado` solo admite reactivar (`1`): la baja se hace siempre con `DELETE`, que verifica que el ítem no esté en uso.
+- Un nombre repetido (también contra uno dado de baja, con el mensaje de reactivarlo) responde `400` con el error en el campo `nombre`. En los roles, "Encargado Turno" y "ENCARGADO_TURNO" cuentan como el mismo nombre.
+- Los roles base del sistema son de solo lectura: modificarlos o darlos de baja responde `400`. Un rol personalizado no puede recibir permisos exclusivos de la plataforma ni ids inexistentes (`400`).
+- Respuestas de error: `400` por datos inválidos o ítem en uso, `401` sin sesión, `403` sin rol de superadmin y `404` si el id no existe.
+- Cada alta, modificación, baja o reactivación queda registrada en la auditoría con el tipo "Cambio de catálogo del sistema" (tipo de evento `17`), sin datos personales.
+
