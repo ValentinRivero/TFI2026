@@ -58,7 +58,7 @@ function DetalleDeComplejo({ id }) {
     alCambiarGrilla: grilla.recargar,
     retomar: retorno?.reservar ? retorno : null,
   });
-  const enVivo = useDisponibilidadEnVivo({
+  useDisponibilidadEnVivo({
     complejoId: id,
     habilitado: Boolean(complejo.datos) && grilla.error?.status !== 404,
     fecha,
@@ -104,7 +104,6 @@ function DetalleDeComplejo({ id }) {
         onCambiarFecha={setFecha}
         grilla={grilla}
         grillaDelDia={grillaDelDia}
-        enVivo={enVivo}
         turno={turno}
         clima={clima}
         reserva={reserva}

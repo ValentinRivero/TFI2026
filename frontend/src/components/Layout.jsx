@@ -13,6 +13,7 @@ import { t } from '../i18n/index.js';
 import { enlaceActivo } from '../utils/navegacion.js';
 import { logout } from '../services/authService.js';
 import BotonAccion from './BotonAccion.jsx';
+import BotonTema from './BotonTema.jsx';
 import Cargando from './Cargando.jsx';
 import BannerInstalarPWA from './BannerInstalarPWA.jsx';
 import CampanaNotificaciones from './CampanaNotificaciones.jsx';
@@ -35,12 +36,15 @@ const SECCIONES_DE_SESION = [
  * que en móvil pasa a un panel flotante anclado bajo el botón del menú y que acompaña el desplazamiento (`sticky`),
  * contenido principal y pie de página (`PiePagina`). El límite de
  * `Suspense` envuelve solo el contenido: mientras carga una pantalla diferida la barra y el menú siguen en su lugar. `enlaces` suma accesos propios de la pantalla (`{ a, texto }`);
- * `ancho` admite `panel` para los paneles de administración (contenedor fluido y densidad de escritorio).
+ * `ancho` admite `panel` para los paneles de administración (contenedor fluido y densidad de escritorio) y `completo`
+ * para las pantallas que arman sus propias secciones: no envuelve el contenido en un contenedor ni le da relleno
+ * vertical, así una sección puede ocupar el ancho de la ventana (portada) y el resto ubicarse en su `Container`.
  * `claveCarga` fija el límite de carga: por defecto cambia con la ruta; un panel con subvistas propias lo fija para
  * que su estructura (selector, subnavegación) no se vuelva a montar al pasar de una subvista a otra.
  */
 export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, children }) {
   const esPanel = ancho === 'panel';
+  const esCompleto = ancho === 'completo';
   const { autenticado, usuario, rol } = useSesion();
   const navegar = useNavigate();
   const { pathname } = useLocation();
@@ -105,6 +109,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
             <img src="/icons/logo.svg" alt="" width="32" height="32" />
             {t('marca.nombre')}
           </Navbar.Brand>
+          <BotonTema className="boton-tema-movil d-lg-none" />
           <Navbar.Toggle
             aria-controls="menu-principal"
             aria-label={t('navegacion.menu')}
@@ -135,6 +140,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
             </Nav>
             {autenticado ? (
               <div className="barra-sesion">
+                <BotonTema className="d-none d-lg-inline-flex" />
                 <CampanaNotificaciones
                   contador={sinLeer}
                   activa={activo === RUTA_NOTIFICACIONES}
@@ -149,6 +155,7 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
               </div>
             ) : (
               <div className="barra-sesion">
+                <BotonTema className="d-none d-lg-inline-flex" />
                 <Button as={Link} to="/login" variant="outline-light" size="sm">{t('navegacion.ingresar')}</Button>
                 <Button as={Link} to="/registro" variant="primary" size="sm">{t('navegacion.registrarse')}</Button>
               </div>
@@ -157,10 +164,13 @@ export default function Layout({ enlaces = [], ancho = 'normal', claveCarga, chi
         </Container>
       </Navbar>
 
-      <main id="contenido" className={`flex-grow-1 py-4 position-relative${esPanel ? ' panel-admin' : ''}`}>
+      <main
+        id="contenido"
+        className={`flex-grow-1 position-relative${esCompleto ? '' : ' py-4'}${esPanel ? ' panel-admin' : ''}`}
+      >
         {/* `key` crea un límite nuevo por pantalla: así la carga de una ruta diferida muestra el overlay también al navegar. */}
         <Suspense key={claveCarga ?? pathname} fallback={<Cargando variante="superpuesto" />}>
-          <Container fluid={esPanel}>{children}</Container>
+          {esCompleto ? children : <Container fluid={esPanel}>{children}</Container>}
         </Suspense>
       </main>
 

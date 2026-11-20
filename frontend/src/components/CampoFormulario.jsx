@@ -18,13 +18,14 @@ export default function CampoFormulario({ id, etiqueta, valor, onCambiar, error,
     <Form.Group className={className} controlId={id}>
       <Form.Label>{etiqueta}</Form.Label>
       <Form.Control
+        aria-describedby={ayuda ? `${id}-ayuda` : undefined}
         value={valor}
         onChange={(evento) => onCambiar(evento.target.value)}
         isInvalid={Boolean(error)}
         {...control}
       />
       <Form.Control.Feedback type="invalid">{error}</Form.Control.Feedback>
-      {ayuda && <Form.Text muted>{ayuda}</Form.Text>}
+      {ayuda && <Form.Text id={`${id}-ayuda`} muted>{ayuda}</Form.Text>}
     </Form.Group>
   );
 }

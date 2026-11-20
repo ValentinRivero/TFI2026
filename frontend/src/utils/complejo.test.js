@@ -86,6 +86,23 @@ describe('validarConfiguracion', () => {
     expect(Object.keys(errores).sort()).toEqual(['horas_limite_cancelacion', 'latitud', 'longitud', 'nombre']);
   });
 
+  test('admite hasta 6 decimales en las coordenadas y rechaza más', () => {
+    const base = valoresDeComplejo(complejo);
+
+    expect(validarConfiguracion({ ...base, latitud: '-29.140123', longitud: '-59.260123' })).toEqual({});
+    expect(validarConfiguracion({ ...base, latitud: '-29.1', longitud: '-59' })).toEqual({});
+
+    const errores = validarConfiguracion({ ...base, latitud: '-29.1401234', longitud: ' -59.2601234 ' });
+    expect(Object.keys(errores).sort()).toEqual(['latitud', 'longitud']);
+    expect(errores.latitud).toContain('6');
+  });
+
+  test('un valor fuera de rango informa el rango aunque también tenga muchos decimales', () => {
+    const errores = validarConfiguracion({ ...valoresDeComplejo(complejo), latitud: '95.1234567' });
+
+    expect(errores.latitud).toContain('90');
+  });
+
   test('las horas deben ser un entero no negativo', () => {
     expect(validarConfiguracion({ ...valoresDeComplejo(complejo), horas_limite_cancelacion: '-1' })).toHaveProperty('horas_limite_cancelacion');
     expect(validarConfiguracion({ ...valoresDeComplejo(complejo), horas_limite_cancelacion: '1.5' })).toHaveProperty('horas_limite_cancelacion');

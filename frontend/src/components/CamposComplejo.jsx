@@ -6,6 +6,7 @@ import { t } from '../i18n/index.js';
 import CampoFormulario from './CampoFormulario.jsx';
 
 const { limitesCampos, panel } = PARAMETROS;
+const decimales = panel.coordenadasDecimales;
 
 /**
  * Campos del perfil comercial de un complejo: nombre, dirección, coordenadas, teléfono, límite de cancelación e
@@ -26,6 +27,7 @@ export default function CamposComplejo({ campo, prefijo = 'complejo' }) {
           id={`${prefijo}-latitud`}
           etiqueta={t('configuracion.latitud')}
           inputMode="decimal"
+          ayuda={t('configuracion.ayudaLatitud', { decimales })}
           className="mb-0"
           {...campo('latitud')}
         />
@@ -35,6 +37,7 @@ export default function CamposComplejo({ campo, prefijo = 'complejo' }) {
           id={`${prefijo}-longitud`}
           etiqueta={t('configuracion.longitud')}
           inputMode="decimal"
+          ayuda={t('configuracion.ayudaLongitud', { decimales })}
           className="mb-0"
           {...campo('longitud')}
         />

@@ -2,8 +2,10 @@
  * Canal de disponibilidad en tiempo real de un complejo. Es de solo lectura: el servidor ignora lo que el cliente
  * envía y los eventos no llevan datos personales. Archivo, junto con `api.js`, que conoce la URL del WebSocket.
  *
- * Reconecta con espera exponencial y jitter. Un complejo sin contrato activo rechaza el handshake y el navegador solo
- * ve un corte genérico, así que quien lo usa decide cuándo dejar de reintentar llamando a `cerrar()`.
+ * Reconecta con espera exponencial y jitter, sin ninguna señal visual: la grilla se vuelve a pedir por REST al volver. El
+ * keepalive lo hace el servidor con pings de protocolo (el navegador responde solo los pongs), así que el cliente no
+ * envía nada. Un complejo sin contrato activo rechaza el handshake y el navegador solo ve un corte genérico, así que quien
+ * lo usa decide cuándo dejar de reintentar llamando a `cerrar()`.
  */
 import { ENTORNO } from '../config/parametros.js';
 import { armarUrlDisponibilidad, calcularEspera } from '../utils/tiempoReal.js';
@@ -15,10 +17,9 @@ import { obtenerEstado } from './authService.js';
  * @param {(evento: object) => void} opciones.alEvento mensaje JSON recibido
  * @param {(reconectada: boolean) => void} [opciones.alConectar] la conexión quedó abierta; `reconectada` es
  *   verdadero si antes hubo un corte (la grilla pudo cambiar sin que llegara el aviso)
- * @param {() => void} [opciones.alDesconectar] se perdió la conexión y se reintentará
  * @returns {{ cerrar: () => void }}
  */
-export const conectarDisponibilidad = ({ complejoId, alEvento, alConectar, alDesconectar }) => {
+export const conectarDisponibilidad = ({ complejoId, alEvento, alConectar }) => {
   let socket = null;
   let temporizador = null;
   let cerrado = false;
@@ -50,7 +51,6 @@ export const conectarDisponibilidad = ({ complejoId, alEvento, alConectar, alDes
       socket = null;
       if (cerrado) return;
       huboCorte = true;
-      alDesconectar?.();
       temporizador = setTimeout(abrir, calcularEspera(intentos));
       intentos += 1;
     };
@@ -62,13 +62,19 @@ export const conectarDisponibilidad = ({ complejoId, alEvento, alConectar, alDes
     cerrar: () => {
       cerrado = true;
       clearTimeout(temporizador);
-      if (socket) {
-        socket.onclose = null;
-        socket.onmessage = null;
-        socket.onopen = null;
-        socket.close();
-        socket = null;
+      if (!socket) return;
+      const cerrando = socket;
+      socket = null;
+      cerrando.onclose = null;
+      cerrando.onmessage = null;
+      // Cerrar un socket que todavía no abrió (el doble montaje de StrictMode lo hace) deja un error en la consola:
+      // se espera a que abra y se cierra recién entonces.
+      if (cerrando.readyState === WebSocket.CONNECTING) {
+        cerrando.onopen = () => cerrando.close();
+        return;
       }
+      cerrando.onopen = null;
+      cerrando.close();
     },
   };
 };

@@ -16,8 +16,8 @@ import SelectorFechaGrilla from './SelectorFechaGrilla.jsx';
  * Turnos del día de la cancha elegida (`cancha`, la ficha pública, o `null` si todavía no se eligió): selector de fecha
  * con su pronóstico, resumen de la cancha, su grilla en vivo, resumen del turno elegido y confirmación de la reserva.
  * Solo dibuja: la consulta (`grilla`), la grilla de la fecha visible (`grillaDelDia`, o `null` mientras
- * llega), el canal en vivo (`enVivo`), la elección (`turno`, de `useSeleccionTurno`), el clima (`clima`, de
- * `useClima`), el flujo de reserva (`reserva`, de `useReservaTurno`) y el `complejo` los entrega la página.
+ * llega), la elección (`turno`, de `useSeleccionTurno`), el clima (`clima`, de `useClima`), el flujo de reserva
+ * (`reserva`, de `useReservaTurno`) y el `complejo` los entrega la página.
  */
 export default function SeccionTurnos({
   complejo,
@@ -27,7 +27,6 @@ export default function SeccionTurnos({
   onCambiarFecha,
   grilla,
   grillaDelDia,
-  enVivo,
   turno,
   clima,
   reserva,
@@ -45,10 +44,7 @@ export default function SeccionTurnos({
 
   return (
     <section aria-labelledby="detalle-turnos">
-      <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-        <h2 id="detalle-turnos" className="h4 mb-0">{t('grilla.titulo')}</h2>
-        {enVivo.estado === 'reconectando' && <span className="badge badge-aviso">{t('grilla.reconectando')}</span>}
-      </div>
+      <h2 id="detalle-turnos" className="h4 mb-3">{t('grilla.titulo')}</h2>
 
       {!cancha ? (
         <p className="text-secondary mb-0">{t('grilla.elegirCanchaPrimero')}</p>

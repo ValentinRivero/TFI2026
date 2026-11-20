@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import Container from 'react-bootstrap/Container';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Alerta from '../components/Alerta.jsx';
 import BannerParaComplejos from '../components/BannerParaComplejos.jsx';
@@ -84,8 +85,7 @@ export default function Catalogo() {
   const esperandoReferencia = referencia === null && lista.cargando;
 
   return (
-    <div>
-      {aviso && <Alerta variante="success" onCerrar={descartarAviso}>{aviso}</Alerta>}
+    <>
       <HeroPresentacion onExplorar={irAResultados} onAbrirMapa={abrirMapa}>
         <ClimaCard
           {...clima}
@@ -95,32 +95,36 @@ export default function Catalogo() {
         />
       </HeroPresentacion>
 
-      {mostrarGuiaDeUso(filtros, vista) && <PasosComoFunciona />}
+      <Container className="py-4">
+        {aviso && <Alerta variante="success" onCerrar={descartarAviso}>{aviso}</Alerta>}
 
-      <div ref={bloqueResultados} id="resultados-catalogo" className="bloque-resultados" tabIndex={-1}>
-        <FiltrosCatalogo
-          filtros={filtros}
-          deportes={deportes.datos ?? LISTA_VACIA}
-          servicios={servicios.datos ?? LISTA_VACIA}
-          onCambiar={cambiarFiltros}
-          onLimpiar={limpiarFiltros}
-        />
+        {mostrarGuiaDeUso(filtros, vista) && <PasosComoFunciona />}
 
-        <SelectorVistaCatalogo vista={vista} onCambiar={cambiarVista} />
-
-        {enMapa ? (
-          <VistaMapa
-            consulta={marcadores}
-            hayFiltros={hayFiltros(filtros)}
+        <div ref={bloqueResultados} id="resultados-catalogo" className="bloque-resultados" tabIndex={-1}>
+          <FiltrosCatalogo
+            filtros={filtros}
+            deportes={deportes.datos ?? LISTA_VACIA}
+            servicios={servicios.datos ?? LISTA_VACIA}
+            onCambiar={cambiarFiltros}
             onLimpiar={limpiarFiltros}
-            onAbrirComplejo={navegar}
           />
-        ) : (
-          <ListaComplejos lista={lista} hayFiltros={hayFiltros(filtros)} onLimpiar={limpiarFiltros} />
-        )}
-      </div>
 
-      <BannerParaComplejos tienePanel={autenticado && puedeVer('panel', rol)} />
-    </div>
+          <SelectorVistaCatalogo vista={vista} onCambiar={cambiarVista} />
+
+          {enMapa ? (
+            <VistaMapa
+              consulta={marcadores}
+              hayFiltros={hayFiltros(filtros)}
+              onLimpiar={limpiarFiltros}
+              onAbrirComplejo={navegar}
+            />
+          ) : (
+            <ListaComplejos lista={lista} hayFiltros={hayFiltros(filtros)} onLimpiar={limpiarFiltros} />
+          )}
+        </div>
+
+        <BannerParaComplejos tienePanel={autenticado && puedeVer('panel', rol)} />
+      </Container>
+    </>
   );
 }

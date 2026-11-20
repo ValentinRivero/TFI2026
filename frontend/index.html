@@ -4,6 +4,31 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0f172a" />
+    <!--
+      Tema inicial antes del primer pintado, para que no haya un destello claro en modo oscuro. Es un script en línea y
+      no un archivo aparte porque el HTML ya se sirve sin caché y el service worker lo guarda con la cáscara: no suma
+      una petición bloqueante ni toca la caché de la PWA. Espeja `PARAMETROS.tema` y `utils/tema.js` (los valores los
+      verifica `utils/tema.test.js`). Si se incorpora una política CSP, hay que autorizarlo con hash o pasarlo a un archivo.
+    -->
+    <script>
+      (function () {
+        var tema = null;
+        try {
+          var guardado = window.localStorage.getItem('talibre_tema');
+          if (guardado === 'light' || guardado === 'dark') tema = guardado;
+        } catch (e) {}
+        if (!tema) {
+          try {
+            tema = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          } catch (e) {
+            tema = 'light';
+          }
+        }
+        document.documentElement.setAttribute('data-bs-theme', tema);
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', tema === 'dark' ? '#0b1322' : '#0f172a');
+      })();
+    </script>
     <meta name="description" content="Reservá turnos en canchas de Goya, en tiempo real." />
     <meta name="application-name" content="TaLibre" />
     <meta name="mobile-web-app-capable" content="yes" />

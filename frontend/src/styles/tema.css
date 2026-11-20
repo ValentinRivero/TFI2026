@@ -3,6 +3,11 @@
  * Se importa después del CSS de Bootstrap. Bootstrap compila sus colores dentro de cada componente (por ejemplo,
  * `.btn-primary` no lee `--bs-primary`), así que más abajo se redefinen las variables de los componentes que llevan
  * color de marca. Para cambiar la paleta alcanza con editar los tokens de `:root`.
+ *
+ * Modo claro y oscuro: Bootstrap 5.3 conmuta con `data-bs-theme` en `<html>` (lo fija `utils/tema.js`, y antes del
+ * primer pintado el script de `index.html`). El modo oscuro redefine los mismos tokens en `:root[data-bs-theme='dark']`.
+ * Toda regla nueva lee tokens (`var(--tema-*)`) o usa utilidades semánticas de Bootstrap (`bg-body`, `text-body`,
+ * `border`): nada de colores sueltos, `bg-white` ni `text-dark`, que se rompen en uno de los dos modos.
  */
 
 /* Barlow Semi Condensed (SIL OFL 1.1), autoalojada: ver public/fonts/OFL.txt. Sin servidores de terceros. */
@@ -30,27 +35,87 @@
   src: url('/fonts/barlow-semi-condensed-latin-700-normal.woff2') format('woff2');
 }
 
+/*
+ * Tokens del tema claro (por defecto). El modo oscuro redefine estos mismos nombres más abajo, bajo
+ * `:root[data-bs-theme='dark']`; las reglas de la aplicación solo leen tokens y nunca un color suelto, así que un
+ * componente nuevo respeta ambos modos sin código propio.
+ */
 :root,
 [data-bs-theme='light'] {
-  /* Marca */
+  color-scheme: light;
+
+  /* Marca. `-texto` es el verde para texto, enlaces y trazos sobre las superficies de cada modo; `primario` es el
+     verde de los botones y rellenos, que siempre llevan texto blanco (`--tema-sobre-primario`). */
   --tema-primario: #15803d;
   --tema-primario-hover: #166534;
   --tema-primario-profundo: #14532d;
   --tema-primario-suave: #f0fdf4;
   --tema-primario-rgb: 21, 128, 61;
+  --tema-primario-texto: #15803d;
+  --tema-primario-texto-hover: #166534;
+  --tema-primario-texto-rgb: 21, 128, 61;
+  --tema-primario-texto-hover-rgb: 22, 101, 52;
+  --tema-primario-sobre-suave: #14532d;
+  --tema-sobre-primario: #ffffff;
 
   /* Superficies y texto */
   --tema-fondo: #f4f6f5;
+  --tema-fondo-rgb: 244, 246, 245;
   --tema-superficie: #ffffff;
+  --tema-flotante-fondo: #f4f6f5;
   --tema-borde: #e2e8e5;
+  --tema-borde-campo: #cbd5d1;
+  --tema-borde-fuerte: #94a3b8;
   --tema-pizarra: #0f172a;
   --tema-pizarra-suave: #1e293b;
+  --tema-titulo: #0f172a;
+  --tema-texto: #1e293b;
+  --tema-texto-rgb: 30, 41, 59;
+  --tema-texto-suave: #475569;
+  --tema-texto-secundario-rgb: 108, 117, 125;
+  --tema-peligro-rgb: 220, 53, 69;
+  --tema-info: #0f766e;
+  --tema-info-rgb: 15, 118, 110;
+  --tema-neutro-hover: #0f172a;
+  --tema-neutro-activo: #1e293b;
+  --tema-velo: rgba(255, 255, 255, 0.72);
+  --tema-foco-anillo: rgba(21, 128, 61, 0.3);
+
+  /* Portada */
+  --hero-fondo: var(--tema-pizarra);
+  --hero-borde: var(--tema-primario);
+  --hero-titulo: #ffffff;
   --hero-texto: #f1f5f9;
   --hero-texto-suave: #cbd5e1;
   --hero-acento: #86efac;
+  --hero-linea: rgba(255, 255, 255, 0.18);
+  --hero-linea-fuerte: rgba(255, 255, 255, 0.4);
+  --hero-cancha-opacidad: 0.1;
   --pie-aviso: #f87171;
-  --tema-texto: #1e293b;
-  --tema-texto-suave: #475569;
+
+  /* Texto y trazos sobre las superficies siempre oscuras (barra superior, pie, invitación a instalar y menú móvil) */
+  --sobre-oscuro-titulo: #ffffff;
+  --sobre-oscuro-texto-fuerte: #e2e8f0;
+  --sobre-oscuro-texto: #cbd5e1;
+  --sobre-oscuro-suave: #94a3b8;
+  --sobre-oscuro-acento: #86efac;
+  --sobre-oscuro-acento-borde: #4ade80;
+  --sobre-oscuro-linea: rgba(255, 255, 255, 0.14);
+  --sobre-oscuro-linea-tenue: rgba(255, 255, 255, 0.2);
+  --sobre-oscuro-resalte: rgba(255, 255, 255, 0.1);
+  --sobre-oscuro-pulsado: rgba(255, 255, 255, 0.16);
+  --sobre-oscuro-bandeja: rgba(255, 255, 255, 0.05);
+  --sobre-oscuro-pista-spinner: rgba(255, 255, 255, 0.4);
+  --barra-translucida: rgba(15, 23, 42, 0.9);
+
+  /* Sombras de las capas flotantes (barra superior, mapa, popups): siempre neutras */
+  --sombra-chica: rgba(15, 23, 42, 0.1);
+  --sombra-barra: rgba(15, 23, 42, 0.25);
+  --sombra-control: rgba(15, 23, 42, 0.22);
+  --sombra-etiqueta: rgba(15, 23, 42, 0.25);
+  --sombra-popup: rgba(15, 23, 42, 0.32);
+  --sombra-menu: rgba(15, 23, 42, 0.4);
+  --sombra-banner: rgba(15, 23, 42, 0.3);
 
   /* Estados (badges y avisos): fondo, texto y borde */
   --estado-ok-fondo: #dcfce7;
@@ -77,14 +142,15 @@
   --barra-info: #0f766e;
   --barra-neutro: #64748b;
 
-  /* Casilleros de la grilla: se distinguen por fondo, tipo de borde y tipografía, no solo por color */
+  /* Casilleros de la grilla: se distinguen por fondo, tipo de borde y tipografía, no solo por color. La grilla y su
+     leyenda comparten estos tokens. */
   --casillero-libre-fondo: #ffffff;
   --casillero-libre-fondo-hover: #f0fdf4;
   --casillero-libre-borde: #15803d;
   --casillero-libre-texto: #166534;
-  --casillero-ocupado-fondo: #e7e5e4;
-  --casillero-ocupado-borde: #a8a29e;
-  --casillero-ocupado-texto: #57534e;
+  --casillero-ocupado-fondo: #fef2f2;
+  --casillero-ocupado-borde: #ef4444;
+  --casillero-ocupado-texto: #991b1b;
   --casillero-excepcion-fondo: #fef3c7;
   --casillero-excepcion-borde: #b45309;
   --casillero-excepcion-texto: #78350f;
@@ -95,43 +161,142 @@
   --casillero-nodisponible-borde: #94a3b8;
   --casillero-nodisponible-texto: #5b6b7f;
 
+  /* Mapa: las teselas son ráster, así que el modo se resuelve con un filtro sobre la capa de teselas */
+  --mapa-filtro-teselas: saturate(0.3) hue-rotate(22deg);
+  --mapa-fondo: #f4f6f5;
+  --mapa-atribucion-fondo: rgba(255, 255, 255, 0.88);
+
   /* Tipografía y medidas */
   --fuente-titulos: 'Barlow Semi Condensed', 'Arial Narrow', system-ui, sans-serif;
   --fuente-cuerpo: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --toque-min: 44px;
   --radio: 6px;
+}
 
-  /* Variables de Bootstrap */
+/*
+ * Tokens del modo oscuro. Se declaran solo en la raíz del documento (no en cualquier `[data-bs-theme='dark']`): la barra
+ * superior de react-bootstrap lleva su propio `data-bs-theme="dark"` y así hereda el tema vigente en lugar de fijar el
+ * oscuro. Los pares texto sobre fondo cumplen contraste WCAG AA (4.5:1; 3:1 en bordes y trazos).
+ */
+:root[data-bs-theme='dark'] {
+  color-scheme: dark;
+
+  --tema-primario-suave: #12261c;
+  --tema-primario-texto: #4ade80;
+  --tema-primario-texto-hover: #86efac;
+  --tema-primario-texto-rgb: 74, 222, 128;
+  --tema-primario-texto-hover-rgb: 134, 239, 172;
+  --tema-primario-sobre-suave: #bbf7d0;
+
+  --tema-fondo: #0a0f1a;
+  --tema-fondo-rgb: 10, 15, 26;
+  --tema-superficie: #121a2b;
+  --tema-flotante-fondo: #18233a;
+  --tema-borde: #27334a;
+  --tema-borde-campo: #3a4a63;
+  --tema-borde-fuerte: #64748b;
+  --tema-pizarra: #0b1322;
+  --tema-pizarra-suave: #17233a;
+  --tema-titulo: #f1f5f9;
+  --tema-texto: #e2e8f0;
+  --tema-texto-rgb: 226, 232, 240;
+  --tema-texto-suave: #a3b1c6;
+  --tema-texto-secundario-rgb: 148, 163, 184;
+  --tema-peligro-rgb: 248, 113, 113;
+  --tema-info: #2dd4bf;
+  --tema-info-rgb: 45, 212, 191;
+  --tema-neutro-hover: #2a3a55;
+  --tema-neutro-activo: #34486a;
+  --tema-velo: rgba(10, 15, 26, 0.72);
+  --tema-foco-anillo: rgba(74, 222, 128, 0.4);
+
+  --hero-fondo: #0a2342;
+  --hero-linea: rgba(255, 255, 255, 0.22);
+  --hero-cancha-opacidad: 0.14;
+
+  --barra-translucida: rgba(11, 19, 34, 0.9);
+
+  --estado-ok-fondo: #12301f;
+  --estado-ok-texto: #bbf7d0;
+  --estado-ok-borde: #1f7a45;
+  --estado-aviso-fondo: #3a2a0b;
+  --estado-aviso-texto: #fde68a;
+  --estado-aviso-borde: #8a6414;
+  --estado-peligro-fondo: #3b1218;
+  --estado-peligro-texto: #fecaca;
+  --estado-peligro-borde: #9b2c37;
+  --estado-info-fondo: #0d3333;
+  --estado-info-texto: #99f6e4;
+  --estado-info-borde: #1d7a73;
+  --estado-neutro-fondo: #1e2a3d;
+  --estado-neutro-texto: #cbd5e1;
+  --estado-neutro-borde: #3a4a63;
+
+  --barra-fondo: #1e2a3d;
+  --barra-ok: #22a35a;
+  --barra-aviso: #d9922b;
+  --barra-peligro: #dc2626;
+  --barra-info: #2bb3a6;
+  --barra-neutro: #7b8ba3;
+
+  --casillero-libre-fondo: #0f2a1c;
+  --casillero-libre-fondo-hover: #16402b;
+  --casillero-libre-borde: #4ade80;
+  --casillero-libre-texto: #bbf7d0;
+  --casillero-ocupado-fondo: #3b1218;
+  --casillero-ocupado-borde: #f87171;
+  --casillero-ocupado-texto: #fecaca;
+  --casillero-excepcion-fondo: #3a2a0b;
+  --casillero-excepcion-borde: #f59e0b;
+  --casillero-excepcion-texto: #fde68a;
+  --casillero-seleccionado-borde: #bbf7d0;
+  --casillero-nodisponible-borde: #64748b;
+  --casillero-nodisponible-texto: #94a3b8;
+
+  --mapa-filtro-teselas: invert(1) hue-rotate(180deg) saturate(0.45) brightness(0.9) contrast(0.92);
+  --mapa-fondo: #0a0f1a;
+  --mapa-atribucion-fondo: rgba(18, 26, 43, 0.88);
+}
+
+/*
+ * Variables de Bootstrap que llevan color de marca o de superficie. Se declaran una sola vez para todos los modos y
+ * apuntan a los tokens de arriba, de modo que cambiar de tema no exige repetir esta lista.
+ */
+:root {
   --bs-body-font-family: var(--fuente-cuerpo);
   --bs-body-bg: var(--tema-fondo);
-  --bs-body-bg-rgb: 244, 246, 245;
+  --bs-body-bg-rgb: var(--tema-fondo-rgb);
   --bs-body-color: var(--tema-texto);
-  --bs-body-color-rgb: 30, 41, 59;
+  --bs-body-color-rgb: var(--tema-texto-rgb);
   --bs-secondary-color: var(--tema-texto-suave);
+  --bs-secondary-rgb: var(--tema-texto-secundario-rgb);
+  --bs-secondary-bg: var(--estado-neutro-fondo);
+  --bs-tertiary-bg: var(--tema-fondo);
+  --bs-danger-rgb: var(--tema-peligro-rgb);
   --bs-border-color: var(--tema-borde);
   --bs-border-radius: var(--radio);
   --bs-border-radius-sm: 4px;
   --bs-border-radius-lg: 8px;
   --bs-primary: var(--tema-primario);
-  --bs-primary-rgb: var(--tema-primario-rgb);
+  --bs-primary-rgb: var(--tema-primario-texto-rgb);
   --bs-success: var(--tema-primario);
-  --bs-success-rgb: var(--tema-primario-rgb);
-  --bs-info: #0f766e;
-  --bs-info-rgb: 15, 118, 110;
+  --bs-success-rgb: var(--tema-primario-texto-rgb);
+  --bs-info: var(--tema-info);
+  --bs-info-rgb: var(--tema-info-rgb);
   --bs-primary-bg-subtle: var(--estado-ok-fondo);
   --bs-primary-border-subtle: var(--estado-ok-borde);
-  --bs-primary-text-emphasis: var(--tema-primario-profundo);
+  --bs-primary-text-emphasis: var(--tema-primario-sobre-suave);
   --bs-success-bg-subtle: var(--estado-ok-fondo);
   --bs-success-border-subtle: var(--estado-ok-borde);
-  --bs-success-text-emphasis: var(--tema-primario-profundo);
+  --bs-success-text-emphasis: var(--tema-primario-sobre-suave);
   --bs-info-bg-subtle: var(--estado-info-fondo);
   --bs-info-border-subtle: var(--estado-info-borde);
   --bs-info-text-emphasis: var(--estado-info-texto);
-  --bs-link-color: var(--tema-primario);
-  --bs-link-color-rgb: var(--tema-primario-rgb);
-  --bs-link-hover-color: var(--tema-primario-hover);
-  --bs-link-hover-color-rgb: 22, 101, 52;
-  --bs-focus-ring-color: rgba(21, 128, 61, 0.3);
+  --bs-link-color: var(--tema-primario-texto);
+  --bs-link-color-rgb: var(--tema-primario-texto-rgb);
+  --bs-link-hover-color: var(--tema-primario-texto-hover);
+  --bs-link-hover-color-rgb: var(--tema-primario-texto-hover-rgb);
+  --bs-focus-ring-color: var(--tema-foco-anillo);
 }
 
 /* Base */
@@ -164,7 +329,7 @@ h6,
   font-family: var(--fuente-titulos);
   font-weight: 600;
   letter-spacing: 0.01em;
-  color: var(--tema-pizarra);
+  color: var(--tema-titulo);
 }
 
 /* Horarios, precios y métricas */
@@ -179,7 +344,7 @@ a {
 }
 
 :focus-visible {
-  outline: 2px solid var(--tema-primario);
+  outline: 2px solid var(--tema-primario-texto);
   outline-offset: 2px;
 }
 
@@ -190,7 +355,7 @@ a {
   z-index: 2000;
   padding: 0.75rem 1rem;
   background: var(--tema-superficie);
-  color: var(--tema-pizarra);
+  color: var(--tema-titulo);
 }
 
 .salto-contenido:focus {
@@ -209,33 +374,33 @@ a {
 }
 
 .btn-primary {
-  --bs-btn-color: #ffffff;
+  --bs-btn-color: var(--tema-sobre-primario);
   --bs-btn-bg: var(--tema-primario);
   --bs-btn-border-color: var(--tema-primario);
-  --bs-btn-hover-color: #ffffff;
+  --bs-btn-hover-color: var(--tema-sobre-primario);
   --bs-btn-hover-bg: var(--tema-primario-hover);
   --bs-btn-hover-border-color: var(--tema-primario-hover);
   --bs-btn-focus-shadow-rgb: var(--tema-primario-rgb);
-  --bs-btn-active-color: #ffffff;
+  --bs-btn-active-color: var(--tema-sobre-primario);
   --bs-btn-active-bg: var(--tema-primario-profundo);
   --bs-btn-active-border-color: var(--tema-primario-profundo);
-  --bs-btn-disabled-color: #ffffff;
+  --bs-btn-disabled-color: var(--tema-sobre-primario);
   --bs-btn-disabled-bg: var(--tema-primario);
   --bs-btn-disabled-border-color: var(--tema-primario);
 }
 
 .btn-outline-primary {
-  --bs-btn-color: var(--tema-primario);
-  --bs-btn-border-color: var(--tema-primario);
-  --bs-btn-hover-color: #ffffff;
+  --bs-btn-color: var(--tema-primario-texto);
+  --bs-btn-border-color: var(--tema-primario-texto);
+  --bs-btn-hover-color: var(--tema-sobre-primario);
   --bs-btn-hover-bg: var(--tema-primario);
   --bs-btn-hover-border-color: var(--tema-primario);
   --bs-btn-focus-shadow-rgb: var(--tema-primario-rgb);
-  --bs-btn-active-color: #ffffff;
+  --bs-btn-active-color: var(--tema-sobre-primario);
   --bs-btn-active-bg: var(--tema-primario-hover);
   --bs-btn-active-border-color: var(--tema-primario-hover);
-  --bs-btn-disabled-color: var(--tema-primario);
-  --bs-btn-disabled-border-color: var(--tema-primario);
+  --bs-btn-disabled-color: var(--tema-primario-texto);
+  --bs-btn-disabled-border-color: var(--tema-primario-texto);
 }
 
 .btn-success {
@@ -252,18 +417,20 @@ a {
 
 .btn-outline-secondary {
   --bs-btn-color: var(--tema-texto);
-  --bs-btn-border-color: #94a3b8;
-  --bs-btn-hover-bg: var(--tema-pizarra);
-  --bs-btn-hover-border-color: var(--tema-pizarra);
-  --bs-btn-active-bg: var(--tema-pizarra-suave);
-  --bs-btn-active-border-color: var(--tema-pizarra-suave);
-  --bs-btn-focus-shadow-rgb: 15, 23, 42;
+  --bs-btn-border-color: var(--tema-borde-fuerte);
+  --bs-btn-hover-color: var(--tema-sobre-primario);
+  --bs-btn-hover-bg: var(--tema-neutro-hover);
+  --bs-btn-hover-border-color: var(--tema-neutro-hover);
+  --bs-btn-active-color: var(--tema-sobre-primario);
+  --bs-btn-active-bg: var(--tema-neutro-activo);
+  --bs-btn-active-border-color: var(--tema-neutro-activo);
+  --bs-btn-focus-shadow-rgb: var(--tema-texto-rgb);
 }
 
 .btn-link {
-  --bs-btn-color: var(--tema-primario);
-  --bs-btn-hover-color: var(--tema-primario-hover);
-  --bs-btn-active-color: var(--tema-primario-hover);
+  --bs-btn-color: var(--tema-primario-texto);
+  --bs-btn-hover-color: var(--tema-primario-texto-hover);
+  --bs-btn-active-color: var(--tema-primario-texto-hover);
   --bs-btn-focus-shadow-rgb: var(--tema-primario-rgb);
 }
 
@@ -271,19 +438,19 @@ a {
 .form-control,
 .form-select {
   min-height: var(--toque-min);
-  border-color: #cbd5d1;
+  border-color: var(--tema-borde-campo);
 }
 
 .form-control:focus,
 .form-select:focus {
-  border-color: var(--tema-primario);
-  box-shadow: 0 0 0 0.25rem rgba(var(--tema-primario-rgb), 0.25);
+  border-color: var(--tema-primario-texto);
+  box-shadow: 0 0 0 0.25rem var(--tema-foco-anillo);
 }
 
 .form-check-input {
   width: 1.25em;
   height: 1.25em;
-  border-color: #94a3b8;
+  border-color: var(--tema-borde-fuerte);
 }
 
 .form-check-input:checked {
@@ -292,8 +459,8 @@ a {
 }
 
 .form-check-input:focus {
-  border-color: var(--tema-primario);
-  box-shadow: 0 0 0 0.25rem rgba(var(--tema-primario-rgb), 0.25);
+  border-color: var(--tema-primario-texto);
+  box-shadow: 0 0 0 0.25rem var(--tema-foco-anillo);
 }
 
 .form-check-input[type='checkbox']:indeterminate {
@@ -311,8 +478,8 @@ a {
 
 /* Navegación interna: pestañas y pastillas */
 .nav {
-  --bs-nav-link-color: var(--tema-primario);
-  --bs-nav-link-hover-color: var(--tema-primario-hover);
+  --bs-nav-link-color: var(--tema-primario-texto);
+  --bs-nav-link-hover-color: var(--tema-primario-texto-hover);
   --bs-nav-link-font-weight: 600;
 }
 
@@ -325,30 +492,30 @@ a {
 .nav-tabs {
   --bs-nav-tabs-border-color: var(--tema-borde);
   --bs-nav-tabs-link-hover-border-color: var(--tema-borde);
-  --bs-nav-tabs-link-active-color: var(--tema-primario-profundo);
+  --bs-nav-tabs-link-active-color: var(--tema-primario-sobre-suave);
   --bs-nav-tabs-link-active-border-color: var(--tema-borde) var(--tema-borde) var(--tema-primario);
 }
 
 .nav-pills {
   --bs-nav-pills-link-active-bg: var(--tema-primario);
-  --bs-nav-pills-link-active-color: #ffffff;
+  --bs-nav-pills-link-active-color: var(--tema-sobre-primario);
 }
 
 /* Paginación */
 .pagination {
-  --bs-pagination-color: var(--tema-primario);
+  --bs-pagination-color: var(--tema-primario-texto);
   --bs-pagination-bg: var(--tema-superficie);
   --bs-pagination-border-color: var(--tema-borde);
-  --bs-pagination-hover-color: var(--tema-primario-hover);
+  --bs-pagination-hover-color: var(--tema-primario-texto-hover);
   --bs-pagination-hover-bg: var(--tema-primario-suave);
   --bs-pagination-hover-border-color: var(--tema-borde);
-  --bs-pagination-focus-color: var(--tema-primario-hover);
+  --bs-pagination-focus-color: var(--tema-primario-texto-hover);
   --bs-pagination-focus-bg: var(--tema-primario-suave);
-  --bs-pagination-focus-box-shadow: 0 0 0 0.25rem rgba(var(--tema-primario-rgb), 0.25);
-  --bs-pagination-active-color: #ffffff;
+  --bs-pagination-focus-box-shadow: 0 0 0 0.25rem var(--tema-foco-anillo);
+  --bs-pagination-active-color: var(--tema-sobre-primario);
   --bs-pagination-active-bg: var(--tema-primario);
   --bs-pagination-active-border-color: var(--tema-primario);
-  --bs-pagination-disabled-color: #94a3b8;
+  --bs-pagination-disabled-color: var(--tema-borde-fuerte);
   --bs-pagination-border-radius: var(--radio);
 }
 
@@ -365,23 +532,24 @@ a {
 .list-group {
   --bs-list-group-active-bg: var(--tema-primario);
   --bs-list-group-active-border-color: var(--tema-primario);
-  --bs-list-group-active-color: #ffffff;
+  --bs-list-group-active-color: var(--tema-sobre-primario);
   --bs-list-group-border-color: var(--tema-borde);
   --bs-list-group-action-hover-bg: var(--tema-primario-suave);
 }
 
 .dropdown-menu {
   --bs-dropdown-link-active-bg: var(--tema-primario);
-  --bs-dropdown-link-active-color: #ffffff;
+  --bs-dropdown-link-active-color: var(--tema-sobre-primario);
   --bs-dropdown-link-hover-bg: var(--tema-primario-suave);
   --bs-dropdown-border-color: var(--tema-borde);
   --bs-dropdown-border-radius: var(--radio);
+  --bs-dropdown-bg: var(--tema-flotante-fondo);
 }
 
 .accordion {
   --bs-accordion-active-bg: var(--tema-primario-suave);
-  --bs-accordion-active-color: var(--tema-primario-profundo);
-  --bs-accordion-btn-focus-box-shadow: 0 0 0 0.25rem rgba(var(--tema-primario-rgb), 0.25);
+  --bs-accordion-active-color: var(--tema-primario-sobre-suave);
+  --bs-accordion-btn-focus-box-shadow: 0 0 0 0.25rem var(--tema-foco-anillo);
   --bs-accordion-border-color: var(--tema-borde);
 }
 
@@ -413,11 +581,11 @@ a {
 }
 
 .cancha-opcion:hover {
-  --bs-card-border-color: #86efac;
+  --bs-card-border-color: var(--estado-ok-borde);
 }
 
 .cancha-opcion:focus-visible {
-  outline: 2px solid var(--tema-primario);
+  outline: 2px solid var(--tema-primario-texto);
   outline-offset: 2px;
 }
 
@@ -438,7 +606,12 @@ a {
 }
 
 .modal-content {
+  --bs-modal-bg: var(--tema-flotante-fondo);
   border-radius: var(--radio);
+}
+
+.offcanvas {
+  --bs-offcanvas-bg: var(--tema-flotante-fondo);
 }
 
 .table {
@@ -598,7 +771,7 @@ a {
   width: 1.75rem;
   height: 1.75rem;
   border: 3px solid var(--tema-borde);
-  border-top-color: var(--tema-primario);
+  border-top-color: var(--tema-primario-texto);
   border-radius: 50%;
   animation: cargando-giro 0.8s linear infinite;
 }
@@ -634,15 +807,15 @@ a {
 }
 
 .btn .cargando-indicador {
-  border-color: rgba(255, 255, 255, 0.4);
-  border-top-color: #ffffff;
+  border-color: var(--sobre-oscuro-pista-spinner);
+  border-top-color: var(--tema-sobre-primario);
 }
 
 .btn-outline-primary .cargando-indicador,
 .btn-outline-secondary .cargando-indicador,
 .btn-link .cargando-indicador {
   border-color: var(--tema-borde);
-  border-top-color: var(--tema-primario);
+  border-top-color: var(--tema-primario-texto);
 }
 
 /* Carga entre pantallas: capa sobre el contenido (debajo de la barra superior), con demora de entrada */
@@ -654,7 +827,7 @@ a {
   align-items: flex-start;
   justify-content: center;
   padding-top: 20vh;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--tema-velo);
   backdrop-filter: blur(2px);
   opacity: 0;
   animation: cargando-aparecer 0.2s ease 150ms forwards;
@@ -665,7 +838,7 @@ a {
   width: 2.5rem;
   height: 2.5rem;
   border: 4px solid var(--tema-borde);
-  border-top-color: var(--tema-primario);
+  border-top-color: var(--tema-primario-texto);
   border-radius: 50%;
   animation: cargando-giro 0.8s linear infinite;
 }
@@ -695,7 +868,7 @@ a {
 
 /* Fuera del tope de la página la barra se vuelve apenas translúcida para dejar ver lo que pasa por detrás */
 .barra-superior.barra-superior-translucida {
-  background: rgba(15, 23, 42, 0.9);
+  background: var(--barra-translucida);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
 }
@@ -706,9 +879,9 @@ a {
   top: 0;
   z-index: 1030;
   background: var(--tema-pizarra);
-  color: #e2e8f0;
-  border-bottom: 1px solid var(--barra-borde-inferior, rgba(255, 255, 255, 0.12));
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25);
+  color: var(--sobre-oscuro-texto-fuerte);
+  border-bottom: 1px solid var(--barra-borde-inferior, var(--sobre-oscuro-linea));
+  box-shadow: 0 2px 8px var(--sombra-barra);
 }
 
 .barra-superior .navbar-brand {
@@ -719,7 +892,7 @@ a {
   font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  color: #ffffff;
+  color: var(--sobre-oscuro-titulo);
 }
 
 .barra-superior .navbar-brand img {
@@ -743,8 +916,8 @@ a {
  * una botonera segmentada y sesión a la derecha. En móvil, el menú es un panel flotante anclado bajo el botón.
  */
 .barra-superior {
-  --barra-separador: rgba(255, 255, 255, 0.14);
-  --barra-resalte: rgba(255, 255, 255, 0.1);
+  --barra-separador: var(--sobre-oscuro-linea);
+  --barra-resalte: var(--sobre-oscuro-resalte);
 }
 
 .barra-superior .barra-secciones {
@@ -757,7 +930,7 @@ a {
   justify-content: center;
   text-align: center;
   line-height: 1.2;
-  color: #cbd5e1;
+  color: var(--sobre-oscuro-texto);
   font-weight: 600;
   border: 1px solid transparent;
   border-radius: var(--radio);
@@ -766,7 +939,7 @@ a {
 
 .barra-superior .nav-link:hover,
 .barra-superior .nav-link:focus-visible {
-  color: #ffffff;
+  color: var(--sobre-oscuro-titulo);
   background: var(--barra-resalte);
 }
 
@@ -774,28 +947,28 @@ a {
 .barra-superior .nav-link:not(.active):focus {
   background: transparent;
   border-color: transparent;
-  color: #cbd5e1;
+  color: var(--sobre-oscuro-texto);
 }
 
 .barra-superior .nav-link:not(.active):focus-visible,
 .barra-superior .nav-link:not(.active):hover {
   background: var(--barra-resalte);
-  color: #ffffff;
+  color: var(--sobre-oscuro-titulo);
 }
 
 .barra-superior .nav-link:not(.active):active {
-  background: rgba(255, 255, 255, 0.16);
-  color: #ffffff;
+  background: var(--sobre-oscuro-pulsado);
+  color: var(--sobre-oscuro-titulo);
 }
 
 .barra-superior .nav-link:active {
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--sobre-oscuro-pulsado);
 }
 
 .barra-superior .nav-link.active {
-  color: #ffffff;
+  color: var(--sobre-oscuro-titulo);
   background: var(--tema-primario);
-  border-color: #4ade80;
+  border-color: var(--sobre-oscuro-acento-borde);
 }
 
 .barra-superior .nav-link.active:hover {
@@ -808,7 +981,7 @@ a {
 }
 
 .barra-superior .barra-usuario {
-  color: #ffffff;
+  color: var(--sobre-oscuro-titulo);
   font-size: 0.875rem;
   overflow-wrap: anywhere;
 }
@@ -823,7 +996,7 @@ a {
   min-width: var(--toque-min);
   min-height: var(--toque-min);
   padding: 0 0.6rem;
-  color: #cbd5e1;
+  color: var(--sobre-oscuro-texto);
   font-weight: 600;
   text-decoration: none;
   border: 1px solid transparent;
@@ -833,16 +1006,16 @@ a {
 
 .barra-superior .campana:hover,
 .barra-superior .campana:focus-visible {
-  color: #ffffff;
+  color: var(--sobre-oscuro-titulo);
   background: var(--barra-resalte);
 }
 
 .barra-superior .campana-activa,
 .barra-superior .campana-activa:hover,
 .barra-superior .campana-activa:focus-visible {
-  color: #ffffff;
+  color: var(--sobre-oscuro-titulo);
   background: var(--tema-primario);
-  border-color: #4ade80;
+  border-color: var(--sobre-oscuro-acento-borde);
 }
 
 .barra-superior .campana-badge {
@@ -850,7 +1023,7 @@ a {
   padding: 0 0.35rem;
   border-radius: 999px;
   background: var(--barra-peligro);
-  color: #ffffff;
+  color: var(--sobre-oscuro-titulo);
   font-size: 0.75rem;
   font-weight: 700;
   line-height: 1.25rem;
@@ -892,7 +1065,7 @@ a {
   min-width: var(--toque-min);
   min-height: var(--toque-min);
   padding: 0;
-  border: 1px solid #4ade80;
+  border: 1px solid var(--sobre-oscuro-acento-borde);
   border-radius: var(--radio);
   background: var(--tema-primario);
   transition: background-color 0.18s ease, transform 0.18s ease;
@@ -909,7 +1082,7 @@ a {
 
 .barra-superior .barra-hamburguesa:focus-visible {
   box-shadow: none;
-  outline: 2px solid #ffffff;
+  outline: 2px solid var(--sobre-oscuro-titulo);
   outline-offset: 2px;
 }
 
@@ -926,7 +1099,7 @@ a {
   width: 100%;
   height: 2px;
   border-radius: 2px;
-  background: #ffffff;
+  background: var(--sobre-oscuro-titulo);
   transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -962,6 +1135,51 @@ a {
   }
 }
 
+/* Botón que alterna el modo claro y oscuro: vive en la barra (siempre oscura) con área táctil de 44 px. En móvil queda junto a la hamburguesa; en escritorio, al inicio de la zona de sesión. */
+.barra-superior .boton-tema {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--toque-min);
+  min-height: var(--toque-min);
+  padding: 0;
+  border: 1px solid var(--sobre-oscuro-linea-tenue);
+  border-radius: var(--radio);
+  background: transparent;
+  color: var(--sobre-oscuro-texto);
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.barra-superior .boton-tema:hover,
+.barra-superior .boton-tema:focus-visible {
+  background: var(--barra-resalte);
+  color: var(--sobre-oscuro-titulo);
+}
+
+.barra-superior .boton-tema:focus-visible {
+  outline: 2px solid var(--sobre-oscuro-titulo);
+  outline-offset: 2px;
+}
+
+.barra-superior .boton-tema:active {
+  background: var(--sobre-oscuro-pulsado);
+}
+
+.barra-superior .boton-tema-movil {
+  margin-left: auto;
+}
+
+.barra-superior .boton-tema-movil + .barra-hamburguesa {
+  margin-left: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barra-superior .boton-tema {
+    transition-duration: 0.01s;
+  }
+}
+
 @media (min-width: 992px) {
   .barra-superior > .container,
   .barra-superior > .container-fluid {
@@ -991,7 +1209,7 @@ a {
     padding: 0.25rem;
     border: 1px solid var(--barra-separador);
     border-radius: calc(var(--radio) + 4px);
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--sobre-oscuro-bandeja);
   }
 
   .barra-superior .barra-secciones .nav-link {
@@ -1024,7 +1242,7 @@ a {
     border: 1px solid var(--barra-separador);
     border-radius: calc(var(--radio) + 4px);
     background: var(--tema-pizarra-suave);
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.4);
+    box-shadow: 0 12px 28px var(--sombra-menu);
   }
 
   .barra-superior .barra-secciones {
@@ -1052,18 +1270,18 @@ a {
   margin-top: auto;
   border-top: 3px solid var(--tema-primario);
   background: var(--tema-pizarra);
-  color: #cbd5e1;
+  color: var(--sobre-oscuro-texto);
   font-size: 0.9rem;
 }
 
 .pie-pagina a {
-  color: #e2e8f0;
+  color: var(--sobre-oscuro-texto-fuerte);
   text-decoration: none;
 }
 
 .pie-pagina a:hover,
 .pie-pagina a:focus-visible {
-  color: #86efac;
+  color: var(--sobre-oscuro-acento);
   text-decoration: underline;
 }
 
@@ -1074,7 +1292,7 @@ a {
   font-family: var(--fuente-titulos);
   font-size: 1.4rem;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--sobre-oscuro-titulo);
 }
 
 .pie-pagina-titulo {
@@ -1084,7 +1302,7 @@ a {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #94a3b8;
+  color: var(--sobre-oscuro-suave);
 }
 
 .pie-pagina-lista {
@@ -1110,7 +1328,7 @@ a {
   justify-content: center;
   width: var(--toque-min);
   height: var(--toque-min);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--sobre-oscuro-linea-tenue);
   border-radius: 50%;
 }
 
@@ -1125,12 +1343,12 @@ a {
 
 .pie-pagina-canal:hover,
 .pie-pagina-canal:focus-visible {
-  border-color: #86efac;
+  border-color: var(--sobre-oscuro-acento);
   text-decoration: none;
 }
 
 .pie-pagina-nota {
-  color: #94a3b8;
+  color: var(--sobre-oscuro-suave);
 }
 
 /* Aclaración al pie de todo: centrada, chica y en rojo claro para que se lea sobre la pizarra */
@@ -1144,8 +1362,8 @@ a {
 }
 
 .pie-pagina-legal {
-  border-top: 1px solid rgba(255, 255, 255, 0.14);
-  color: #94a3b8;
+  border-top: 1px solid var(--sobre-oscuro-linea);
+  color: var(--sobre-oscuro-suave);
 }
 
 /* Paneles de administración: densidad de escritorio a partir de lg */
@@ -1191,6 +1409,47 @@ a {
 
 .solo-lectura-datos {
   user-select: none;
+}
+
+/* Dato sensible oculto por defecto: la máscara conserva el ancho y el botón de ojo tiene área táctil cómoda */
+.valor-oculto {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.valor-oculto-texto {
+  min-width: 8.5rem;
+  white-space: nowrap;
+}
+
+.valor-oculto-boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radio);
+  background: transparent;
+  color: var(--tema-texto-suave);
+}
+
+.valor-oculto-boton:hover,
+.valor-oculto-boton:focus-visible,
+.valor-oculto-boton[aria-pressed='true'] {
+  background: var(--tema-primario-suave);
+  border-color: var(--tema-primario-texto);
+  color: var(--tema-primario-sobre-suave);
+}
+
+@media (max-width: 991.98px) {
+  .valor-oculto-boton {
+    min-width: var(--toque-min);
+    min-height: var(--toque-min);
+  }
 }
 
 /* Estructura del panel: selector de complejo y subnavegación */
@@ -1325,21 +1584,21 @@ a {
   gap: 0.5rem;
   min-height: var(--toque-min);
   padding: 0.35rem 1rem 0.35rem 0.7rem;
-  border: 1px solid #94a3b8;
+  border: 1px solid var(--tema-borde-fuerte);
   border-radius: var(--radio);
   background: var(--tema-superficie);
   color: var(--tema-texto);
   font-weight: 600;
   text-decoration: none;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
+  box-shadow: 0 1px 2px var(--sombra-chica);
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .boton-volver:hover,
 .boton-volver:focus-visible {
   background: var(--tema-primario-suave);
-  border-color: var(--tema-primario);
-  color: var(--tema-primario-profundo);
+  border-color: var(--tema-primario-texto);
+  color: var(--tema-primario-sobre-suave);
 }
 
 .boton-volver:active {
@@ -1353,6 +1612,21 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+}
+
+/* Franja compacta del clima: la tarjeta con datos de relleno, invisible, marca el alto y el aviso de carga o de error se superpone */
+.clima-reserva {
+  position: relative;
+}
+
+.clima-reserva .superficie > * {
+  visibility: hidden;
+}
+
+.clima-reserva-estado {
+  position: absolute;
+  inset: 0;
+  padding: 1rem;
 }
 
 .clima-estado-chico {
@@ -1529,7 +1803,7 @@ a {
   border: 2px solid var(--estado-ok-borde);
   border-radius: 50%;
   background: var(--tema-primario-suave);
-  color: var(--tema-primario);
+  color: var(--tema-primario-texto);
 }
 
 .pantalla-estado-titulo {
@@ -1555,40 +1829,61 @@ a {
   margin-bottom: 1rem;
 }
 
-/* Portada del catálogo: presentación sobre pizarra con líneas de cancha de fondo, guía de uso y tarjeta para complejos */
+/*
+ * Portada del catálogo: sección de ancho completo, pegada a la barra superior, con líneas de cancha de fondo. Ocupa el
+ * ancho del bloque contenedor (no usa 100vw, que suma el ancho de la barra de desplazamiento y desborda). El texto se
+ * alinea con el resto de la página porque va dentro de un `.container`.
+ */
 .hero-presentacion {
   position: relative;
   overflow: hidden;
-  border: 1px solid var(--tema-pizarra-suave);
-  border-bottom: 4px solid var(--tema-primario);
-  border-radius: var(--radio);
-  background: var(--tema-pizarra);
+  border-bottom: 4px solid var(--hero-borde);
+  background: var(--hero-fondo);
   color: var(--hero-texto);
 }
 
-/* Anclada arriba y con alto propio (por la proporción del ancho): no se mueve cuando el hero crece al cargar el clima */
+/*
+ * La cancha se dibuja completa dentro de una caja que ocupa el alto de la sección (menos un margen): `meet` la
+ * escala sin recortarla ni deformarla y `xMaxYMid` la apoya a la derecha. El trazo no escala con el dibujo.
+ */
 .hero-cancha {
   position: absolute;
-  top: 2rem;
-  right: -4%;
-  width: min(62%, 38rem);
-  height: auto;
+  top: 1.5rem;
+  right: 0;
+  width: 100%;
+  height: calc(100% - 3rem);
   fill: none;
   stroke: var(--hero-acento);
   stroke-width: 2;
-  opacity: 0.14;
+  stroke-linejoin: round;
+  opacity: var(--hero-cancha-opacidad);
   pointer-events: none;
+}
+
+.hero-cancha * {
+  vector-effect: non-scaling-stroke;
+}
+
+.hero-cancha .hero-cancha-punto {
+  fill: var(--hero-acento);
+  stroke: none;
+}
+
+@media (min-width: 992px) {
+  .hero-cancha {
+    width: min(58%, 60rem);
+  }
 }
 
 .hero-contenido {
   position: relative;
   max-width: 44rem;
-  padding: 1.75rem 1.25rem;
+  padding-block: 2rem;
 }
 
 @media (min-width: 768px) {
   .hero-contenido {
-    padding: 2.75rem 2.5rem;
+    padding-block: 3rem;
   }
 }
 
@@ -1598,7 +1893,7 @@ a {
   font-size: clamp(2.1rem, 6vw, 3.5rem);
   font-weight: 700;
   line-height: 1.05;
-  color: #ffffff;
+  color: var(--hero-titulo);
 }
 
 .hero-bajada {
@@ -1620,7 +1915,7 @@ a {
   align-items: center;
   gap: 0.4rem;
   padding: 0.3rem 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--hero-linea);
   border-radius: 999px;
   color: var(--hero-texto);
   font-size: 0.875rem;
@@ -1635,19 +1930,19 @@ a {
   --bs-body-color: var(--hero-texto);
   --bs-secondary-color: var(--hero-texto-suave);
   --bs-secondary-rgb: 203, 213, 225;
-  --bs-border-color: rgba(255, 255, 255, 0.18);
+  --bs-border-color: var(--hero-linea);
   max-width: 100%;
   color: var(--hero-texto);
 }
 
 .hero-clima .superficie {
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: var(--hero-linea);
   background: var(--tema-pizarra-suave);
 }
 
 .hero-clima .clima-dia-compacto {
-  border-color: rgba(255, 255, 255, 0.14);
-  background: var(--tema-pizarra);
+  border-color: var(--hero-linea);
+  background: var(--hero-fondo);
 }
 
 .hero-clima a {
@@ -1656,8 +1951,8 @@ a {
 
 .hero-clima .btn-outline-secondary {
   --bs-btn-color: var(--hero-texto);
-  --bs-btn-border-color: rgba(255, 255, 255, 0.4);
-  --bs-btn-hover-color: var(--tema-pizarra);
+  --bs-btn-border-color: var(--hero-linea-fuerte);
+  --bs-btn-hover-color: var(--hero-fondo);
   --bs-btn-hover-bg: var(--hero-texto);
   --bs-btn-hover-border-color: var(--hero-texto);
 }
@@ -1679,7 +1974,7 @@ a {
   height: 2.75rem;
   border-radius: 50%;
   background: var(--tema-primario-suave);
-  color: var(--tema-primario);
+  color: var(--tema-primario-texto);
 }
 
 .paso-numero {
@@ -1705,6 +2000,7 @@ a {
   padding: 0.75rem 1.5rem;
   cursor: pointer;
   list-style: none;
+  user-select: none;
 }
 
 .banner-complejos-resumen::-webkit-details-marker {
@@ -1712,13 +2008,13 @@ a {
 }
 
 .banner-complejos-resumen:focus-visible {
-  outline: 2px solid var(--tema-primario);
+  outline: 2px solid var(--tema-primario-texto);
   outline-offset: -2px;
 }
 
 .banner-complejos-flecha {
   flex-shrink: 0;
-  color: var(--tema-primario);
+  color: var(--tema-primario-texto);
   transition: transform 0.2s ease;
 }
 
@@ -1743,7 +2039,7 @@ a {
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--tema-primario);
+  color: var(--tema-primario-texto);
 }
 
 .banner-complejos-lista {
@@ -1784,12 +2080,12 @@ a {
   font-size: 0.95rem;
 }
 
-/* Capa Mapa: las teselas de calles son ráster y no admiten otro estilo, así que se desaturan y se llevan a un verde muy suave (calles en gris claro, manzanas verdosas). El satélite no se toca. */
-.mapa-capa-mapa .leaflet-tile-pane {
-  filter: saturate(0.3) hue-rotate(22deg);
+/* Las teselas de calles son ráster y no admiten otro estilo, así que se desaturan y se llevan a un verde muy suave (calles en gris claro, manzanas verdosas). */
+.mapa-contenedor .leaflet-tile-pane {
+  filter: var(--mapa-filtro-teselas);
 }
 
-/* Controles flotantes propios: capa de teselas arriba a la derecha y "Centrar en Goya" abajo a la izquierda */
+/* Control flotante propio: "Centrar en Goya" abajo a la izquierda */
 .mapa-control {
   position: absolute;
   z-index: 5;
@@ -1797,35 +2093,7 @@ a {
   border-radius: var(--radio);
   background: var(--tema-superficie);
   color: var(--tema-texto);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.22);
-}
-
-.mapa-control-capas {
-  top: 0.75rem;
-  right: 0.75rem;
-  display: inline-flex;
-  overflow: hidden;
-}
-
-.mapa-control-opcion {
-  min-width: var(--toque-min);
-  min-height: var(--toque-min);
-  padding: 0 1rem;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font-weight: 600;
-  transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
-}
-
-.mapa-control-opcion:hover {
-  background: var(--tema-primario-suave);
-}
-
-.mapa-control-opcion.activa,
-.mapa-control-opcion.activa:hover {
-  background: var(--tema-primario);
-  color: #ffffff;
+  box-shadow: 0 2px 8px var(--sombra-control);
 }
 
 .mapa-control-centrar {
@@ -1844,9 +2112,8 @@ a {
   background: var(--tema-primario-suave);
 }
 
-.mapa-control-opcion:focus-visible,
 .mapa-control-centrar:focus-visible {
-  outline: 3px solid rgba(var(--tema-primario-rgb), 0.45);
+  outline: 3px solid var(--tema-foco-anillo);
   outline-offset: -3px;
 }
 
@@ -1854,7 +2121,7 @@ a {
 .mapa-contenedor .mapa-complejos .leaflet-bar {
   border: 1px solid var(--tema-borde);
   border-radius: var(--radio);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.22);
+  box-shadow: 0 2px 8px var(--sombra-control);
 }
 
 .mapa-contenedor .mapa-complejos .leaflet-bar a {
@@ -1872,12 +2139,57 @@ a {
 }
 
 .mapa-contenedor .mapa-complejos .leaflet-control-attribution {
-  background: rgba(255, 255, 255, 0.88);
+  background: var(--mapa-atribucion-fondo);
+  color: var(--tema-texto-suave);
   font-size: 0.7rem;
 }
 
 .mapa-contenedor .mapa-complejos .leaflet-control-attribution a {
-  color: var(--tema-primario-hover);
+  color: var(--tema-primario-texto-hover);
+}
+
+/* Fondo de carga, botones de zoom y globos de ayuda de Leaflet con los tokens del tema: su hoja trae blanco fijo y esto evita bloques claros sobre el mapa oscuro */
+.mapa-contenedor .mapa-complejos.leaflet-container {
+  background: var(--mapa-fondo);
+}
+
+.mapa-contenedor .mapa-complejos .leaflet-bar a {
+  border-bottom-color: var(--tema-borde);
+  background-color: var(--tema-superficie);
+}
+
+.mapa-contenedor .mapa-complejos .leaflet-bar a:hover,
+.mapa-contenedor .mapa-complejos .leaflet-bar a:focus-visible {
+  background-color: var(--tema-primario-suave);
+  color: var(--tema-primario-sobre-suave);
+}
+
+.mapa-contenedor .mapa-complejos .leaflet-bar a.leaflet-disabled {
+  background-color: var(--estado-neutro-fondo);
+  color: var(--tema-borde-fuerte);
+}
+
+.mapa-contenedor .mapa-complejos .leaflet-tooltip {
+  border-color: var(--tema-borde);
+  background: var(--tema-superficie);
+  color: var(--tema-texto);
+  box-shadow: 0 1px 4px var(--sombra-etiqueta);
+}
+
+.mapa-contenedor .mapa-complejos .leaflet-tooltip-top::before {
+  border-top-color: var(--tema-superficie);
+}
+
+.mapa-contenedor .mapa-complejos .leaflet-tooltip-bottom::before {
+  border-bottom-color: var(--tema-superficie);
+}
+
+.mapa-contenedor .mapa-complejos .leaflet-tooltip-left::before {
+  border-left-color: var(--tema-superficie);
+}
+
+.mapa-contenedor .mapa-complejos .leaflet-tooltip-right::before {
+  border-right-color: var(--tema-superficie);
 }
 
 @media (pointer: coarse) {
@@ -1907,7 +2219,7 @@ a {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  filter: drop-shadow(0 2px 3px rgba(15, 23, 42, 0.4));
+  filter: drop-shadow(0 2px 3px var(--sombra-menu));
 }
 
 .marcador-complejo-pin {
@@ -1916,7 +2228,7 @@ a {
   width: 28px;
   height: 28px;
   margin-bottom: 6px;
-  border: 2px solid #ffffff;
+  border: 2px solid var(--tema-sobre-primario);
   border-radius: 50% 50% 50% 0;
   background: var(--tema-primario);
   transform: rotate(-45deg);
@@ -1932,7 +2244,7 @@ a {
   height: 9px;
   margin: -4.5px 0 0 -4.5px;
   border-radius: 50%;
-  background: #ffffff;
+  background: var(--tema-sobre-primario);
 }
 
 .marcador-complejo:hover .marcador-complejo-pin,
@@ -1947,7 +2259,7 @@ a {
 }
 
 .marcador-complejo:focus-visible {
-  outline: 3px solid rgba(var(--tema-primario-rgb), 0.45);
+  outline: 3px solid var(--tema-foco-anillo);
   outline-offset: -4px;
   border-radius: var(--radio);
 }
@@ -1964,7 +2276,7 @@ a {
   border: 1px solid var(--tema-borde);
   border-radius: 999px;
   background: var(--tema-superficie);
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+  box-shadow: 0 1px 4px var(--sombra-etiqueta);
   color: var(--tema-texto);
   font-family: var(--fuente-titulos);
   line-height: 1.2;
@@ -2000,7 +2312,7 @@ a {
 }
 
 .marcador-complejo.marcador-activo .marcador-complejo-etiqueta {
-  border-color: var(--tema-primario);
+  border-color: var(--tema-primario-texto);
 }
 
 /* Popup del marcador: tarjeta con franja verde de marca, nombre en la tipografía de títulos, precio destacado y acceso al detalle de ancho completo */
@@ -2011,7 +2323,7 @@ a {
   border-radius: var(--radio);
   background: var(--tema-superficie);
   color: var(--tema-texto);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.32);
+  box-shadow: 0 8px 24px var(--sombra-popup);
 }
 
 .mapa-contenedor .mapa-complejos .leaflet-popup-content {
@@ -2027,7 +2339,7 @@ a {
 
 .mapa-contenedor .mapa-complejos .leaflet-popup-tip {
   background: var(--tema-superficie);
-  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.25);
+  box-shadow: 0 3px 10px var(--sombra-etiqueta);
 }
 
 .mapa-contenedor .mapa-complejos a.leaflet-popup-close-button {
@@ -2047,7 +2359,7 @@ a {
 .mapa-contenedor .mapa-complejos a.leaflet-popup-close-button:hover,
 .mapa-contenedor .mapa-complejos a.leaflet-popup-close-button:focus-visible {
   background: var(--tema-primario-suave);
-  color: var(--tema-primario-profundo);
+  color: var(--tema-primario-sobre-suave);
 }
 
 .mapa-popup {
@@ -2077,7 +2389,7 @@ a {
 }
 
 .mapa-popup-importe {
-  color: var(--tema-primario-profundo);
+  color: var(--tema-primario-sobre-suave);
   font-family: var(--fuente-titulos);
   font-size: 1.45rem;
   font-weight: 700;
@@ -2099,7 +2411,7 @@ a {
   border: 1px solid var(--tema-primario);
   border-radius: var(--radio);
   background: var(--tema-primario);
-  color: #ffffff;
+  color: var(--tema-sobre-primario);
   font-weight: 600;
   text-decoration: none;
   transition: background-color 0.15s ease-in-out;
@@ -2108,7 +2420,7 @@ a {
 .mapa-contenedor .mapa-complejos .mapa-popup-enlace:hover,
 .mapa-contenedor .mapa-complejos .mapa-popup-enlace:focus-visible {
   background: var(--tema-primario-hover);
-  color: #ffffff;
+  color: var(--tema-sobre-primario);
 }
 
 /* Invitación a instalar la aplicación: capa flotante al pie, por debajo de la barra superior y de los modales */
@@ -2121,8 +2433,8 @@ a {
   padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
   border-top: 3px solid var(--tema-primario);
   background: var(--tema-pizarra);
-  color: #e2e8f0;
-  box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.3);
+  color: var(--sobre-oscuro-texto-fuerte);
+  box-shadow: 0 -4px 16px var(--sombra-banner);
 }
 
 .banner-pwa-contenido {
@@ -2143,7 +2455,7 @@ a {
   height: 2.5rem;
   border-radius: 50%;
   background: var(--tema-primario);
-  color: #ffffff;
+  color: var(--tema-sobre-primario);
 }
 
 .banner-pwa-texto {

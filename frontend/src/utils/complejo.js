@@ -1,7 +1,7 @@
 import { PARAMETROS } from '../config/parametros.js';
 import { t } from '../i18n/index.js';
 
-const { horasCancelacionMaximas, latitudMaxima, longitudMaxima } = PARAMETROS.panel;
+const { horasCancelacionMaximas, latitudMaxima, longitudMaxima, coordenadasDecimales } = PARAMETROS.panel;
 
 /**
  * Complejo activo del panel: el elegido si sigue en la lista; si no (primera carga, complejo dado de baja, cambio de
@@ -48,13 +48,24 @@ export const cuerpoConfiguracion = (valores, complejo) => {
 
 const fueraDeRango = (texto, limite) => texto.trim() === '' || !Number.isFinite(Number(texto)) || Math.abs(Number(texto)) > limite;
 
+const conDemasiadosDecimales = (texto) => (texto.trim().split('.')[1]?.length ?? 0) > coordenadasDecimales;
+
+/** Error de una coordenada (rango o cantidad de decimales que admite la base), o `undefined` si es válida. */
+const errorDeCoordenada = (texto, limite, claveRango) => {
+  if (fueraDeRango(texto, limite)) return t(claveRango, { maximo: limite });
+  if (conDemasiadosDecimales(texto)) return t('configuracion.errorDecimales', { decimales: coordenadasDecimales });
+  return undefined;
+};
+
 /** Errores por campo del formulario de configuración; un objeto vacío significa que se puede enviar. */
 export const validarConfiguracion = (valores) => {
   const errores = {};
   if (valores.nombre.trim() === '') errores.nombre = t('configuracion.errorObligatorio');
   if (valores.direccion.trim() === '') errores.direccion = t('configuracion.errorObligatorio');
-  if (fueraDeRango(valores.latitud, latitudMaxima)) errores.latitud = t('configuracion.errorLatitud', { maximo: latitudMaxima });
-  if (fueraDeRango(valores.longitud, longitudMaxima)) errores.longitud = t('configuracion.errorLongitud', { maximo: longitudMaxima });
+  const errorLatitud = errorDeCoordenada(valores.latitud, latitudMaxima, 'configuracion.errorLatitud');
+  if (errorLatitud) errores.latitud = errorLatitud;
+  const errorLongitud = errorDeCoordenada(valores.longitud, longitudMaxima, 'configuracion.errorLongitud');
+  if (errorLongitud) errores.longitud = errorLongitud;
   const horas = valores.horas_limite_cancelacion.trim();
   if (horas === '' || !/^\d+$/.test(horas) || Number(horas) > horasCancelacionMaximas) {
     errores.horas_limite_cancelacion = t('configuracion.errorHoras', { maximo: horasCancelacionMaximas });

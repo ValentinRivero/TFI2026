@@ -3,6 +3,7 @@ import { t } from '../i18n/index.js';
 import { formatearFechaHora } from '../utils/formatos.js';
 import { CeldaTabla } from './TablaApilable.jsx';
 import UsuarioEnAuditoria from './UsuarioEnAuditoria.jsx';
+import ValorOculto from './ValorOculto.jsx';
 
 const columnas = 'auditoria.columnas';
 
@@ -24,7 +25,14 @@ export default function AuditoriaRow({ evento }) {
         {evento.usuario ? <UsuarioEnAuditoria usuarioId={evento.usuario} complejoNombre={evento.complejo_nombre} /> : '-'}
       </CeldaTabla>
       <CeldaTabla etiqueta={t(`${columnas}.complejo`)}>{evento.complejo_nombre || '-'}</CeldaTabla>
-      <CeldaTabla etiqueta={t(`${columnas}.ip`)} className="num">{evento.ip_origen || '-'}</CeldaTabla>
+      <CeldaTabla etiqueta={t(`${columnas}.ip`)} className="num">
+        <ValorOculto
+          valor={evento.ip_origen}
+          mascara={t('auditoria.mascaraIp')}
+          etiquetaMostrar={t('auditoria.mostrarIp')}
+          etiquetaOcultar={t('auditoria.ocultarIp')}
+        />
+      </CeldaTabla>
     </tr>
   );
 }

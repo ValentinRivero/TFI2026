@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import sys
@@ -29,6 +30,31 @@ class ConfiguracionDeProduccionTests(SimpleTestCase):
         )
         self.assertEqual(resultado.returncode, 0, resultado.stderr)
         self.assertIn('no issues', resultado.stdout)
+
+
+class KeepaliveDelWebSocketTests(SimpleTestCase):
+    """El canal de disponibilidad es de solo lectura y pasa largos ratos sin tráfico: sin ping de protocolo, Cloudflare
+    lo corta por inactividad."""
+
+    LIMITE_INACTIVIDAD_CLOUDFLARE = 100
+
+    def _opcion_del_comando(self, nombre):
+        dockerfile = (RAIZ_DJANGO / 'Dockerfile').read_text(encoding='utf-8')
+        linea = next(linea for linea in dockerfile.splitlines() if linea.startswith('CMD '))
+        comando = json.loads(linea.removeprefix('CMD '))
+        self.assertIn(nombre, comando)
+        return int(comando[comando.index(nombre) + 1])
+
+    def test_daphne_envia_pings_antes_del_limite_de_inactividad_de_cloudflare(self):
+        intervalo = self._opcion_del_comando('--ping-interval')
+        self.assertGreater(intervalo, 0)
+        self.assertLess(intervalo, self.LIMITE_INACTIVIDAD_CLOUDFLARE)
+
+    def test_daphne_descarta_conexiones_que_no_responden_al_ping(self):
+        espera = self._opcion_del_comando('--ping-timeout')
+        self.assertGreater(espera, 0)
+        self.assertLess(espera, self.LIMITE_INACTIVIDAD_CLOUDFLARE)
+
 
 
 @override_settings(

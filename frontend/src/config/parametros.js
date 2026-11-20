@@ -56,44 +56,16 @@ export const PARAMETROS = Object.freeze({
     zoomAjusteMaximo: 16,
     margenAjustePx: 40,
     anchoPopupPx: 232,
-    capaInicial: 'mapa',
-    // Cada capa es una pila de teselas (la última queda arriba) con las atribuciones que exigen sus proveedores. Todas
-    // se piden sin clave. `zoomNativoMaximo` es el último nivel con datos reales en Goya: más cerca se amplía ese nivel
-    // (con imágenes satelitales, el siguiente muestra "Map data not yet available").
-    capas: Object.freeze({
-      mapa: Object.freeze({
-        valor: 'mapa',
-        clave: 'mapa.capaMapa',
-        teselas: Object.freeze([
-          Object.freeze({
-            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-            zoomNativoMaximo: 19,
-          }),
-        ]),
-        atribuciones: Object.freeze([
-          Object.freeze({ texto: 'Tiles © Esri', url: 'https://www.esri.com/', licencia: 'Esri World Street Map' }),
-          Object.freeze({ texto: '© OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright', licencia: 'ODbL' }),
-        ]),
-      }),
-      satelite: Object.freeze({
-        valor: 'satelite',
-        clave: 'mapa.capaSatelite',
-        teselas: Object.freeze([
-          Object.freeze({
-            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-            zoomNativoMaximo: 17,
-          }),
-          Object.freeze({
-            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
-            zoomNativoMaximo: 19,
-          }),
-        ]),
-        atribuciones: Object.freeze([
-          Object.freeze({ texto: 'Tiles © Esri', url: 'https://www.esri.com/', licencia: 'Esri World Imagery' }),
-          Object.freeze({ texto: '© OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright', licencia: 'ODbL' }),
-        ]),
-      }),
+    // Teselas de calles, pedidas sin clave, con las atribuciones que exigen sus proveedores. `zoomNativoMaximo` es el
+    // último nivel con datos reales en Goya: más cerca se amplía ese nivel.
+    teselas: Object.freeze({
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+      zoomNativoMaximo: 19,
     }),
+    atribuciones: Object.freeze([
+      Object.freeze({ texto: 'Tiles © Esri', url: 'https://www.esri.com/', licencia: 'Esri World Street Map' }),
+      Object.freeze({ texto: '© OpenStreetMap contributors', url: 'https://www.openstreetmap.org/copyright', licencia: 'ODbL' }),
+    ]),
   }),
   catalogo: Object.freeze({ busquedaDemoraMs: 400, serviciosEnTarjeta: 4 }),
   // Fuente del pronóstico: su licencia (CC BY 4.0) exige mostrarla junto al clima.
@@ -114,13 +86,15 @@ export const PARAMETROS = Object.freeze({
   }),
   // `paginasMaximas` acota los selectores que necesitan todos los registros de una colección chica (complejos
   // administrados, canchas de un complejo, rangos horarios de una cancha). Los demás valores son espejos de
-  // HORAS_CANCELACION_DEFECTO, HORAS_CANCELACION_MAXIMAS, LATITUD_MAXIMA y LONGITUD_MAXIMA de Django (core/models.py).
+  // HORAS_CANCELACION_DEFECTO, HORAS_CANCELACION_MAXIMAS, LATITUD_MAXIMA y LONGITUD_MAXIMA de Django (core/models.py);
+  // `coordenadasDecimales` replica los `decimal_places` de `Complejo.latitud` y `Complejo.longitud`.
   panel: Object.freeze({
     paginasMaximas: 10,
     horasCancelacionDefecto: 4,
     horasCancelacionMaximas: 168,
     latitudMaxima: 90,
     longitudMaxima: 180,
+    coordenadasDecimales: 6,
   }),
   // Espejo de POLITICA_PRIVACIDAD_VERSION de Django.
   politica: Object.freeze({
@@ -151,5 +125,15 @@ export const PARAMETROS = Object.freeze({
   // Espejo de LARGO_MINIMO_NOMBRE, LARGO_MINIMO_EMAIL y SIMBOLOS_PASSWORD de Django (core/models.py): reglas de los campos
   // de cuenta. El largo mínimo de la contraseña es `password.largoMinimo` y los máximos están en `limitesCampos`.
   cuenta: Object.freeze({ nombreLargoMinimo: 2, emailLargoMinimo: 6, passwordSimbolos: '!@#$%^&*()_+-=.,:;?/' }),
+  // Espejo de `diasDePronostico` de backend-node: la franja compacta del clima reserva el alto de esa cantidad de días.
+  clima: Object.freeze({ diasDePronostico: 3 }),
   pwa: Object.freeze({ claveBannerCerrado: 'talibre.bannerPwaCerrado', rutaServiceWorker: '/sw.js' }),
+  // Espejo del script de arranque de index.html (que aplica el tema antes de montar React) y de `--tema-pizarra` en
+  // tema.css: la clave del almacenamiento, la consulta de preferencia del sistema y el color de la barra del navegador
+  // coinciden con los de ese script. `utils/tema.test.js` verifica que sigan siendo iguales.
+  tema: Object.freeze({
+    claveAlmacenamiento: 'talibre_tema',
+    consultaOscuro: '(prefers-color-scheme: dark)',
+    colorBarra: Object.freeze({ light: '#0f172a', dark: '#0b1322' }),
+  }),
 });

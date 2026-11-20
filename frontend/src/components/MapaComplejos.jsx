@@ -1,12 +1,11 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { PARAMETROS } from '../config/parametros.js';
 import { t } from '../i18n/index.js';
 import { formatearPrecio } from '../utils/formatos.js';
 import { esClicSimple, htmlAtribuciones, limitesDe, rutaDeComplejo } from '../utils/mapa.js';
 import BotonCentrarMapa from './BotonCentrarMapa.jsx';
-import ControlCapasMapa from './ControlCapasMapa.jsx';
 
 const elemento = (etiqueta, clase, texto) => {
   const nodo = document.createElement(etiqueta);
@@ -82,25 +81,25 @@ const marcarActivo = (marcador, activo) => {
 
 /**
  * Mapa de los complejos con Leaflet directo (sin `react-leaflet`, por licencia: ver PROJECT.md §16). Es un
- * envoltorio de React: una instancia por montaje, que se destruye al desmontar, una pila de teselas que cambia con la
- * capa elegida (`Mapa` o `Satélite`) y una capa de marcadores que se rehace cuando cambia la lista. Queda limitado a
+ * envoltorio de React: una instancia por montaje, que se destruye al desmontar, una capa de teselas de calles y una
+ * capa de marcadores que se rehace cuando cambia la lista. Queda limitado a
  * Goya (`limites` y `zoomMinimo`). Se carga diferido (`React.lazy`) junto con el CSS de Leaflet.
  * `marcadores` sale de `armarMarcadores` y `alAbrir(ruta)` navega al detalle del complejo.
  */
 export default function MapaComplejos({ marcadores, alAbrir }) {
   const contenedor = useRef(null);
   const mapa = useRef(null);
-  const teselas = useRef(null);
   const capaMarcadores = useRef(null);
   const ultimoAlAbrir = useRef(alAbrir);
-  const [capa, setCapa] = useState(PARAMETROS.mapa.capaInicial);
 
   useEffect(() => {
     ultimoAlAbrir.current = alAbrir;
   });
 
   useEffect(() => {
-    const { centro, zoom, zoomMinimo, zoomMaximo, limites, viscosidadLimites, zoomEtiquetasVisibles } = PARAMETROS.mapa;
+    const {
+      centro, zoom, zoomMinimo, zoomMaximo, limites, viscosidadLimites, zoomEtiquetasVisibles, teselas, atribuciones,
+    } = PARAMETROS.mapa;
     const instancia = L.map(contenedor.current, {
       center: centro,
       zoom,
@@ -111,7 +110,12 @@ export default function MapaComplejos({ marcadores, alAbrir }) {
       attributionControl: false,
     });
     L.control.attribution({ prefix: false }).addTo(instancia);
-    teselas.current = L.layerGroup().addTo(instancia);
+    L.tileLayer(teselas.url, {
+      maxZoom: zoomMaximo,
+      maxNativeZoom: teselas.zoomNativoMaximo,
+      updateWhenZooming: false,
+      attribution: htmlAtribuciones(atribuciones),
+    }).addTo(instancia);
     capaMarcadores.current = L.layerGroup().addTo(instancia);
     mapa.current = instancia;
 
@@ -126,27 +130,9 @@ export default function MapaComplejos({ marcadores, alAbrir }) {
       instancia.off('zoomend', sincronizarEtiquetas);
       instancia.remove();
       mapa.current = null;
-      teselas.current = null;
       capaMarcadores.current = null;
     };
   }, []);
-
-  // Cambiar de capa reemplaza la pila de teselas; Leaflet ajusta solo la atribución según las capas presentes.
-  useEffect(() => {
-    const grupo = teselas.current;
-    if (!grupo) return;
-    const { zoomMaximo, capas } = PARAMETROS.mapa;
-    const definicion = capas[capa];
-    grupo.clearLayers();
-    definicion.teselas.forEach((pila, indice) => {
-      grupo.addLayer(L.tileLayer(pila.url, {
-        maxZoom: zoomMaximo,
-        maxNativeZoom: pila.zoomNativoMaximo,
-        updateWhenZooming: false,
-        attribution: indice === 0 ? htmlAtribuciones(definicion.atribuciones) : '',
-      }));
-    });
-  }, [capa]);
 
   useEffect(() => {
     const instancia = mapa.current;
@@ -180,9 +166,8 @@ export default function MapaComplejos({ marcadores, alAbrir }) {
   };
 
   return (
-    <div className={`mapa-contenedor mapa-capa-${capa}`}>
+    <div className="mapa-contenedor">
       <div ref={contenedor} className="mapa-complejos" role="region" aria-label={t('mapa.descripcion')} />
-      <ControlCapasMapa capas={PARAMETROS.mapa.capas} activa={capa} onCambiar={setCapa} />
       <BotonCentrarMapa onClick={centrarEnLaCiudad} />
     </div>
   );

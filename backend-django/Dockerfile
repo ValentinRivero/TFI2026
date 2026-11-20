@@ -29,4 +29,7 @@ RUN DJANGO_SECRET_KEY=solo-para-collectstatic-durante-el-build \
 
 EXPOSE 8000
 
-CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]
+# Keepalive explicito del WebSocket: un ping de protocolo cada 20 s de silencio mantiene vivo el canal frente al limite de
+# inactividad de Cloudflare (alrededor de 100 s) y limpia conexiones muertas a los 30 s sin respuesta. No depende del
+# valor por defecto de la version instalada.
+CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "--ping-interval", "20", "--ping-timeout", "30", "config.asgi:application"]
