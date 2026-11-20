@@ -41,3 +41,12 @@ export const reactivarItemCatalogo = async (recurso, id) => {
 export const darDeBajaItemCatalogo = async (recurso, id) => {
   await apiDjango.delete(rutaDeItem(recurso, id));
 };
+
+/**
+ * Una página de dónde está en uso un ítem, con los mismos criterios que bloquean su baja. Deportes: complejos con sus
+ * canchas (`{ complejo_id, complejo_nombre, canchas }`); servicios: complejos (`{ complejo_id, complejo_nombre }`).
+ */
+export const listarUsosCatalogo = async (recurso, id, pagina, signal) => {
+  const { data } = await apiDjango.get(`${rutaDeItem(recurso, id)}usos/`, { params: { page: pagina }, signal });
+  return data;
+};

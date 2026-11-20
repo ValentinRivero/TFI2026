@@ -6,6 +6,7 @@ import {
   cuerpoRolEdicion,
   cuerpoRolNuevo,
   esRolEditable,
+  filtrarRoles,
   validarRol,
   VALORES_ROL_INICIALES,
   valoresDeRol,
@@ -136,5 +137,36 @@ describe('textos de la pantalla de roles', () => {
     'avisoEdicion', 'avisoBaja', 'avisoReactivacion',
   ])('existe roles.%s', (clave) => {
     expect(t(`roles.${clave}`)).not.toBe(`roles.${clave}`);
+  });
+});
+
+describe('filtrarRoles', () => {
+  const roles = [
+    { id: 1, nombre: 'DUENO_COMPLEJO', descripcion: 'Responsable del complejo', estado: 1 },
+    { id: 2, nombre: 'Encargado de Turno', descripcion: 'Atiende el mostrador', estado: 1 },
+    { id: 3, nombre: 'Cajero', descripcion: '', estado: 0 },
+  ];
+  const ids = (resultado) => resultado.map((rol) => rol.id);
+
+  test('busca en el nombre y en la descripción, sin distinguir mayúsculas ni tildes', () => {
+    expect(ids(filtrarRoles(roles, { busqueda: 'MOSTRADOR', estado: '' }))).toEqual([2]);
+    expect(ids(filtrarRoles(roles, { busqueda: 'encargado', estado: '' }))).toEqual([2]);
+    expect(ids(filtrarRoles(roles, { busqueda: 'responsable', estado: '' }))).toEqual([1]);
+  });
+
+  test('un rol base también se encuentra por la etiqueta con la que se muestra', () => {
+    expect(ids(filtrarRoles(roles, { busqueda: 'dueño de complejo', estado: '' }))).toEqual([1]);
+    expect(ids(filtrarRoles(roles, { busqueda: 'dueno_complejo', estado: '' }))).toEqual([1]);
+  });
+
+  test('filtra por estado y combina con la búsqueda', () => {
+    expect(ids(filtrarRoles(roles, { busqueda: '', estado: '0' }))).toEqual([3]);
+    expect(ids(filtrarRoles(roles, { busqueda: 'cajero', estado: '1' }))).toEqual([]);
+  });
+
+  test('un rol sin descripción no rompe la búsqueda', () => {
+    const sinDescripcion = [{ id: 9, nombre: 'Sin Datos', descripcion: null, estado: 1 }];
+
+    expect(ids(filtrarRoles(sinDescripcion, { busqueda: 'datos', estado: '' }))).toEqual([9]);
   });
 });

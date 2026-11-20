@@ -3,7 +3,15 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 const apiDjango = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() }));
 vi.mock('./api.js', () => ({ apiDjango }));
 
-const { actualizarRol, crearRol, darDeBajaRol, listarPermisos, listarRoles, reactivarRol } = await import('./rolService.js');
+const {
+  actualizarRol,
+  crearRol,
+  darDeBajaRol,
+  listarPermisos,
+  listarRoles,
+  listarUsosRol,
+  reactivarRol,
+} = await import('./rolService.js');
 
 beforeEach(() => {
   Object.values(apiDjango).forEach((funcion) => funcion.mockReset());
@@ -67,5 +75,23 @@ describe('permisos', () => {
 
     await expect(listarPermisos()).resolves.toEqual(permisos);
     expect(apiDjango.get).toHaveBeenCalledWith('/api/sistema/permisos/', { signal: undefined });
+  });
+});
+
+describe('usos de un rol', () => {
+  test('pide una página de las cuentas que lo tienen', async () => {
+    const senal = new AbortController().signal;
+    const pagina = { count: 1, next: null, results: [{ id: 3, nombre: 'Ana Prueba', email: 'ana@talibre.test', estado: 1 }] };
+    apiDjango.get.mockResolvedValue({ data: pagina });
+
+    await expect(listarUsosRol(8, 3, senal)).resolves.toEqual(pagina);
+    expect(apiDjango.get).toHaveBeenCalledWith('/api/sistema/roles/8/usos/', { params: { page: 3 }, signal: senal });
+  });
+
+  test('un error se propaga tal cual', async () => {
+    const error = new Error('403');
+    apiDjango.get.mockRejectedValue(error);
+
+    await expect(listarUsosRol(8, 1)).rejects.toBe(error);
   });
 });

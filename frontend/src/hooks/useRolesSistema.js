@@ -8,10 +8,12 @@ import {
   listarRoles,
   reactivarRol,
 } from '../services/rolService.js';
+import { FILTROS_CATALOGO_INICIALES, hayFiltroActivo } from '../utils/catalogoSistema.js';
 import {
   alternarPermiso,
   cuerpoRolEdicion,
   cuerpoRolNuevo,
+  filtrarRoles,
   validarRol,
   VALORES_ROL_INICIALES,
   valoresDeRol,
@@ -19,13 +21,15 @@ import {
 import useConfirmacion from './useConfirmacion.js';
 import useConsulta from './useConsulta.js';
 import useEnvio from './useEnvio.js';
+import useFiltros from './useFiltros.js';
 
 const FORMULARIO_CERRADO = Object.freeze({ abierto: false, rol: null, valores: VALORES_ROL_INICIALES, intentado: false });
 
 /**
  * Roles del superadmin: lista completa con sus bajas, permisos y usos; alta y edición de roles personalizados con un
  * selector de permisos; baja lógica con confirmación y reactivación; y una ficha de solo lectura con los permisos de
- * cualquier rol (también de los base, que son de solo lectura). El backend rechaza la baja de un rol en uso y los
+ * cualquier rol (también de los base, que son de solo lectura). La lista se filtra en el cliente por nombre o
+ * descripción y por estado. El backend rechaza la baja de un rol en uso y los
  * permisos exclusivos de la plataforma con su motivo, que se muestra tal cual.
  */
 export default function useRolesSistema() {
@@ -37,7 +41,10 @@ export default function useRolesSistema() {
   const guardado = useEnvio();
   const reactivacion = useEnvio();
 
-  const items = consulta.datos ?? [];
+  const busqueda = useFiltros(FILTROS_CATALOGO_INICIALES);
+
+  const todos = consulta.datos ?? [];
+  const items = filtrarRoles(todos, busqueda.filtros);
   const lista = {
     items,
     total: items.length,
@@ -127,6 +134,13 @@ export default function useRolesSistema() {
 
   return {
     lista,
+    hayItems: todos.length > 0,
+    filtros: {
+      valores: busqueda.filtros,
+      activos: hayFiltroActivo(busqueda.filtros),
+      cambiar: busqueda.cambiar,
+      limpiar: busqueda.limpiar,
+    },
     aviso,
     descartarAviso: () => setAviso(null),
     errorReactivacion: reactivacion.error,

@@ -6,6 +6,7 @@ from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.filters import OrderingFilter
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.settings import api_settings
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
@@ -61,6 +62,9 @@ from .serializers import (
     ServicioEdicionSerializer,
     ServiciosComplejoSerializer,
     TurnoFijoSerializer,
+    UsoDeporteSerializer,
+    UsoRolSerializer,
+    UsoServicioSerializer,
     UsuarioAdminEdicionSerializer,
     UsuarioAdminSerializer,
     VincularOperadorSerializer,
@@ -359,7 +363,7 @@ class CatalogoMaestroAdminViewSet(mixins.ListModelMixin, mixins.RetrieveModelMix
     permission_classes = [TienePermisoRBAC]
     permisos_requeridos = {
         accion: ('administrar_catalogos',)
-        for accion in ('list', 'retrieve', 'create', 'partial_update', 'destroy')
+        for accion in ('list', 'retrieve', 'create', 'partial_update', 'destroy', 'usos')
     }
     serializer_class = CatalogoMaestroAdminSerializer
     # Catálogos chicos y acotados (unas pocas filas): la pantalla de administración los recibe completos.
@@ -370,6 +374,7 @@ class CatalogoMaestroAdminViewSet(mixins.ListModelMixin, mixins.RetrieveModelMix
     servicio = None
     serializer_alta = None
     serializer_edicion = None
+    serializer_usos = None
 
     def get_queryset(self):
         return self.servicio.listar()
@@ -394,17 +399,27 @@ class CatalogoMaestroAdminViewSet(mixins.ListModelMixin, mixins.RetrieveModelMix
         self.servicio.dar_de_baja(registro.pk, request.user, AuditoriaService.ip_de_request(request))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @action(detail=True, methods=['get'])
+    def usos(self, request, pk=None):
+        """Dónde está en uso el registro, paginado: es lo que bloquea su baja (la cantidad puede crecer con el sistema)."""
+        usos = self.servicio.listar_usos(int(pk))
+        paginador = api_settings.DEFAULT_PAGINATION_CLASS()
+        pagina = paginador.paginate_queryset(usos, request, view=self)
+        return paginador.get_paginated_response(self.serializer_usos(pagina, many=True).data)
+
 
 class DeporteAdminViewSet(CatalogoMaestroAdminViewSet):
     servicio = DeporteService
     serializer_alta = DeporteAltaSerializer
     serializer_edicion = DeporteEdicionSerializer
+    serializer_usos = UsoDeporteSerializer
 
 
 class ServicioAdminViewSet(CatalogoMaestroAdminViewSet):
     servicio = ServicioService
     serializer_alta = ServicioAltaSerializer
     serializer_edicion = ServicioEdicionSerializer
+    serializer_usos = UsoServicioSerializer
 
 
 class RolAdminViewSet(CatalogoMaestroAdminViewSet):
@@ -412,12 +427,13 @@ class RolAdminViewSet(CatalogoMaestroAdminViewSet):
 
     permisos_requeridos = {
         accion: ('administrar_roles',)
-        for accion in ('list', 'retrieve', 'create', 'partial_update', 'destroy')
+        for accion in ('list', 'retrieve', 'create', 'partial_update', 'destroy', 'usos')
     }
     serializer_class = RolAdminSerializer
     servicio = RolAdminService
     serializer_alta = RolAltaSerializer
     serializer_edicion = RolEdicionSerializer
+    serializer_usos = UsoRolSerializer
 
 
 class PermisoAdminViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):

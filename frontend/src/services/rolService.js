@@ -39,3 +39,9 @@ export const reactivarRol = async (id) => actualizarRol(id, { estado: REGISTRO_A
 export const darDeBajaRol = async (id) => {
   await apiDjango.delete(rutaDeRol(id));
 };
+
+/** Una página de las cuentas vigentes (activas o suspendidas) con el rol: `{ id, nombre, email, estado, estado_nombre }`. */
+export const listarUsosRol = async (id, pagina, signal) => {
+  const { data } = await apiDjango.get(`${rutaDeRol(id)}usos/`, { params: { page: pagina }, signal });
+  return data;
+};

@@ -282,8 +282,17 @@ class RolAdminRepository:
         return rol
 
     @staticmethod
+    def _usuarios_vigentes(rol_id):
+        return Usuario.objects.filter(rol_id=rol_id).exclude(estado=EstadoUsuario.BAJA)
+
+    @staticmethod
     def contar_usos(rol_id):
-        return Usuario.objects.filter(rol_id=rol_id).exclude(estado=EstadoUsuario.BAJA).count()
+        return RolAdminRepository._usuarios_vigentes(rol_id).count()
+
+    @staticmethod
+    def detalle_de_usos(rol_id):
+        """Cuentas activas o suspendidas con el rol: las mismas que cuenta `contar_usos`."""
+        return RolAdminRepository._usuarios_vigentes(rol_id).order_by('nombre_completo', 'id')
 
     @staticmethod
     def asignaciones(rol_id):
@@ -496,6 +505,11 @@ class CatalogoMaestroRepository:
     def contar_usos(cls, registro_id):
         return cls.modelo.objects.filter(id=registro_id).annotate(usos=cls._usos()).values_list('usos', flat=True).get()
 
+    @classmethod
+    def detalle_de_usos(cls, registro_id):
+        """Complejos que usan el registro, con los mismos filtros de estado que `_usos`: lo que bloquea su baja."""
+        raise NotImplementedError
+
 
 class DeporteRepository(CatalogoMaestroRepository):
     modelo = Deporte
@@ -512,6 +526,16 @@ class DeporteRepository(CatalogoMaestroRepository):
             .order_by().values_list('complejo_id', flat=True).distinct()
         )
 
+    @classmethod
+    def detalle_de_usos(cls, registro_id):
+        """Complejos con canchas vigentes del deporte (en mantenimiento también cuentan), con esas canchas en `canchas_del_deporte`."""
+        canchas = Cancha.objects.filter(deporte_id=registro_id).exclude(estado=EstadoCancha.BAJA).order_by('nombre', 'id')
+        return (
+            Complejo.objects.filter(Exists(canchas.filter(complejo=OuterRef('pk')).order_by()))
+            .prefetch_related(Prefetch('canchas', queryset=canchas, to_attr='canchas_del_deporte'))
+            .order_by('nombre', 'id')
+        )
+
 
 class ServicioRepository(CatalogoMaestroRepository):
     modelo = Servicio
@@ -522,6 +546,14 @@ class ServicioRepository(CatalogoMaestroRepository):
             'ofrecido_en',
             filter=Q(ofrecido_en__estado=EstadoRegistro.ACTIVO) & ~Q(ofrecido_en__complejo__estado=EstadoRegistro.BAJA),
         )
+
+    @classmethod
+    def detalle_de_usos(cls, registro_id):
+        """Complejos sin baja lógica que tienen el servicio activo."""
+        ofrecido = ComplejoServicio.objects.filter(
+            servicio_id=registro_id, estado=EstadoRegistro.ACTIVO, complejo=OuterRef('pk'),
+        )
+        return Complejo.objects.exclude(estado=EstadoRegistro.BAJA).filter(Exists(ofrecido)).order_by('nombre', 'id')
 
 
 class ComplejoServicioRepository:

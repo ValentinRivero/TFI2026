@@ -4,6 +4,7 @@ import { t } from '../i18n/index.js';
 import { esRolEditable } from '../utils/roles.js';
 import BotonAccion from './BotonAccion.jsx';
 import Icono from './Icono.jsx';
+import IndicadorUsos from './IndicadorUsos.jsx';
 import { CeldaTabla } from './TablaApilable.jsx';
 
 const columnas = 'roles.columnas';
@@ -13,7 +14,7 @@ const columnas = 'roles.columnas';
  * base solo se consulta y se marca como protegido; uno personalizado activo se edita o se da de baja, y uno de baja se
  * reactiva.
  */
-export default function RolRow({ rol, onVerPermisos, onEditar, onDarDeBaja, onReactivar }) {
+export default function RolRow({ rol, onVerUsos, onVerPermisos, onEditar, onDarDeBaja, onReactivar }) {
   const estado = describir(ESTADO_REGISTRO, rol.estado);
   const activo = rol.estado === REGISTRO_ACTIVO;
   const editable = esRolEditable(rol);
@@ -31,7 +32,12 @@ export default function RolRow({ rol, onVerPermisos, onEditar, onDarDeBaja, onRe
         <span className={`badge ${estado.badge}`}>{estado.etiqueta}</span>
       </CeldaTabla>
       <CeldaTabla etiqueta={t(`${columnas}.usos`)} className="num">
-        {t(rol.usos === 1 ? 'roles.usosUno' : 'roles.usosVarios', { cantidad: rol.usos })}
+        <IndicadorUsos
+          texto={t(rol.usos === 1 ? 'roles.usosUno' : 'roles.usosVarios', { cantidad: rol.usos })}
+          usos={rol.usos}
+          nombre={rol.nombre}
+          onVer={() => onVerUsos(rol)}
+        />
       </CeldaTabla>
       <CeldaTabla etiqueta={t(`${columnas}.permisos`)}>
         <Button size="sm" variant="outline-secondary" onClick={() => onVerPermisos(rol)}>

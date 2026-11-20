@@ -7,16 +7,23 @@ import {
   reactivarItemCatalogo,
   renombrarItemCatalogo,
 } from '../services/catalogoSistemaService.js';
-import { normalizarNombre, validarNombreCatalogo } from '../utils/catalogoSistema.js';
+import {
+  filtrarCatalogo,
+  FILTROS_CATALOGO_INICIALES,
+  hayFiltroActivo,
+  normalizarNombre,
+  validarNombreCatalogo,
+} from '../utils/catalogoSistema.js';
 import useConfirmacion from './useConfirmacion.js';
 import useConsulta from './useConsulta.js';
 import useEnvio from './useEnvio.js';
+import useFiltros from './useFiltros.js';
 
 const FORMULARIO_CERRADO = Object.freeze({ abierto: false, item: null, nombre: '', intentado: false });
 
 /**
  * Catálogo maestro (deportes o servicios) del superadmin: lista completa con sus bajas y usos, alta, cambio de nombre,
- * baja lógica con confirmación y reactivación. `recurso` es una clave de `CATALOGOS_SISTEMA`. El backend rechaza la
+ * baja lógica con confirmación y reactivación, con búsqueda por nombre y filtro de estado en el cliente. `recurso` es una clave de `CATALOGOS_SISTEMA`. El backend rechaza la
  * baja de un ítem en uso con su motivo, que queda dentro del diálogo de confirmación.
  */
 export default function useCatalogoSistema(recurso) {
@@ -26,7 +33,10 @@ export default function useCatalogoSistema(recurso) {
   const guardado = useEnvio();
   const reactivacion = useEnvio();
 
-  const items = consulta.datos ?? [];
+  const busqueda = useFiltros(FILTROS_CATALOGO_INICIALES);
+
+  const todos = consulta.datos ?? [];
+  const items = filtrarCatalogo(todos, busqueda.filtros);
   const lista = {
     items,
     total: items.length,
@@ -105,6 +115,13 @@ export default function useCatalogoSistema(recurso) {
 
   return {
     lista,
+    hayItems: todos.length > 0,
+    filtros: {
+      valores: busqueda.filtros,
+      activos: hayFiltroActivo(busqueda.filtros),
+      cambiar: busqueda.cambiar,
+      limpiar: busqueda.limpiar,
+    },
     aviso,
     descartarAviso: () => setAviso(null),
     errorReactivacion: reactivacion.error,

@@ -761,6 +761,13 @@ class CatalogoMaestroService:
         return cls.repositorio.listar()
 
     @classmethod
+    def listar_usos(cls, registro_id):
+        """Dónde está en uso el registro (lo que impide su baja). 404 si no existe."""
+        if cls.repositorio.obtener(registro_id) is None:
+            raise NotFound()
+        return cls.repositorio.detalle_de_usos(registro_id)
+
+    @classmethod
     def _validar_nombre(cls, nombre, excluir_id=None):
         existente = cls.repositorio.con_nombre(nombre, excluir_id)
         if existente is None:
@@ -875,6 +882,13 @@ class RolAdminService:
     @staticmethod
     def permisos():
         return PermisoRepository.activos()
+
+    @staticmethod
+    def listar_usos(rol_id):
+        """Cuentas vigentes con el rol (lo que impide su baja). 404 si no existe."""
+        if RolAdminRepository.obtener(rol_id) is None:
+            raise NotFound()
+        return RolAdminRepository.detalle_de_usos(rol_id)
 
     @staticmethod
     def es_asignable(permiso):

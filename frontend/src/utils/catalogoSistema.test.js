@@ -1,6 +1,15 @@
 import { describe, expect, test } from 'vitest';
 import { t } from '../i18n/index.js';
-import { CATALOGOS_SISTEMA, normalizarNombre, textoDeUsos, validarNombreCatalogo } from './catalogoSistema.js';
+import {
+  CATALOGOS_SISTEMA,
+  filtrarCatalogo,
+  FILTROS_CATALOGO_INICIALES,
+  hayFiltroActivo,
+  normalizarNombre,
+  normalizarParaBuscar,
+  textoDeUsos,
+  validarNombreCatalogo,
+} from './catalogoSistema.js';
 
 describe('normalizarNombre', () => {
   test('quita los espacios de los extremos y simplifica los internos', () => {
@@ -75,5 +84,101 @@ describe('pestañas de /sistema y acceso al panel', () => {
 
   test('el botón de cada contrato tiene su texto', () => {
     expect(t('contratos.administrar')).toBe('Administrar complejo');
+  });
+});
+
+describe('normalizarParaBuscar', () => {
+  test('ignora mayúsculas, tildes y espacios de los extremos', () => {
+    expect(normalizarParaBuscar('  PÁDEL Ñandú ')).toBe('padel nandu');
+  });
+
+  test('un valor ausente es un texto vacío', () => {
+    expect(normalizarParaBuscar(undefined)).toBe('');
+    expect(normalizarParaBuscar(null)).toBe('');
+  });
+});
+
+describe('filtrarCatalogo', () => {
+  const items = Object.freeze([
+    Object.freeze({ id: 1, nombre: 'Fútbol 5', estado: 1 }),
+    Object.freeze({ id: 2, nombre: 'Fútbol 7', estado: 0 }),
+    Object.freeze({ id: 3, nombre: 'Pádel', estado: 1 }),
+    Object.freeze({ id: 4, nombre: 'Básquet', estado: 0 }),
+  ]);
+  const ids = (resultado) => resultado.map((item) => item.id);
+
+  test('sin filtros devuelve todo, en el mismo orden', () => {
+    expect(ids(filtrarCatalogo(items, FILTROS_CATALOGO_INICIALES))).toEqual([1, 2, 3, 4]);
+  });
+
+  test('busca sin distinguir mayúsculas ni tildes', () => {
+    expect(ids(filtrarCatalogo(items, { busqueda: 'padel', estado: '' }))).toEqual([3]);
+    expect(ids(filtrarCatalogo(items, { busqueda: 'FUTBOL', estado: '' }))).toEqual([1, 2]);
+    expect(ids(filtrarCatalogo(items, { busqueda: 'básq', estado: '' }))).toEqual([4]);
+  });
+
+  test('todas las palabras escritas deben aparecer, en cualquier orden', () => {
+    expect(ids(filtrarCatalogo(items, { busqueda: '7 futbol', estado: '' }))).toEqual([2]);
+    expect(ids(filtrarCatalogo(items, { busqueda: 'futbol tenis', estado: '' }))).toEqual([]);
+  });
+
+  test('filtra por estado: activos (1) o de baja (0)', () => {
+    expect(ids(filtrarCatalogo(items, { busqueda: '', estado: '1' }))).toEqual([1, 3]);
+    expect(ids(filtrarCatalogo(items, { busqueda: '', estado: '0' }))).toEqual([2, 4]);
+  });
+
+  test('combina búsqueda y estado', () => {
+    expect(ids(filtrarCatalogo(items, { busqueda: 'futbol', estado: '0' }))).toEqual([2]);
+  });
+
+  test('una búsqueda de solo espacios no filtra', () => {
+    expect(ids(filtrarCatalogo(items, { busqueda: '   ', estado: '' }))).toEqual([1, 2, 3, 4]);
+  });
+
+  test('sin coincidencias devuelve una lista vacía y no modifica la original', () => {
+    expect(filtrarCatalogo(items, { busqueda: 'natación', estado: '' })).toEqual([]);
+    expect(items).toHaveLength(4);
+  });
+
+  test('puede buscar en otros textos del registro', () => {
+    const roles = [{ id: 1, nombre: 'Cajero', descripcion: 'Cobra en el mostrador', estado: 1 }];
+    const filtros = { busqueda: 'mostrador', estado: '' };
+
+    expect(filtrarCatalogo(roles, filtros, (rol) => [rol.nombre, rol.descripcion])).toHaveLength(1);
+    expect(filtrarCatalogo(roles, filtros)).toHaveLength(0);
+  });
+});
+
+describe('hayFiltroActivo', () => {
+  test('hay filtro con texto o con estado, pero no con espacios solos', () => {
+    expect(hayFiltroActivo(FILTROS_CATALOGO_INICIALES)).toBe(false);
+    expect(hayFiltroActivo({ busqueda: '   ', estado: '' })).toBe(false);
+    expect(hayFiltroActivo({ busqueda: 'a', estado: '' })).toBe(true);
+    expect(hayFiltroActivo({ busqueda: '', estado: '0' })).toBe(true);
+  });
+});
+
+describe('redirección desde los usos', () => {
+  test('los deportes llevan a las canchas del complejo y los servicios, a su configuración', () => {
+    expect(CATALOGOS_SISTEMA.deportes.rutaPanel).toBe('/panel/canchas');
+    expect(CATALOGOS_SISTEMA.servicios.rutaPanel).toBe('/panel');
+  });
+});
+
+describe('textos de la búsqueda y del detalle de usos', () => {
+  test.each([
+    'catalogoSistema.filtros.etiqueta', 'catalogoSistema.filtros.estado', 'catalogoSistema.filtros.todos',
+    'catalogoSistema.filtros.activos', 'catalogoSistema.filtros.baja', 'catalogoSistema.filtros.sinResultadosTitulo',
+    'catalogoSistema.filtros.sinResultados', 'catalogoSistema.deportes.buscar', 'catalogoSistema.servicios.buscar',
+    'roles.buscar', 'usos.titulo', 'usos.verDetalle', 'usos.errorTitulo', 'usos.errorMas', 'usos.vacio',
+    'usos.deportes.titulo', 'usos.deportes.resumen', 'usos.deportes.canchas', 'usos.deportes.ir', 'usos.deportes.ayuda',
+    'usos.servicios.titulo', 'usos.servicios.resumen', 'usos.servicios.ir', 'usos.servicios.ayuda',
+    'usos.roles.titulo', 'usos.roles.resumen', 'usos.roles.ir', 'usos.roles.ayuda',
+  ])('existe %s', (clave) => {
+    expect(t(clave)).not.toBe(clave);
+  });
+
+  test('el nombre accesible del indicador de usos nombra el ítem y la cantidad', () => {
+    expect(t('usos.verDetalle', { nombre: 'Pádel', cantidad: '3 canchas' })).toBe('Ver dónde está en uso «Pádel»: 3 canchas');
   });
 });

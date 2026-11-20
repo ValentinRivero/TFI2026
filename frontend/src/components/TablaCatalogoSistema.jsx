@@ -13,11 +13,13 @@ const COLUMNAS = [
 
 /**
  * Ítems de un catálogo maestro (deportes o servicios) con sus estados de carga, error y vacío. `catalogo` es lo que
- * devuelve `useCatalogoSistema`; `recurso`, una clave de `CATALOGOS_SISTEMA`.
+ * devuelve `useCatalogoSistema`; `recurso`, una clave de `CATALOGOS_SISTEMA`; `onVerUsos(item)` abre dónde está en uso.
+ * Con la búsqueda sin coincidencias ofrece limpiar los filtros.
  */
-export default function TablaCatalogoSistema({ recurso, catalogo }) {
+export default function TablaCatalogoSistema({ recurso, catalogo, onVerUsos }) {
   const { textos } = CATALOGOS_SISTEMA[recurso];
-  const { lista, formulario, baja } = catalogo;
+  const { lista, formulario, baja, filtros } = catalogo;
+  const sinCoincidencias = catalogo.hayItems && filtros.activos;
 
   return (
     <ListaAdmin
@@ -26,7 +28,11 @@ export default function TablaCatalogoSistema({ recurso, catalogo }) {
       etiqueta={t(`${textos}.titulo`)}
       resumen={t(`${textos}.resumen`, { total: lista.total })}
       errorTitulo={t(`${textos}.errorTitulo`)}
-      vacio={{
+      vacio={sinCoincidencias ? {
+        titulo: t('catalogoSistema.filtros.sinResultadosTitulo'),
+        descripcion: t('catalogoSistema.filtros.sinResultados'),
+        children: <Button variant="outline-primary" onClick={filtros.limpiar}>{t('comun.limpiarFiltros')}</Button>,
+      } : {
         titulo: t(`${textos}.vacioTitulo`),
         descripcion: t(`${textos}.vacioDescripcion`),
         children: <Button onClick={() => formulario.abrir(null)}>{t(`${textos}.nuevo`)}</Button>,
@@ -36,6 +42,7 @@ export default function TablaCatalogoSistema({ recurso, catalogo }) {
           key={item.id}
           recurso={recurso}
           item={item}
+          onVerUsos={onVerUsos}
           onEditar={formulario.abrir}
           onDarDeBaja={baja.pedir}
           onReactivar={catalogo.reactivar}

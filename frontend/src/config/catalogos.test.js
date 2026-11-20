@@ -3,9 +3,11 @@ import {
   describir,
   describirModulo,
   ESTADO_REGISTRO,
+  FILTRO_ESTADO_REGISTRO,
   opcionesDe,
   REGISTRO_ACTIVO,
   REGISTRO_BAJA,
+  RUTAS_PANEL,
   TIPO_EVENTO_AUDITORIA,
 } from './catalogos.js';
 
@@ -38,5 +40,17 @@ describe('describirModulo', () => {
     expect(describirModulo('agenda')).toBe('Agenda');
     expect(describirModulo('sistema')).toBe('Sistema');
     expect(describirModulo('facturacion')).toBe('facturacion');
+  });
+});
+
+describe('filtro de estado de los catálogos del sistema', () => {
+  test('ofrece activos (1) y de baja (0) con los códigos del backend', () => {
+    expect(FILTRO_ESTADO_REGISTRO.map(({ valor }) => valor)).toEqual(['1', '0']);
+  });
+});
+
+describe('rutas del panel a las que se salta desde un listado', () => {
+  test('apuntan a la configuración y a las canchas de /panel', () => {
+    expect(RUTAS_PANEL).toEqual({ configuracion: '/panel', canchas: '/panel/canchas' });
   });
 });

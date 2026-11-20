@@ -7,6 +7,7 @@ import {
   cuerpoUsuario,
   esDireccionIp,
   idDeUsuarioEnRuta,
+  rutaDeFichaUsuario,
   FILTROS_AUDITORIA_INICIALES,
   FILTROS_CONTRATOS_INICIALES,
   FILTROS_USUARIOS_INICIALES,
@@ -187,5 +188,17 @@ describe('idDeUsuarioEnRuta', () => {
     ['', null, undefined, '0', '-3', '2.5', 'abc', '7abc', '01'].forEach((valor) => {
       expect(idDeUsuarioEnRuta(valor)).toBeNull();
     });
+  });
+});
+
+describe('rutaDeFichaUsuario', () => {
+  test('abre la ficha de la cuenta en modo consulta desde /sistema', () => {
+    expect(rutaDeFichaUsuario(42)).toBe('/sistema?verUsuario=42');
+  });
+
+  test('la ruta que arma es la que la pantalla de usuarios sabe leer', () => {
+    const id = new URLSearchParams(rutaDeFichaUsuario(42).split('?')[1]).get('verUsuario');
+
+    expect(idDeUsuarioEnRuta(id)).toBe(42);
   });
 });

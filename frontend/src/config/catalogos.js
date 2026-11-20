@@ -133,6 +133,12 @@ export const ESTADO_REGISTRO = Object.freeze({
 export const REGISTRO_ACTIVO = 1;
 export const REGISTRO_BAJA = 0;
 
+/** Opciones del filtro de estado de los catálogos del sistema (sin elegir se ven todos), con la clave de texto que las rotula. */
+export const FILTRO_ESTADO_REGISTRO = Object.freeze([
+  Object.freeze({ valor: String(REGISTRO_ACTIVO), clave: 'catalogoSistema.filtros.activos' }),
+  Object.freeze({ valor: String(REGISTRO_BAJA), clave: 'catalogoSistema.filtros.baja' }),
+]);
+
 /** Módulo de cada permiso del catálogo de roles, con su etiqueta. Un módulo nuevo del backend se muestra con su código. */
 export const ETIQUETA_MODULO_PERMISO = Object.freeze({
   perfil: 'Perfil',
@@ -340,6 +346,9 @@ export const RUTA_INICIAL_POR_ROL = Object.freeze({
   OPERADOR_COMPLEJO: '/panel',
   JUGADOR: '/',
 });
+
+/** Secciones de `/panel` a las que el superadmin salta desde un listado (configuración y servicios, y canchas). */
+export const RUTAS_PANEL = Object.freeze({ configuracion: '/panel', canchas: '/panel/canchas' });
 
 /** Secciones de la navegación por rol. El control real lo hacen los backends: acá solo se decide qué se muestra. */
 export const ROLES_POR_SECCION = Object.freeze({

@@ -230,6 +230,32 @@ class CatalogoMaestroEdicionSerializer(serializers.Serializer):
         return _exigir_algun_campo(attrs)
 
 
+class UsoDeporteSerializer(serializers.Serializer):
+    """Un complejo que usa el deporte, con sus canchas vigentes de ese deporte."""
+
+    complejo_id = serializers.IntegerField(source='id', read_only=True)
+    complejo_nombre = serializers.CharField(source='nombre', read_only=True)
+    canchas = serializers.SerializerMethodField()
+
+    def get_canchas(self, complejo):
+        return [{'id': cancha.id, 'nombre': cancha.nombre} for cancha in complejo.canchas_del_deporte]
+
+
+class UsoServicioSerializer(serializers.Serializer):
+    complejo_id = serializers.IntegerField(source='id', read_only=True)
+    complejo_nombre = serializers.CharField(source='nombre', read_only=True)
+
+
+class UsoRolSerializer(serializers.Serializer):
+    """Cuenta con el rol: lo justo para identificarla y abrirla en la gestión de usuarios (que ya expone estos datos)."""
+
+    id = serializers.IntegerField(read_only=True)
+    nombre = serializers.CharField(source='nombre_completo', read_only=True)
+    email = serializers.CharField(read_only=True)
+    estado = serializers.IntegerField(read_only=True)
+    estado_nombre = serializers.CharField(source='get_estado_display', read_only=True)
+
+
 class DeporteAltaSerializer(serializers.Serializer):
     nombre = _nombre_de_catalogo(LARGO_NOMBRE_DEPORTE)
 

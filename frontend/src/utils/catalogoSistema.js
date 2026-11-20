@@ -1,3 +1,4 @@
+import { RUTAS_PANEL } from '../config/catalogos.js';
 import { PARAMETROS } from '../config/parametros.js';
 import { t } from '../i18n/index.js';
 
@@ -12,11 +13,13 @@ export const CATALOGOS_SISTEMA = Object.freeze({
     ruta: '/api/sistema/deportes/',
     largoMaximo: limitesCampos.nombreDeporte,
     textos: 'catalogoSistema.deportes',
+    rutaPanel: RUTAS_PANEL.canchas,
   }),
   servicios: Object.freeze({
     ruta: '/api/sistema/servicios/',
     largoMaximo: limitesCampos.nombreServicio,
     textos: 'catalogoSistema.servicios',
+    rutaPanel: RUTAS_PANEL.configuracion,
   }),
 });
 
@@ -39,3 +42,26 @@ export const validarNombreCatalogo = (nombre, recurso) => {
 export const textoDeUsos = (recurso, usos) => (
   t(`${CATALOGOS_SISTEMA[recurso].textos}.${usos === 1 ? 'usosUno' : 'usosVarios'}`, { cantidad: usos })
 );
+
+export const FILTROS_CATALOGO_INICIALES = Object.freeze({ busqueda: '', estado: '' });
+
+/** Texto sin mayúsculas ni tildes, para buscar sin distinguirlas ("Pádel" coincide con "padel"). */
+export const normalizarParaBuscar = (texto) => (
+  String(texto ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim()
+);
+
+export const hayFiltroActivo = (filtros) => normalizarParaBuscar(filtros.busqueda) !== '' || filtros.estado !== '';
+
+/**
+ * Registros que cumplen la búsqueda (todas las palabras escritas aparecen en alguno de los textos del registro) y el
+ * estado elegido (`''` no filtra). `textosDe(registro)` devuelve los textos donde se busca. Función pura: no modifica la lista.
+ */
+export const filtrarCatalogo = (items, filtros, textosDe = (item) => [item.nombre]) => {
+  const palabras = normalizarParaBuscar(filtros.busqueda).split(/\s+/).filter(Boolean);
+  return items.filter((item) => {
+    if (filtros.estado !== '' && String(item.estado) !== filtros.estado) return false;
+    if (palabras.length === 0) return true;
+    const texto = textosDe(item).map(normalizarParaBuscar).join(' ');
+    return palabras.every((palabra) => texto.includes(palabra));
+  });
+};

@@ -1,6 +1,7 @@
+import { ETIQUETA_ROL } from '../config/catalogos.js';
 import { PARAMETROS } from '../config/parametros.js';
 import { t } from '../i18n/index.js';
-import { normalizarNombre } from './catalogoSistema.js';
+import { filtrarCatalogo, normalizarNombre } from './catalogoSistema.js';
 
 const { limitesCampos, cuenta } = PARAMETROS;
 
@@ -70,3 +71,8 @@ export const agruparPermisosPorModulo = (permisos) => {
 
 /** Un rol protegido de la carga inicial no se edita ni se da de baja. */
 export const esRolEditable = (rol) => !rol.es_base;
+
+/** Roles que cumplen la búsqueda (por nombre, etiqueta de un rol base o descripción) y el estado elegido. */
+export const filtrarRoles = (roles, filtros) => (
+  filtrarCatalogo(roles, filtros, (rol) => [rol.nombre, ETIQUETA_ROL[rol.nombre], rol.descripcion])
+);

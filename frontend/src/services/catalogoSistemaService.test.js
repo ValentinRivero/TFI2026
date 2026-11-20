@@ -7,6 +7,7 @@ const {
   crearItemCatalogo,
   darDeBajaItemCatalogo,
   listarCatalogoSistema,
+  listarUsosCatalogo,
   reactivarItemCatalogo,
   renombrarItemCatalogo,
 } = await import('./catalogoSistemaService.js');
@@ -55,6 +56,22 @@ describe.each([
 
     await expect(darDeBajaItemCatalogo(recurso, 4)).resolves.toBeUndefined();
     expect(apiDjango.delete).toHaveBeenCalledWith(`${ruta}4/`);
+  });
+
+  test('pide una página de dónde está en uso el ítem', async () => {
+    const senal = new AbortController().signal;
+    const pagina = { count: 1, next: null, results: [{ complejo_id: 5, complejo_nombre: 'Complejo El Yacaré' }] };
+    apiDjango.get.mockResolvedValue({ data: pagina });
+
+    await expect(listarUsosCatalogo(recurso, 4, 2, senal)).resolves.toEqual(pagina);
+    expect(apiDjango.get).toHaveBeenCalledWith(`${ruta}4/usos/`, { params: { page: 2 }, signal: senal });
+  });
+
+  test('un error al pedir los usos se propaga para que el diálogo lo muestre', async () => {
+    const error = new Error('404');
+    apiDjango.get.mockRejectedValue(error);
+
+    await expect(listarUsosCatalogo(recurso, 4, 1)).rejects.toBe(error);
   });
 
   test('un rechazo del backend (por ejemplo, ítem en uso) se propaga tal cual', async () => {
