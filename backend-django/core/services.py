@@ -46,6 +46,7 @@ from .repositories import (
     CatalogoRepository,
     ComplejoRepository,
     ComplejoServicioRepository,
+    DeporteRepository,
     ExcepcionHorariaRepository,
     GrillaRepository,
     HorarioAperturaRepository,
@@ -53,6 +54,7 @@ from .repositories import (
     ReporteRepository,
     ReservaRepository,
     RolRepository,
+    ServicioRepository,
     SesionRepository,
     TurnoFijoRepository,
     UsuarioRepository,
@@ -728,6 +730,128 @@ class CatalogoService:
     @staticmethod
     def marcadores_publicos():
         return ComplejoRepository.marcadores_publicos()
+
+
+class CatalogoMaestroService:
+    """
+    Administración de un catálogo maestro (deportes, servicios) por el superadministrador. La baja es lógica y se
+    rechaza mientras el registro esté en uso, para no dejar canchas o complejos apuntando a algo que el catálogo
+    público ya no muestra. Las subclases declaran el repositorio y cómo se describe el uso.
+    """
+
+    repositorio = None
+    etiqueta = ''
+
+    @classmethod
+    def _describir_uso(cls, usos):
+        raise NotImplementedError
+
+    @classmethod
+    def _al_renombrar(cls, registro):
+        """Gancho para invalidar lo que guarda una copia del nombre. Corre dentro de la transacción."""
+
+    @classmethod
+    def listar(cls):
+        return cls.repositorio.listar()
+
+    @classmethod
+    def _validar_nombre(cls, nombre, excluir_id=None):
+        existente = cls.repositorio.con_nombre(nombre, excluir_id)
+        if existente is None:
+            return
+        if existente.estado == EstadoRegistro.BAJA:
+            mensaje = f'Ya existe un {cls.etiqueta} con ese nombre dado de baja. Reactivalo en lugar de crear otro.'
+        else:
+            mensaje = f'Ya existe un {cls.etiqueta} con ese nombre.'
+        raise ValidationError({'nombre': mensaje})
+
+    @classmethod
+    def _auditar(cls, accion, registro, actor, ip_origen, extra=''):
+        AuditoriaService.registrar(
+            TipoEventoAuditoria.CAMBIO_CATALOGO, f'{accion} de {cls.etiqueta}',
+            detalle=f'{cls.etiqueta.capitalize()} id {registro.pk}: «{registro.nombre}».{extra}',
+            usuario=actor, ip_origen=ip_origen,
+        )
+
+    @classmethod
+    def crear(cls, datos, actor, ip_origen):
+        try:
+            with transaction.atomic():
+                cls._validar_nombre(datos['nombre'])
+                registro = cls.repositorio.crear(datos['nombre'])
+        except IntegrityError:
+            # Alta simultánea con el mismo nombre: la unicidad de la tabla decide.
+            raise ValidationError({'nombre': f'Ya existe un {cls.etiqueta} con ese nombre.'})
+        cls._auditar('Alta', registro, actor, ip_origen)
+        return cls.repositorio.obtener(registro.pk)
+
+    @classmethod
+    def actualizar(cls, registro_id, datos, actor, ip_origen):
+        try:
+            with transaction.atomic():
+                registro = cls.repositorio.bloquear(registro_id)
+                if registro is None:
+                    raise NotFound()
+                campos = _campos_modificados(registro, datos)
+                if not campos:
+                    return cls.repositorio.obtener(registro_id)
+                nombre_anterior = registro.nombre
+                if 'nombre' in campos:
+                    cls._validar_nombre(campos['nombre'], excluir_id=registro.pk)
+                cls.repositorio.actualizar(registro, **campos)
+                if 'nombre' in campos:
+                    cls._al_renombrar(registro)
+        except IntegrityError:
+            raise ValidationError({'nombre': f'Ya existe un {cls.etiqueta} con ese nombre.'})
+
+        cambios = []
+        if 'nombre' in campos:
+            cambios.append(f' Antes: «{nombre_anterior}».')
+        if 'estado' in campos:
+            cambios.append(' Reactivado.')
+        cls._auditar('Modificación', registro, actor, ip_origen, ''.join(cambios))
+        return cls.repositorio.obtener(registro_id)
+
+    @classmethod
+    def dar_de_baja(cls, registro_id, actor, ip_origen):
+        with transaction.atomic():
+            registro = cls.repositorio.bloquear(registro_id)
+            if registro is None:
+                raise NotFound()
+            if registro.estado == EstadoRegistro.BAJA:
+                raise ValidationError(f'El {cls.etiqueta} ya está dado de baja.')
+            usos = cls.repositorio.contar_usos(registro.pk)
+            if usos:
+                raise ValidationError(
+                    f'No se puede dar de baja el {cls.etiqueta} «{registro.nombre}»: está en uso en '
+                    f'{cls._describir_uso(usos)}. Quitalo de ahí antes de darlo de baja.'
+                )
+            registro.desactivar()
+        cls._auditar('Baja', registro, actor, ip_origen)
+
+
+class DeporteService(CatalogoMaestroService):
+    repositorio = DeporteRepository
+    etiqueta = 'deporte'
+
+    @classmethod
+    def _describir_uso(cls, usos):
+        return f'{usos} cancha' if usos == 1 else f'{usos} canchas'
+
+    @classmethod
+    def _al_renombrar(cls, registro):
+        # La grilla pública cacheada lleva el nombre del deporte: se invalida la de cada complejo que lo usa.
+        for complejo_id in DeporteRepository.complejos_con_canchas(registro.pk):
+            transaction.on_commit(lambda complejo_id=complejo_id: CacheGrillaService.invalidar(complejo_id))
+
+
+class ServicioService(CatalogoMaestroService):
+    repositorio = ServicioRepository
+    etiqueta = 'servicio'
+
+    @classmethod
+    def _describir_uso(cls, usos):
+        return f'{usos} complejo' if usos == 1 else f'{usos} complejos'
 
 
 class ComplejoService:

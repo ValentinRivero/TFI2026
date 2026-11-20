@@ -25,6 +25,7 @@ from .filters import (
 from .permissions import AdministraComplejo, TienePermisoRBAC
 from .serializers import (
     CanchaSerializer,
+    CatalogoMaestroAdminSerializer,
     CatalogoMaestroSerializer,
     ComplejoAdminSerializer,
     ComplejoCatalogoSerializer,
@@ -34,6 +35,8 @@ from .serializers import (
     ContratoAltaSerializer,
     ContratoEstadoSerializer,
     ContratoSerializer,
+    DeporteAltaSerializer,
+    DeporteEdicionSerializer,
     ExcepcionHorariaSerializer,
     FechaTurnoFijoSerializer,
     FiltroAuditoriaSerializer,
@@ -50,6 +53,8 @@ from .serializers import (
     ReservaAltaSerializer,
     ReservaManualSerializer,
     ReservaPropiaSerializer,
+    ServicioAltaSerializer,
+    ServicioEdicionSerializer,
     ServiciosComplejoSerializer,
     TurnoFijoSerializer,
     UsuarioAdminEdicionSerializer,
@@ -66,6 +71,7 @@ from .services import (
     ConflictoOperatoriaService,
     ComplejoService,
     ContratoService,
+    DeporteService,
     ExcepcionHorariaService,
     GrillaService,
     HorarioAperturaService,
@@ -74,6 +80,7 @@ from .services import (
     RecordatorioService,
     ReporteService,
     ReservaService,
+    ServicioService,
     SesionService,
     TurnoFijoService,
     UsuarioAdminService,
@@ -336,6 +343,63 @@ class DeporteViewSet(CatalogoMaestroViewSet):
 class ServicioViewSet(CatalogoMaestroViewSet):
     def get_queryset(self):
         return CatalogoService.servicios()
+
+
+class CatalogoMaestroAdminViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    """
+    Administración de un catálogo maestro. Vive en /sistema/ y no en la ruta pública, que sigue sirviendo
+    solo los registros activos. Las subclases declaran su servicio y sus serializers de alta y de edición.
+    """
+
+    permission_classes = [TienePermisoRBAC]
+    permisos_requeridos = {
+        accion: ('administrar_catalogos',)
+        for accion in ('list', 'retrieve', 'create', 'partial_update', 'destroy')
+    }
+    serializer_class = CatalogoMaestroAdminSerializer
+    # Catálogos chicos y acotados (unas pocas filas): la pantalla de administración los recibe completos.
+    pagination_class = None
+    filter_backends = []
+    lookup_value_regex = r'\d+'
+    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
+    servicio = None
+    serializer_alta = None
+    serializer_edicion = None
+
+    def get_queryset(self):
+        return self.servicio.listar()
+
+    def create(self, request):
+        entrada = self.serializer_alta(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        registro = self.servicio.crear(entrada.validated_data, request.user, AuditoriaService.ip_de_request(request))
+        return Response(self.get_serializer(registro).data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, pk=None):
+        registro = self.get_object()
+        entrada = self.serializer_edicion(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        registro = self.servicio.actualizar(
+            registro.pk, entrada.validated_data, request.user, AuditoriaService.ip_de_request(request),
+        )
+        return Response(self.get_serializer(registro).data)
+
+    def destroy(self, request, pk=None):
+        registro = self.get_object()
+        self.servicio.dar_de_baja(registro.pk, request.user, AuditoriaService.ip_de_request(request))
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class DeporteAdminViewSet(CatalogoMaestroAdminViewSet):
+    servicio = DeporteService
+    serializer_alta = DeporteAltaSerializer
+    serializer_edicion = DeporteEdicionSerializer
+
+
+class ServicioAdminViewSet(CatalogoMaestroAdminViewSet):
+    servicio = ServicioService
+    serializer_alta = ServicioAltaSerializer
+    serializer_edicion = ServicioEdicionSerializer
 
 
 BACKENDS_DE_LISTADO = (DjangoFilterBackend, BusquedaFlexibleFilter, OrderingFilter)

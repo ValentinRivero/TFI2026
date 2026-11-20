@@ -15,6 +15,8 @@ from .models import (
     LARGO_MINIMO_NOMBRE,
     LARGO_NOMBRE,
     LARGO_NOMBRE_CANCHA,
+    LARGO_NOMBRE_DEPORTE,
+    LARGO_NOMBRE_SERVICIO,
     LARGO_TELEFONO,
     LARGO_TEXTO_LIBRE,
     LATITUD_MAXIMA,
@@ -24,6 +26,7 @@ from .models import (
     Complejo,
     EstadoCancha,
     EstadoContrato,
+    EstadoRegistro,
     EstadoReserva,
     EstadoTurnoFijo,
     EstadoUsuario,
@@ -189,6 +192,54 @@ class FiltroReporteSerializer(serializers.Serializer):
 class CatalogoMaestroSerializer(serializers.Serializer):
     id = serializers.IntegerField(read_only=True)
     nombre = serializers.CharField(read_only=True)
+
+
+class NombreCatalogoField(TextoLimpioField):
+    """Nombre de un catálogo maestro: sin etiquetas, sin espacios de más y con espacios internos simples."""
+
+    def to_internal_value(self, data):
+        return ' '.join(super().to_internal_value(data).split())
+
+
+def _nombre_de_catalogo(largo_maximo, **opciones):
+    return NombreCatalogoField(min_length=LARGO_MINIMO_NOMBRE, max_length=largo_maximo, **opciones)
+
+
+class CatalogoMaestroAdminSerializer(serializers.Serializer):
+    """Vista administrativa: incluye las bajas y cuántos registros vigentes usan cada ítem."""
+
+    id = serializers.IntegerField(read_only=True)
+    nombre = serializers.CharField(read_only=True)
+    estado = serializers.IntegerField(read_only=True)
+    estado_nombre = serializers.CharField(source='get_estado_display', read_only=True)
+    usos = serializers.IntegerField(read_only=True)
+    fecha_creacion = serializers.DateTimeField(read_only=True)
+    fecha_modificacion = serializers.DateTimeField(read_only=True)
+
+
+class CatalogoMaestroEdicionSerializer(serializers.Serializer):
+    """`estado` solo admite reactivar: la baja pasa por DELETE, que valida que el ítem no esté en uso."""
+
+    estado = serializers.ChoiceField(choices=[EstadoRegistro.ACTIVO], required=False)
+
+    def validate(self, attrs):
+        return _exigir_algun_campo(attrs)
+
+
+class DeporteAltaSerializer(serializers.Serializer):
+    nombre = _nombre_de_catalogo(LARGO_NOMBRE_DEPORTE)
+
+
+class DeporteEdicionSerializer(CatalogoMaestroEdicionSerializer):
+    nombre = _nombre_de_catalogo(LARGO_NOMBRE_DEPORTE, required=False)
+
+
+class ServicioAltaSerializer(serializers.Serializer):
+    nombre = _nombre_de_catalogo(LARGO_NOMBRE_SERVICIO)
+
+
+class ServicioEdicionSerializer(CatalogoMaestroEdicionSerializer):
+    nombre = _nombre_de_catalogo(LARGO_NOMBRE_SERVICIO, required=False)
 
 
 class CanchaPublicaSerializer(serializers.ModelSerializer):

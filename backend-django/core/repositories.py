@@ -379,6 +379,81 @@ class CatalogoRepository:
         return Deporte.objects.filter(id=deporte_id).exists()
 
 
+class CatalogoMaestroRepository:
+    """
+    Consultas administrativas de un catálogo maestro. A diferencia de CatalogoRepository, que sirve la lectura
+    pública, acá se ven también los registros dados de baja, con la cantidad de usos vigentes de cada uno.
+    """
+
+    modelo = None
+
+    @classmethod
+    def _usos(cls):
+        raise NotImplementedError
+
+    @classmethod
+    def listar(cls):
+        return cls.modelo.objects.annotate(usos=cls._usos()).order_by('nombre', 'id')
+
+    @classmethod
+    def obtener(cls, registro_id):
+        return cls.listar().filter(id=registro_id).first()
+
+    @classmethod
+    def bloquear(cls, registro_id):
+        return cls.modelo.objects.select_for_update().filter(id=registro_id).first()
+
+    @classmethod
+    def con_nombre(cls, nombre, excluir_id=None):
+        """Incluye las bajas: el nombre es único en la tabla, así que una baja también lo ocupa."""
+        registros = cls.modelo.objects.filter(nombre__iexact=nombre)
+        if excluir_id is not None:
+            registros = registros.exclude(id=excluir_id)
+        return registros.first()
+
+    @classmethod
+    def crear(cls, nombre):
+        return cls.modelo.objects.create(nombre=nombre)
+
+    @classmethod
+    def actualizar(cls, registro, **campos):
+        for campo, valor in campos.items():
+            setattr(registro, campo, valor)
+        registro.save(update_fields=[*campos, 'fecha_modificacion'])
+        return registro
+
+    @classmethod
+    def contar_usos(cls, registro_id):
+        return cls.modelo.objects.filter(id=registro_id).annotate(usos=cls._usos()).values_list('usos', flat=True).get()
+
+
+class DeporteRepository(CatalogoMaestroRepository):
+    modelo = Deporte
+
+    @classmethod
+    def _usos(cls):
+        return Count('canchas', filter=~Q(canchas__estado=EstadoCancha.BAJA))
+
+    @staticmethod
+    def complejos_con_canchas(deporte_id):
+        """Complejos cuya grilla pública muestra el nombre del deporte."""
+        return list(
+            Cancha.objects.filter(deporte_id=deporte_id).exclude(estado=EstadoCancha.BAJA)
+            .order_by().values_list('complejo_id', flat=True).distinct()
+        )
+
+
+class ServicioRepository(CatalogoMaestroRepository):
+    modelo = Servicio
+
+    @classmethod
+    def _usos(cls):
+        return Count(
+            'ofrecido_en',
+            filter=Q(ofrecido_en__estado=EstadoRegistro.ACTIVO) & ~Q(ofrecido_en__complejo__estado=EstadoRegistro.BAJA),
+        )
+
+
 class ComplejoServicioRepository:
     @staticmethod
     def de_complejo(complejo_id):
