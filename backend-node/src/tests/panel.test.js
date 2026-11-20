@@ -40,14 +40,16 @@ const django = async (url) => {
 
 beforeEach(() => {
   consultas = [];
-  datos = { Evento: [], Notificacion: [], cantidad: 0, porId: null };
+  datos = { Evento: [], Notificacion: [], cantidad: 0, porId: null, modificadas: 0 };
   fetchSimulado = jest.spyOn(globalThis, 'fetch').mockImplementation(django);
   // MongoDB simulado a nivel de consulta: se registra cada consulta y se devuelve lo preparado por el test.
   jest.spyOn(mongoose.Query.prototype, 'exec').mockImplementation(async function ejecutar() {
     consultas.push({
       modelo: this.model.modelName, operacion: this.op, filtro: this.getFilter(), opciones: this.getOptions(),
+      actualizacion: this.op === 'updateMany' ? this.getUpdate() : undefined,
     });
     if (this.op === 'countDocuments') return datos.cantidad;
+    if (this.op === 'updateMany') return { modifiedCount: datos.modificadas };
     if (this.op === 'findOne') return datos.porId;
     return datos[this.model.modelName];
   });
@@ -566,5 +568,58 @@ describe('PATCH /api/actividad/notificaciones/:id', () => {
     Notificacion.prototype.save.mockRejectedValue(new mongoose.Error.MongooseServerSelectionError('timeout'));
 
     expect((await marcar(como(ROLES.JUGADOR, 7))).status).toBe(502);
+  });
+});
+
+describe('PATCH /api/actividad/notificaciones/mias/leidas (marcar todas como leídas)', () => {
+  const RUTA = '/api/actividad/notificaciones/mias/leidas';
+  const marcarTodas = (headers = {}) => request(app).patch(RUTA).set(headers);
+
+  test('marca en una sola operación las no leídas de la cuenta autenticada y devuelve cuántas fueron', async () => {
+    datos.modificadas = 3;
+
+    const respuesta = await marcarTodas(como(ROLES.JUGADOR, 7));
+
+    expect(respuesta.status).toBe(200);
+    expect(respuesta.body).toEqual({ actualizadas: 3 });
+    const actualizaciones = consultasDe('Notificacion', 'updateMany');
+    expect(actualizaciones).toHaveLength(1);
+    expect(actualizaciones[0].filtro).toEqual({ usuario_id: 7, estado: ESTADOS_NOTIFICACION.NO_LEIDA });
+    expect(actualizaciones[0].actualizacion).toEqual({ $set: { estado: ESTADOS_NOTIFICACION.LEIDA } });
+  });
+
+  test('solo alcanza las de quien llama: el destinatario sale del token y no admite parámetros', async () => {
+    await marcarTodas(como(ROLES.DUENO_COMPLEJO, 12)).query({ usuario_id: 7 }).send({ usuario_id: 7 });
+
+    expect(consultasDe('Notificacion', 'updateMany')[0].filtro.usuario_id).toBe(12);
+  });
+
+  test('es idempotente: sin no leídas responde 200 con cero', async () => {
+    datos.modificadas = 0;
+
+    const respuesta = await marcarTodas(como(ROLES.JUGADOR, 7));
+
+    expect(respuesta.status).toBe(200);
+    expect(respuesta.body).toEqual({ actualizadas: 0 });
+  });
+
+  test('no consulta a Django ni modifica avisos generales de un complejo', async () => {
+    await marcarTodas(como(ROLES.OPERADOR_COMPLEJO));
+
+    expect(fetchSimulado).not.toHaveBeenCalled();
+    expect(consultasDe('Notificacion', 'updateMany')[0].filtro.complejo_id).toBeUndefined();
+  });
+
+  test('sin sesión responde 401 y no consulta MongoDB', async () => {
+    const respuesta = await marcarTodas();
+
+    expect(respuesta.status).toBe(401);
+    expect(consultas).toHaveLength(0);
+  });
+
+  test('si MongoDB falla, 502', async () => {
+    mongoose.Query.prototype.exec.mockRejectedValue(new mongoose.Error.MongooseServerSelectionError('timeout'));
+
+    expect((await marcarTodas(como(ROLES.JUGADOR, 7))).status).toBe(502);
   });
 });

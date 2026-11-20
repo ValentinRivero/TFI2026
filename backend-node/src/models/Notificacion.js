@@ -130,6 +130,21 @@ notificacionSchema.statics.vigentePorId = function vigentePorId(id) {
     .populate({ path: 'evento', select: CAMPOS_DEL_EVENTO, match: { estado: ESTADOS_EVENTO.ACTIVO } });
 };
 
+/**
+ * Pasa a leídas, en una sola operación, las notificaciones no leídas dirigidas a un usuario. Las generales de un
+ * complejo (sin destinatario) y las de otras cuentas quedan afuera. Devuelve cuántas se modificaron.
+ */
+notificacionSchema.statics.marcarLeidasDeUsuario = async function marcarLeidasDeUsuario(usuarioId) {
+  if (!usuarioId) {
+    throw new Error('Marcar como leídas necesita un usuario destinatario.');
+  }
+  const resultado = await this.updateMany(
+    { usuario_id: usuarioId, estado: ESTADOS_NOTIFICACION.NO_LEIDA },
+    { $set: { estado: ESTADOS_NOTIFICACION.LEIDA } },
+  );
+  return resultado.modifiedCount;
+};
+
 notificacionSchema.index({ complejo_id: 1, estado: 1, fecha_creacion: -1 });
 notificacionSchema.index({ usuario_id: 1, estado: 1, fecha_creacion: -1 });
 // Un recordatorio o un reporte repetido no se duplica: la base rechaza la segunda clave del mismo usuario.

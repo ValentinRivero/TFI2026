@@ -31,6 +31,12 @@ export const contarMisNoLeidas = async (signal) => {
   return data?.count ?? 0;
 };
 
+/** Marca como leídas, en una sola operación, todas las notificaciones sin leer de la cuenta. Responde cuántas fueron. */
+export const marcarTodasMisNotificacionesLeidas = async () => {
+  const { data } = await apiNode.patch(`${RUTA}/mias/leidas`);
+  return data?.actualizadas ?? 0;
+};
+
 /** Marca una notificación como leída. Responde la notificación actualizada. */
 export const marcarNotificacionLeida = async (id) => {
   const { data } = await apiNode.patch(`${RUTA}/${encodeURIComponent(id)}`, { estado: NOTIFICACION_LEIDA });

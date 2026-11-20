@@ -126,6 +126,12 @@ const confirmarQuePuedeModificarla = async (notificacion, req) => {
   }
 };
 
+/** Marca como leídas todas las notificaciones no leídas de la cuenta autenticada; sin ninguna pendiente, responde 0. */
+export const marcarMisNotificacionesLeidas = async (req, res) => {
+  const actualizadas = await enMongo(() => Notificacion.marcarLeidasDeUsuario(req.usuario.id));
+  res.json({ actualizadas });
+};
+
 /** Marca una notificación como leída o no leída. La baja no se hace por esta vía. */
 export const cambiarEstadoDeNotificacion = async (req, res) => {
   const { id } = matchedData(req, { locations: ['params'] });
