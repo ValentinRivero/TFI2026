@@ -8,6 +8,7 @@ import threading
 import time as time_module
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
+from decimal import ROUND_HALF_UP, Decimal
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -1046,10 +1047,21 @@ class ComplejoService:
         )
 
     @staticmethod
+    def _validar_sena(complejo, campos):
+        """Una seña mayor a cero exige un alias: se valida el estado resultante, no solo los campos enviados."""
+        porcentaje = campos.get('porcentaje_sena', complejo.porcentaje_sena)
+        alias = campos.get('alias_transferencia', complejo.alias_transferencia)
+        if porcentaje > 0 and not alias:
+            raise ValidationError({
+                'alias_transferencia': 'Configurá el alias de transferencia para exigir una seña.',
+            })
+
+    @staticmethod
     def actualizar_configuracion(complejo, datos, actor, ip_origen):
         campos = _campos_modificados(complejo, datos)
         if not campos:
             return complejo
+        ComplejoService._validar_sena(complejo, campos)
         ComplejoRepository.actualizar(complejo, **campos)
         AuditoriaService.registrar(
             TipoEventoAuditoria.CAMBIO_CONFIGURACION, 'Cambio de configuración del complejo',
@@ -1867,6 +1879,21 @@ def _horas(cantidad):
     return f'{cantidad} hora' if cantidad == 1 else f'{cantidad} horas'
 
 
+CENTAVOS = Decimal('0.01')
+# La seña solo se registra antes de jugar; el cobro total también después, para saldar un turno completado.
+ESTADOS_RESERVA_SENABLES = (EstadoReserva.PENDIENTE, EstadoReserva.CONFIRMADA)
+ESTADOS_RESERVA_COBRABLES = (
+    EstadoReserva.PENDIENTE, EstadoReserva.CONFIRMADA, EstadoReserva.SENADA, EstadoReserva.COMPLETADA,
+)
+MENSAJE_SENA_YA_REGISTRADA = 'La seña de esta reserva ya está registrada.'
+MENSAJE_SIN_SENA = 'Esta reserva no exige seña: confirmala o registrá el pago total.'
+
+
+def calcular_monto_sena(precio, porcentaje):
+    """Seña = precio * porcentaje / 100, con redondeo monetario al centavo (mitad hacia arriba)."""
+    return (Decimal(precio) * Decimal(porcentaje) / Decimal(100)).quantize(CENTAVOS, rounding=ROUND_HALF_UP)
+
+
 class ReservaService:
     @staticmethod
     def propias(usuario):
@@ -1990,6 +2017,19 @@ class ReservaService:
         )
 
     @staticmethod
+    def _avisar_pago(reserva, actor, total):
+        ReservaService._al_personal(
+            reserva,
+            f'se registró {"el pago total" if total else "la seña"} de la reserva id {reserva.pk} '
+            f'({ReservaService._turno(reserva)}).',
+            actor=actor,
+        )
+        if total:
+            ReservaService._avisar_reserva_pagada(reserva)
+        else:
+            ReservaService._avisar_reserva_senada(reserva)
+
+    @staticmethod
     def _avisar_reserva_completada(reserva):
         ReservaService._al_titular(
             reserva, f'Tu reserva id {reserva.pk} en {ReservaService._complejo(reserva)} '
@@ -2109,8 +2149,9 @@ class ReservaService:
     def crear_reserva(datos, actor, ip_origen, manual=False):
         """
         Motor anti-colisiones. Con la fila de la cancha bloqueada, las altas que compiten por ella se
-        serializan: el turno debe ser un bloque válido de la grilla y estar libre en esa fecha. hora_fin y
-        precio_acordado los fija el servidor a partir del horario.
+        serializan: el turno debe ser un bloque válido de la grilla y estar libre en esa fecha. hora_fin,
+        precio_acordado y monto_sena los fija el servidor a partir del horario y del porcentaje de seña vigente del
+        complejo; desde ese momento quedan congelados.
         """
         fecha, hora_inicio = datos['fecha_turno'], datos['hora_inicio']
         if _ya_comenzo(fecha, hora_inicio):
@@ -2145,7 +2186,8 @@ class ReservaService:
             DisponibilidadService.validar_fecha_libre(cancha, fecha, hora_inicio, hora_fin)
             reserva = ReservaService._guardar(lambda: ReservaRepository.crear(
                 cancha=cancha, creado_por=actor, fecha_turno=fecha, hora_inicio=hora_inicio, hora_fin=hora_fin,
-                precio_acordado=precio, estado=EstadoReserva.PENDIENTE, **cliente,
+                precio_acordado=precio, monto_sena=calcular_monto_sena(precio, cancha.complejo.porcentaje_sena),
+                estado=EstadoReserva.PENDIENTE, **cliente,
             ))
             ReservaService._difundir(reserva)
             if manual:
@@ -2155,6 +2197,86 @@ class ReservaService:
 
         ReservaService._auditar(TipoEventoAuditoria.RESERVA_CREADA, 'Alta de reserva', reserva, actor, ip_origen)
         return reserva
+
+    @staticmethod
+    def motivo_sena_no_registrable(reserva):
+        """Por qué no se puede registrar la seña de la reserva, o None si se puede."""
+        if reserva.estado == EstadoReserva.SENADA:
+            return MENSAJE_SENA_YA_REGISTRADA
+        if reserva.estado not in ESTADOS_RESERVA_SENABLES:
+            return f'Una reserva en estado «{reserva.get_estado_display()}» no admite el registro de una seña.'
+        if reserva.monto_sena <= 0:
+            return MENSAJE_SIN_SENA
+        if reserva.monto_pagado >= reserva.monto_sena:
+            return MENSAJE_SENA_YA_REGISTRADA
+        return None
+
+    @staticmethod
+    def motivo_pago_no_registrable(reserva):
+        """Por qué no se puede registrar el pago total de la reserva, o None si se puede."""
+        if reserva.estado not in ESTADOS_RESERVA_COBRABLES:
+            return f'Una reserva en estado «{reserva.get_estado_display()}» no admite el registro de un pago.'
+        if reserva.saldo_restante <= 0:
+            return 'La reserva ya está saldada.'
+        return None
+
+    @staticmethod
+    def _validar_senable(reserva, estado_nuevo):
+        """«Señada» solo existe para una reserva con seña acordada: sin seña se confirma o se registra el pago total."""
+        if estado_nuevo == EstadoReserva.SENADA and reserva.monto_sena <= 0:
+            raise ValidationError({'estado': MENSAJE_SIN_SENA})
+
+    @staticmethod
+    def _monto_al_senar(reserva, estado_nuevo):
+        """Pasar a «Señada» por la agenda, sin la acción de cobro, deja abonada la seña para que los montos no contradigan el estado."""
+        if estado_nuevo != EstadoReserva.SENADA or reserva.monto_pagado >= reserva.monto_sena:
+            return {}
+        return {'monto_pagado': reserva.monto_sena}
+
+    @staticmethod
+    def _estado_tras_cobro(reserva):
+        """
+        Una reserva por jugar que cobra queda «Señada» si tiene seña acordada y «Confirmada» si no la exige; las
+        demás (señada, completada) conservan su estado operativo.
+        """
+        if reserva.estado not in ESTADOS_RESERVA_SENABLES:
+            return reserva.estado
+        return EstadoReserva.SENADA if reserva.monto_sena > 0 else EstadoReserva.CONFIRMADA
+
+    @staticmethod
+    def _registrar_cobro(reserva_id, motivo_de_rechazo, monto_abonado, accion, total, actor, ip_origen):
+        with transaction.atomic():
+            reserva = ReservaRepository.bloquear(reserva_id)
+            if reserva is None:
+                raise NotFound()
+            motivo = motivo_de_rechazo(reserva)
+            if motivo:
+                raise ValidationError(motivo)
+            estado_anterior = reserva.estado
+            campos = {'monto_pagado': monto_abonado(reserva), 'estado': ReservaService._estado_tras_cobro(reserva)}
+            ReservaRepository.actualizar(reserva, **campos)
+            ReservaService._avisar_pago(reserva, actor, total)
+
+        ReservaService._auditar(
+            TipoEventoAuditoria.RESERVA_PAGO, accion, reserva, actor, ip_origen,
+            f' Abonado: {reserva.monto_pagado} de {reserva.precio_acordado}. '
+            f'Estado: {EstadoReserva(estado_anterior).label} -> {reserva.get_estado_display()}.',
+        )
+        return reserva
+
+    @staticmethod
+    def confirmar_sena(reserva_id, actor, ip_origen):
+        return ReservaService._registrar_cobro(
+            reserva_id, ReservaService.motivo_sena_no_registrable, lambda reserva: reserva.monto_sena,
+            'Seña de reserva confirmada', False, actor, ip_origen,
+        )
+
+    @staticmethod
+    def registrar_pago_total(reserva_id, actor, ip_origen):
+        return ReservaService._registrar_cobro(
+            reserva_id, ReservaService.motivo_pago_no_registrable, lambda reserva: reserva.precio_acordado,
+            'Pago total de reserva registrado', True, actor, ip_origen,
+        )
 
     @staticmethod
     def _validar_cancelable(reserva):
@@ -2248,6 +2370,8 @@ class ReservaService:
             estado_anterior = reserva.estado
             if 'estado' in campos:
                 ReservaService._validar_transicion(reserva, campos['estado'])
+                ReservaService._validar_senable(reserva, campos['estado'])
+                campos.update(ReservaService._monto_al_senar(reserva, campos['estado']))
                 if campos['estado'] in (EstadoReserva.AUSENTE, EstadoReserva.COMPLETADA):
                     campos.update(ReservaService._contacto_de_baja_a_liberar(reserva))
             ReservaService._guardar(lambda: ReservaRepository.actualizar(reserva, **campos))
@@ -2331,6 +2455,7 @@ class ReservaService:
                 raise ValidationError('La cuenta del titular se dio de baja: registrá una reserva manual nueva.')
             if _ya_comenzo(reserva.fecha_turno, reserva.hora_inicio):
                 raise ValidationError('El turno ya comenzó: no se puede reabrir.')
+            ReservaService._validar_senable(reserva, estado_nuevo)
 
             complejo = cancha.complejo
             publica = complejo.estado == EstadoRegistro.ACTIVO and complejo.estado_contrato == EstadoContrato.ACTIVO
@@ -2352,7 +2477,8 @@ class ReservaService:
                     },
                 )
             estado_anterior = reserva.get_estado_display()
-            ReservaService._guardar(lambda: ReservaRepository.actualizar(reserva, estado=estado_nuevo))
+            campos = {'estado': estado_nuevo, **ReservaService._monto_al_senar(reserva, estado_nuevo)}
+            ReservaService._guardar(lambda: ReservaRepository.actualizar(reserva, **campos))
             ReservaService._difundir(reserva)
             ReservaService._avisar_reapertura(reserva, estado_anterior, actor)
 

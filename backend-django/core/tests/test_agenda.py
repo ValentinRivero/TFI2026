@@ -1,6 +1,8 @@
 from datetime import date, time, timedelta
 from unittest import mock
 
+from decimal import Decimal
+
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -332,7 +334,10 @@ class TestAltaManual:
 class TestCambioDeEstado:
     @pytest.fixture
     def reserva(self, crear_reserva, cancha):
-        return crear_reserva(cancha, MARTES, time(14, 0), time(15, 0), estado=EstadoReserva.PENDIENTE)
+        # Con seña acordada: sin ella la reserva no admite el estado «Señada».
+        return crear_reserva(
+            cancha, MARTES, time(14, 0), time(15, 0), estado=EstadoReserva.PENDIENTE, monto_sena=Decimal('11400.00'),
+        )
 
     def _patch(self, cliente_de, usuario, reserva, **datos):
         return cliente_de(usuario).patch(_url(reserva), datos, format='json')

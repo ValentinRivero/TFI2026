@@ -6,6 +6,8 @@ superadministradores en lo del sistema. Los avisos se capturan antes de salir ha
 from datetime import time, timedelta
 from unittest import mock
 
+from decimal import Decimal
+
 import pytest
 from django.db import DatabaseError
 from rest_framework import status
@@ -71,7 +73,7 @@ def cancha(complejo, crear_cancha, crear_horario):
 
 @pytest.fixture
 def reserva(cancha, crear_reserva):
-    return crear_reserva(cancha, MARTES, time(14, 0), time(15, 0), estado=EstadoReserva.PENDIENTE)
+    return crear_reserva(cancha, MARTES, time(14, 0), time(15, 0), estado=EstadoReserva.PENDIENTE, monto_sena=Decimal('11400.00'))
 
 
 def _del_jugador(entregados, jugador):
