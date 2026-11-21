@@ -7,16 +7,17 @@ import FiltrosAgenda from './FiltrosAgenda.jsx';
 import FormularioReservaManual from './FormularioReservaManual.jsx';
 import ModalCobroReserva from './ModalCobroReserva.jsx';
 import ModalConfirmarAccion from './ModalConfirmarAccion.jsx';
+import ModalObservaciones from './ModalObservaciones.jsx';
 import ModalReabrirReserva from './ModalReabrirReserva.jsx';
 import TablaAgenda from './TablaAgenda.jsx';
 import VistaPreviaCambio from './VistaPreviaCambio.jsx';
 
 /**
  * Pestaña "Reservas" de la agenda (presentación): avisos, alta manual, filtros, tabla paginada y los diálogos
- * de cobro, cancelación y reapertura. `agenda` es lo que devuelve `useAgenda` y `canchas`, `[{ id, nombre }]` del complejo.
+ * de cobro, observaciones, cancelación y reapertura. `agenda` es lo que devuelve `useAgenda` y `canchas`, `[{ id, nombre }]` del complejo.
  */
 export default function SeccionReservasAgenda({ agenda, canchas }) {
-  const { alta, cancelacion, cobro, reapertura } = agenda;
+  const { alta, cancelacion, cobro, observaciones, reapertura } = agenda;
   const reserva = cancelacion.objetivo;
 
   return (
@@ -49,7 +50,10 @@ export default function SeccionReservasAgenda({ agenda, canchas }) {
         onCancelar={cancelacion.pedir}
         onReabrir={reapertura.pedir}
         onCobrar={(reserva, accion) => cobro.pedir({ reserva, accion })}
+        onEditarObservaciones={observaciones.abrir}
       />
+
+      <ModalObservaciones edicion={observaciones} />
 
       <ModalCobroReserva cobro={cobro} />
 

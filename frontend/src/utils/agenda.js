@@ -8,6 +8,7 @@ import {
   TRANSICIONES_AGENDA,
   VISTA_AGENDA,
 } from '../config/catalogos.js';
+import { PARAMETROS } from '../config/parametros.js';
 import { t } from '../i18n/index.js';
 import { diasEntre, parsearFecha, sumarDias } from './formatos.js';
 import { tieneSena } from './pagos.js';
@@ -126,6 +127,17 @@ export const puedeCancelarElComplejo = (reserva) => ESTADOS_RESERVA_CANCELABLES.
 /** Se reabre una reserva cancelada cuyo turno todavía no empezó. */
 export const puedeReabrir = (reserva, ahora = new Date()) => (
   ESTADOS_RESERVA_CANCELADOS.includes(reserva.estado) && !yaComenzo(reserva, ahora)
+);
+
+/** Error de las observaciones internas (largo máximo, igual que el servidor) o `undefined`. Vacío es válido: las borra. */
+export const errorDeObservaciones = (texto) => {
+  const maximo = PARAMETROS.limitesCampos.descripcion;
+  return String(texto ?? '').trim().length > maximo ? t('agenda.errorObservaciones', { maximo }) : undefined;
+};
+
+/** Si el texto escrito difiere del guardado (sin contar espacios en los extremos). */
+export const observacionesModificadas = (reserva, texto) => (
+  String(texto ?? '').trim() !== String(reserva.observaciones ?? '').trim()
 );
 
 export const VALORES_RESERVA_MANUAL_INICIALES = Object.freeze({

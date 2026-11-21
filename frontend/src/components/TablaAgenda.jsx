@@ -14,7 +14,7 @@ const COLUMNAS = [
 ];
 
 /** Reservas de la agenda en una tabla paginada con sus estados (carga, error, vacío). `lista` viene de `useListaPaginada`. */
-export default function TablaAgenda({ lista, cambiando, onCambiarEstado, onCancelar, onReabrir, onCobrar }) {
+export default function TablaAgenda({ lista, cambiando, onCambiarEstado, onCancelar, onReabrir, onCobrar, onEditarObservaciones }) {
   return (
     <ListaAdmin
       lista={lista}
@@ -32,6 +32,7 @@ export default function TablaAgenda({ lista, cambiando, onCambiarEstado, onCance
           onCancelar={onCancelar}
           onReabrir={onReabrir}
           onCobrar={onCobrar}
+          onEditarObservaciones={onEditarObservaciones}
         />
       )}
     />

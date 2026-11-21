@@ -6,6 +6,7 @@ import { estadosSiguientes, puedeCancelarElComplejo, puedeReabrir } from '../uti
 import { formatearFechaCorta, formatearHora } from '../utils/formatos.js';
 import { ACCION_COBRO, accionesDeCobro } from '../utils/pagos.js';
 import BadgeEstadoReserva from './BadgeEstadoReserva.jsx';
+import Icono from './Icono.jsx';
 import ResumenPago from './ResumenPago.jsx';
 import { CeldaTabla } from './TablaApilable.jsx';
 
@@ -16,7 +17,7 @@ const columnas = 'agenda.columnas';
  * observaciones internas y las acciones que admite el estado actual (cobrar la seña o el total, cambiar estado,
  * cancelar o reabrir). `ocupada` deshabilita las acciones mientras se aplica un cambio sobre esa reserva.
  */
-export default function ReservaAgendaRow({ reserva, ocupada, onCambiarEstado, onCancelar, onReabrir, onCobrar }) {
+export default function ReservaAgendaRow({ reserva, ocupada, onCambiarEstado, onCancelar, onReabrir, onCobrar, onEditarObservaciones }) {
   const origen = describir(TIPO_OCUPACION, reserva.tipo_ocupacion);
   const siguientes = estadosSiguientes(reserva);
   const { cliente } = reserva;
@@ -43,7 +44,22 @@ export default function ReservaAgendaRow({ reserva, ocupada, onCambiarEstado, on
           <div className="small text-danger mt-1">{t('agenda.conflicto', { motivo: reserva.conflicto_operatoria })}</div>
         )}
       </CeldaTabla>
-      <CeldaTabla etiqueta={t(`${columnas}.observaciones`)} className="texto-multilinea">{reserva.observaciones || '-'}</CeldaTabla>
+      <CeldaTabla etiqueta={t(`${columnas}.observaciones`)}>
+        <div className="d-flex align-items-start justify-content-between gap-2">
+          <span className="texto-multilinea">{reserva.observaciones || '-'}</span>
+          <Button
+            size="sm"
+            variant="outline-secondary"
+            className="boton-icono flex-shrink-0"
+            disabled={ocupada}
+            title={t('agenda.editarObservaciones')}
+            aria-label={t('agenda.editarObservacionesDe', { id: reserva.id })}
+            onClick={() => onEditarObservaciones(reserva)}
+          >
+            <Icono nombre="lapiz" size={16} />
+          </Button>
+        </div>
+      </CeldaTabla>
       <CeldaTabla etiqueta="" className="text-lg-end">
         <div className="d-flex flex-wrap justify-content-lg-end align-items-center gap-2" role="group" aria-label={t('pagos.accionesDe', { id: reserva.id })}>
           {accionesDeCobro(reserva).map((accion) => (

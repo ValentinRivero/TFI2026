@@ -26,6 +26,7 @@ import { aFechaIso } from '../utils/formatos.js';
 import { ACCION_COBRO } from '../utils/pagos.js';
 import useBloquesDeCancha from './useBloquesDeCancha.js';
 import useConfirmacion from './useConfirmacion.js';
+import useEditarObservaciones from './useEditarObservaciones.js';
 import useEnvio from './useEnvio.js';
 import useFiltros from './useFiltros.js';
 import useListaPaginada from './useListaPaginada.js';
@@ -156,6 +157,17 @@ export default function useAgenda(complejoId, { habilitado = true } = {}) {
     },
   );
 
+  // Las observaciones se editan en cualquier estado; solo un 404 (la reserva ya no existe) desactualiza la lista.
+  const observaciones = useEditarObservaciones({
+    alGuardar: () => {
+      informar('agenda.avisoObservaciones');
+      lista.recargar();
+    },
+    alError: (error) => {
+      if (error.status === 404) lista.recargar();
+    },
+  });
+
   const [reapertura, setReapertura] = useState({ reserva: null, estado: ESTADO_REAPERTURA_INICIAL, conflicto: null });
   const reabrir = useEnvio();
 
@@ -229,6 +241,7 @@ export default function useAgenda(complejoId, { habilitado = true } = {}) {
     },
     cancelacion,
     cobro,
+    observaciones,
     reapertura: {
       ...reapertura,
       error: reabrir.error,

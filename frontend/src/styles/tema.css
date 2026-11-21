@@ -753,6 +753,12 @@ a {
   border-color: var(--estado-neutro-borde);
 }
 
+/* Botón de solo ícono: respeta el área táctil mínima también en ancho */
+.boton-icono {
+  min-width: var(--toque-min);
+  padding-inline: 0.5rem;
+}
+
 /* Alias de transferencia: se lee y se copia, así que ancho parejo y corte en cualquier carácter si no entra */
 .alias-transferencia {
   font-variant-numeric: tabular-nums;

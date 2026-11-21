@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 const apiDjango = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() }));
 vi.mock('./api.js', () => ({ apiDjango }));
 
-const { confirmarSenaReserva, crearReserva, registrarPagoReserva } = await import('./reservaService.js');
+const { actualizarReservaAgenda, confirmarSenaReserva, crearReserva, registrarPagoReserva } = await import('./reservaService.js');
 
 beforeEach(() => {
   Object.values(apiDjango).forEach((funcion) => funcion.mockReset());
@@ -47,5 +47,14 @@ describe('alta de reserva', () => {
 
     await expect(crearReserva({ canchaId: 2, fechaTurno: '2026-11-17', horaInicio: '14:00:00' })).resolves.toEqual(reserva);
     expect(apiDjango.post).toHaveBeenCalledWith('/api/reservas/', { cancha: 2, fecha_turno: '2026-11-17', hora_inicio: '14:00' });
+  });
+});
+
+describe('observaciones de la agenda', () => {
+  test('edita solo las observaciones de la reserva', async () => {
+    apiDjango.patch.mockResolvedValue({ data: { id: 7, observaciones: 'Trae pelota' } });
+
+    await expect(actualizarReservaAgenda(7, { observaciones: 'Trae pelota' })).resolves.toEqual({ id: 7, observaciones: 'Trae pelota' });
+    expect(apiDjango.patch).toHaveBeenCalledWith('/api/agenda/7/', { observaciones: 'Trae pelota' });
   });
 });

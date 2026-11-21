@@ -3,10 +3,12 @@ import {
   aParametrosAgenda,
   cambiosAlAlternarRango,
   cuerpoReservaManual,
+  errorDeObservaciones,
   estadosDeReapertura,
   estadosSiguientes,
   fechaInicialDeAlta,
   filtrosAgendaIniciales,
+  observacionesModificadas,
   periodoActivo,
   puedeCancelarElComplejo,
   puedeReabrir,
@@ -323,5 +325,29 @@ describe('cuerpoReservaManual', () => {
       telefono_cliente_manual: '3777 001234',
       observaciones: 'Trae pelota',
     });
+  });
+});
+
+describe('observaciones de una reserva', () => {
+  test('un texto de hasta 255 caracteres es válido, también vacío', () => {
+    expect(errorDeObservaciones('')).toBeUndefined();
+    expect(errorDeObservaciones('x'.repeat(255))).toBeUndefined();
+    expect(errorDeObservaciones(null)).toBeUndefined();
+  });
+
+  test('más de 255 caracteres informa el máximo', () => {
+    expect(errorDeObservaciones('x'.repeat(256))).toBe('Las observaciones no pueden superar los 255 caracteres.');
+  });
+
+  test('los espacios de los extremos no cuentan para el largo', () => {
+    expect(errorDeObservaciones(`  ${'x'.repeat(255)}  `)).toBeUndefined();
+  });
+
+  test('detecta si el texto difiere del guardado sin contar espacios en los extremos', () => {
+    expect(observacionesModificadas({ observaciones: 'Trae pelota' }, 'Trae pelota ')).toBe(false);
+    expect(observacionesModificadas({ observaciones: 'Trae pelota' }, 'Trae red')).toBe(true);
+    expect(observacionesModificadas({ observaciones: '' }, '')).toBe(false);
+    expect(observacionesModificadas({}, 'Nueva nota')).toBe(true);
+    expect(observacionesModificadas({ observaciones: 'Nota' }, '')).toBe(true);
   });
 });

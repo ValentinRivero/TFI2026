@@ -41,6 +41,13 @@ const CLAVES_DE_SENAS_Y_PAGOS = [
   'configuracion.errorPorcentajeSena',
   'configuracion.errorAliasObligatorio',
   'configuracion.errorAlias',
+  'agenda.editarObservaciones',
+  'agenda.editarObservacionesDe',
+  'agenda.observacionesTitulo',
+  'agenda.observacionesTurno',
+  'agenda.observacionesContador',
+  'agenda.errorObservaciones',
+  'agenda.avisoObservaciones',
 ];
 
 describe('textos de señas y pagos', () => {
