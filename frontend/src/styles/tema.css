@@ -753,6 +753,14 @@ a {
   border-color: var(--estado-neutro-borde);
 }
 
+/* Alias de transferencia: se lee y se copia, así que ancho parejo y corte en cualquier carácter si no entra */
+.alias-transferencia {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
 /* Texto libre del complejo (por ejemplo, las condiciones de seña): respeta los saltos de línea */
 .texto-multilinea {
   white-space: pre-line;
