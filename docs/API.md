@@ -136,6 +136,7 @@ El listado y el detalle informan `porcentaje_sena` (entero de `0` a `100`; `0` s
 | `POST /api/reservas/` | Jugador | `cancha`, `fecha_turno` (`AAAA-MM-DD`) y `hora_inicio` (`HH:MM`) de un turno libre de la grilla |
 | `GET /api/reservas/mias/` | Jugador | Reservas propias; filtros `estado`, `vigencia` (`proximas` o `pasadas`), `fecha_desde` y `fecha_hasta`; `ordering` por `fecha_turno`, `hora_inicio` o `fecha_creacion` |
 | `POST /api/reservas/<id>/cancelar/` | Jugador | Cancela una reserva propia (`estado = 4`) |
+| `POST /api/reservas/<id>/informar-transferencia/` | Jugador | `{ "titular", "referencia" }`: avisa al complejo que transfirió la seña de una reserva propia, para que la concilie |
 
 ```json
 {
@@ -143,7 +144,9 @@ El listado y el detalle informan `porcentaje_sena` (entero de `0` a `100`; `0` s
   "deporte": "Fútbol 5", "fecha_turno": "2026-11-24", "hora_inicio": "20:00:00", "hora_fin": "21:00:00",
   "precio_acordado": "38000.00", "monto_sena": "11400.00", "monto_pagado": "0.00", "saldo_restante": "38000.00",
   "estado_pago": 2, "estado_pago_nombre": "Seña pendiente",
-  "datos_transferencia": { "alias": "YACARE.DEMO.SENA", "titular": "Yacaré Deportes S.R.L." },
+  "datos_transferencia": { "alias": "YACARE.DEMO.SENA", "titular": "Yacaré Deportes S.R.L.", "cbu": "0000000000000000123459" },
+  "transferencia_informada": true,
+  "transferencia": { "titular": "Marta López", "referencia": "OP-48213", "informada_en": "2026-11-16T10:30:00-03:00" },
   "tipo_ocupacion": 1, "tipo_ocupacion_nombre": "Reserva web del jugador",
   "estado": 1, "estado_nombre": "Pendiente Seña", "cancelable_hasta": "2026-11-24T16:00:00-03:00",
   "fecha_creacion": "2026-11-16T10:00:00-03:00"
@@ -160,7 +163,13 @@ El listado y el detalle informan `porcentaje_sena` (entero de `0` a `100`; `0` s
 - `estado`: `1` pendiente de seña, `2` confirmada, `3` señada o pagada, `4` cancelada por el jugador, `5` cancelada por el complejo, `6` ausente, `7` completada.
 - **Montos:** `precio_acordado` es el precio total. Al reservar, el servidor calcula y congela `monto_sena` (el `porcentaje_sena` del complejo aplicado al precio, redondeado al centavo con la mitad hacia arriba) y deja `monto_pagado` en `0.00`. Un cambio posterior del precio de la cancha o del porcentaje de seña no altera las reservas ya registradas. `saldo_restante` es `precio_acordado - monto_pagado`. Un complejo que no exige seña devuelve `monto_sena: "0.00"` y la reserva nace igual, pendiente (`estado = 1`).
 - **`estado_pago`:** se deduce de los montos. `1` sin seña, `2` seña pendiente, `3` seña abonada y `4` pagada.
-- **`datos_transferencia`:** `{ "alias", "titular" }` del complejo mientras la reserva está pendiente o confirmada y su seña sigue pendiente de pago; en cualquier otro caso es `null`. `titular` puede ser una cadena vacía.
+- **Aviso de transferencia:** `informar-transferencia/` (también para reenviar tras un rechazo) solo lo usa el titular de la reserva y solo mientras la seña está pendiente (reserva pendiente o confirmada, con seña acordada y sin abonar). Informar **no confirma ningún pago**: la seña la sigue confirmando el personal, con o sin aviso previo.
+  - `titular` (nombre de quien transfirió, que puede ser otra persona; 2 a 100 caracteres, con al menos dos letras) y `referencia` (número de operación o comprobante; 3 a 60 caracteres: letras, números y `.` `_` `/` `-`, sin espacios, empezando por una letra o un número). Ambos se limpian de HTML y se colapsan los espacios. No se piden DNI ni otros datos.
+  - Se puede reenviar para corregir mientras la seña siga pendiente. Repetir exactamente los mismos datos responde `200` sin cambios ni nuevo aviso. Responde la reserva actualizada.
+  - `400` si faltan datos o son inválidos (el detalle indica el campo), o si la reserva está cancelada, ausente, completada, ya señada o pagada, o no exige seña. `401` sin sesión, `403` para quien no es jugador y `404` si la reserva no es del usuario. Las altas y correcciones tienen un límite por cuenta y responden `429` al superarlo.
+  - Cada alta o corrección avisa al dueño y a los operadores activos del complejo y queda en el registro del complejo, con el turno y sin los datos informados.
+  - `transferencia_informada` indica si hay un aviso y `transferencia` trae `titular`, `referencia`, `informada_en` y `rechazo` (o `null`). Si el complejo rechazó el aviso, `transferencia_rechazada` es verdadero y `rechazo` trae el motivo y la nota para que el jugador la informe de nuevo. Solo los ven el jugador titular y el personal de ese complejo en la agenda; nunca aparecen en rutas públicas ni para otros jugadores o complejos. Se conservan a la vista del titular también con la seña ya confirmada.
+- **`datos_transferencia`:** `{ "alias", "titular" }` del complejo mientras la reserva está pendiente o confirmada y su seña sigue pendiente de pago; en cualquier otro caso es `null`. `titular` y `cbu` (CBU o CVU opcional del complejo, como otra forma de transferir) pueden ser cadenas vacías.
 
 ## Administración del complejo
 
@@ -168,13 +177,13 @@ El listado y el detalle informan `porcentaje_sena` (entero de `0` a `100`; `0` s
 |---|---|---|
 | `GET /api/complejos/administrados/` | Operador | Complejos que el usuario puede administrar |
 | `GET /api/complejos/<id>/acceso/` | Operador | Confirma que el usuario administra el complejo: `{ "complejo": id }`. Un complejo ajeno, inexistente o dado de baja responde `404` |
-| `PATCH /api/complejos/<id>/` | Dueño | `nombre`, `direccion`, `latitud`, `longitud`, `telefono_contacto`, `horas_limite_cancelacion`, `info_sena`, `porcentaje_sena`, `alias_transferencia`, `titular_transferencia` |
+| `PATCH /api/complejos/<id>/` | Dueño | `nombre`, `direccion`, `latitud`, `longitud`, `telefono_contacto`, `horas_limite_cancelacion`, `info_sena`, `porcentaje_sena`, `alias_transferencia`, `titular_transferencia`, `cbu_cvu_transferencia` |
 | `PUT /api/complejos/<id>/servicios/` | Dueño | `{ "servicios": [ids] }`: deja activos exactamente esos servicios |
 | `GET /api/complejos/<id>/operadores/` | Dueño | Operadores del complejo |
 | `POST /api/complejos/<id>/operadores/` | Dueño | `{ "email" }` de una cuenta de operador sin complejo asignado |
 | `DELETE /api/complejos/<id>/operadores/<usuario_id>/` | Dueño | Desvincula al operador (la cuenta sigue activa) |
 
-- **Seña por transferencia:** `porcentaje_sena` es un entero de `0` a `100` (`0` no exige seña). Con un porcentaje mayor a cero el complejo necesita `alias_transferencia`; si falta, `400` sobre ese campo, también al intentar vaciar el alias mientras se exige seña. El alias mide entre 6 y 20 caracteres, admite letras, números, puntos y guiones, sin espacios, y se guarda en mayúsculas. `titular_transferencia` es opcional (hasta 120 caracteres). Todos los textos se limpian de HTML. Las respuestas del complejo administrado incluyen los tres campos.
+- **Seña por transferencia:** `porcentaje_sena` es un entero de `0` a `100` (`0` no exige seña). Con un porcentaje mayor a cero el complejo necesita `alias_transferencia`; si falta, `400` sobre ese campo, también al intentar vaciar el alias mientras se exige seña. El alias mide entre 6 y 20 caracteres, admite letras, números, puntos y guiones, sin espacios, y se guarda en mayúsculas. `titular_transferencia` es opcional (hasta 120 caracteres). `cbu_cvu_transferencia` es opcional y no depende de la seña: son 22 dígitos (al enviarlo se ignoran espacios y guiones) y se controlan sus dos dígitos verificadores, para no aceptar un número mal tipeado; vacío lo borra. Todos los textos se limpian de HTML. Las respuestas del complejo administrado incluyen los tres campos.
 - Cambiar el porcentaje solo rige para las reservas nuevas. La auditoría registra los nombres de los campos modificados, nunca el alias.
 
 ### Canchas
@@ -253,6 +262,8 @@ Si el cambio deja reservas por jugar (pendientes, confirmadas o señadas) o turn
 | `POST /api/agenda/<id>/cancelar/` | Operador | Cancela la reserva (`estado = 5`) sin restricción horaria |
 | `POST /api/agenda/<id>/reabrir/` | Operador | `{ "estado", "confirmar" }`: reabre una reserva cancelada por error (`estado`: `1`, `2` o `3`) |
 | `POST /api/agenda/<id>/confirmar-sena/` | Operador | Registra que el complejo recibió la seña: `monto_pagado` pasa a `monto_sena` y la reserva a señada (`estado = 3`). Sin cuerpo |
+| `POST /api/agenda/<id>/rechazar-transferencia/` | Operador | `{ "motivo", "nota" }`: rechaza la transferencia que informó el jugador (`motivo` de la lista: `1` no llegó, `2` monto incorrecto, `3` datos incorrectos, `4` otro; `nota` opcional de hasta 120 caracteres) y le pide que la informe de nuevo |
+| `POST /api/agenda/<id>/anular-cobro/` | Dueño | Deja sin efecto lo cobrado (seña o pago total) de una reserva: `monto_pagado` vuelve a `0.00`. Sin cuerpo |
 | `POST /api/agenda/<id>/registrar-pago/` | Operador | Registra el cobro del total: `monto_pagado` pasa a `precio_acordado`. Sin cuerpo |
 
 - Cada reserva trae `cliente`: `{ "nombre", "telefono", "email" }`. Es la cuenta del jugador si reservó en la web; si se cargó a mano, `email` es `null`. Si el titular dio de baja su cuenta, figura el contacto conservado para resolver una seña, o "Titular dado de baja".
@@ -260,16 +271,21 @@ Si el cambio deja reservas por jugar (pendientes, confirmadas o señadas) o turn
 - El alta manual sigue las mismas reglas que la reserva web (turno de la grilla, futuro, dentro de la anticipación máxima y libre) y responde `409` ante un choque. Una cancha de otro complejo responde `403`.
 - `observaciones` (hasta 255 caracteres, texto plano: se limpia de HTML y se recortan los espacios de los extremos; vacío las borra) se edita con `PATCH` en cualquier estado de la reserva, también cancelada, ausente o completada, y no cambia su estado ni sus montos. Las ve solo el personal del complejo: no figuran en las reservas del jugador ni en la auditoría. Una reserva de otro complejo responde `404`.
 - En `PATCH`, `cancha`, `fecha_turno`, `hora_inicio`, `hora_fin` y `precio_acordado` no se editan: enviados con otro valor responden `400` con el motivo; con el mismo valor se aceptan. Para cambiar el turno se cancela la reserva y se registra otra.
-- `estado` en `PATCH` admite `2` confirmada, `3` señada, `6` ausente y `7` completada. Desde pendiente se pasa a cualquiera de ellas, desde confirmada a señada, ausente o completada, y desde señada a ausente o completada; ausente y completada se corrigen entre sí. Ausente y completada exigen que el turno haya empezado. Una reserva cancelada no cambia de estado por `PATCH`: se reabre con `reabrir/`.
+- `estado` en `PATCH` admite `1` pendiente, `2` confirmada, `3` señada, `6` ausente y `7` completada. Pendiente, confirmada y señada se mueven entre sí en cualquier sentido, para corregir un error de carga (mover el estado no modifica los montos: el pago se sigue con `monto_pagado`), y desde cualquiera de ellas se pasa a ausente o completada; ausente y completada se corrigen entre sí. Pedir el estado que la reserva ya tiene responde `200` sin cambios. Ausente y completada exigen que el turno haya empezado. Una reserva cancelada no cambia de estado por `PATCH`: se reabre con `reabrir/`.
 - `reabrir/` solo acepta reservas canceladas (`4` o `5`) de turnos que todavía no empezaron, y no las de una cuenta dada de baja.
   - **Validación:** vuelve a validar el turno como un alta. Si lo tomó otra reserva o un turno fijo, lo cerró una excepción, la cancha cambió de horario o dejó de estar disponible, responde `409` sin opción de confirmar.
   - **Confirmación:** si el turno está libre y no se envía `confirmar: true`, responde `409` con `requiere_confirmacion: true` y una `vista_previa` (`id`, `fecha_turno`, `hora_inicio`, `hora_fin`, `estado_actual`, `estado_nuevo`). Con `confirmar: true` la reserva vuelve a ocupar su turno.
 - Las reservas no se borran: se cancelan.
-- **Seña y pago:** cada reserva de la agenda trae `monto_sena`, `monto_pagado`, `saldo_restante`, `estado_pago` y `estado_pago_nombre` (mismos valores que en las reservas del jugador, sin `datos_transferencia`), y dos indicadores que dicen qué admite hoy el servidor: `puede_confirmar_sena` y `puede_registrar_pago`.
+- **Seña y pago:** cada reserva de la agenda trae `monto_sena`, `monto_pagado`, `saldo_restante`, `estado_pago` y `estado_pago_nombre` (mismos valores que en las reservas del jugador, sin `datos_transferencia`), y dos indicadores que dicen qué admite hoy el servidor: `puede_confirmar_sena` y `puede_registrar_pago`. Incluye también `transferencia_informada` y `transferencia`, para que el personal compare lo que informó el jugador con su cuenta antes de confirmar.
   - `confirmar-sena/` pide una reserva pendiente o confirmada con seña acordada y todavía sin abonar. `registrar-pago/` pide una reserva pendiente, confirmada, señada o completada con saldo; tras el cobro, una reserva pendiente o confirmada con seña acordada pasa a señada (`estado = 3`); sin seña, una pendiente pasa a confirmada (`estado = 2`) y una confirmada o completada conserva su estado, con `estado_pago = 4`. Ambas responden la reserva actualizada y avisan al titular y al resto del personal.
   - `400` si la reserva está cancelada o ausente, si ya está señada o saldada, o si no exige seña (`confirmar-sena/`). `403` sin permiso de gestión de la agenda y `404` si la reserva es de un complejo que el usuario no administra. Registrar el mismo cobro dos veces no suma: la segunda respuesta es `400`.
   - El estado señada (`3`) solo existe para una reserva con seña acordada (`monto_sena` mayor a cero): `PATCH` con `estado = 3` o `reabrir/` con `estado = 3` sobre una reserva sin seña responden `400`, y se la confirma (`2`) o se registra el pago total. Pasar una reserva con seña a señada con `PATCH` o al reabrirla deja abonada la seña, para que los montos sigan coherentes. Una reserva señada anterior a las señas, sin montos, sigue pudiendo pasar a ausente o completada.
-  - Cada cobro queda en la auditoría como "Cobro de reserva" (tipo de evento `18`), con ids, montos y estados, sin datos personales.
+  - Cada cobro, y cada anulación de un cobro, queda en la auditoría como "Cobro de reserva" (tipo de evento `18`), con ids, montos y estados, sin datos personales. Cada aviso, corrección, reenvío o rechazo de una transferencia queda como "Transferencia de seña" (tipo `19`), con ids y la acción realizada (y el motivo de la lista en un rechazo), sin el nombre, el número de operación ni la nota.
+- **Correcciones del personal:**
+  - `rechazar-transferencia/` pide una transferencia informada, con la seña todavía sin confirmar y sin rechazo previo. No cambia el estado ni los montos: el jugador la vuelve a informar (se puede reenviar los mismos datos) o el personal confirma la seña igual, y ambas cosas limpian el rechazo. `400` si no hay transferencia informada, ya está rechazada, la seña ya se confirmó o la reserva está cerrada. El jugador recibe un aviso urgente con el motivo de la lista (la nota solo la ve en su reserva) y el resto del personal se entera.
+  - `anular-cobro/` es del dueño del complejo y del superadmin: el operador los registra pero no los anula (`403`). Pide un cobro registrado (`400` si `monto_pagado` es cero) y sirve en cualquier estado de la reserva: una señada vuelve a pendiente (a confirmada si no exige seña) y las demás conservan su estado. Avisa al jugador (urgente) y al resto del personal. `puede_anular_cobro` indica si hay algo cobrado.
+  - Además de `transferencia_informada` y `transferencia`, la agenda trae `transferencia_rechazada` y, dentro de `transferencia`, `rechazo` (`motivo`, `motivo_nombre`, `nota` y `rechazada_en`, o `null`).
+  - Todo se puede revertir: el cobro anulado se vuelve a registrar con `confirmar-sena/` o `registrar-pago/`, el rechazo se limpia al reenviar o al confirmar, el estado se mueve con `PATCH` y una cancelación se reabre con `reabrir/`. Ninguna corrección borra información: las reservas, los montos anteriores y los avisos quedan en la auditoría y en el registro del complejo.
 
 ### Turnos fijos
 
@@ -384,7 +400,7 @@ query {
 }
 ```
 
-- Cada reserva expone los campos de REST en camelCase: `id`, `complejo`, `cancha`, `deporte`, `fechaTurno`, `horaInicio`, `horaFin`, `precioAcordado`, `montoSena`, `montoPagado`, `saldoRestante`, `estadoPago`, `estadoPagoNombre`, `datosTransferencia` (`alias` y `titular`, o `null`), `tipoOcupacion`, `tipoOcupacionNombre`, `estado`, `estadoNombre`, `cancelableHasta` y `fechaCreacion`. Fechas y horas llegan como texto con el mismo formato que REST.
+- Cada reserva expone los campos de REST en camelCase: `id`, `complejo`, `cancha`, `deporte`, `fechaTurno`, `horaInicio`, `horaFin`, `precioAcordado`, `montoSena`, `montoPagado`, `saldoRestante`, `estadoPago`, `estadoPagoNombre`, `datosTransferencia` (`alias`, `titular` y `cbu`, o `null`), `transferenciaInformada`, `transferenciaRechazada` y `transferencia` (`titular`, `referencia`, `informadaEn` y `rechazo`, o `null`), `tipoOcupacion`, `tipoOcupacionNombre`, `estado`, `estadoNombre`, `cancelableHasta` y `fechaCreacion`. Fechas y horas llegan como texto con el mismo formato que REST.
 - Sin token, o con un token inválido o vencido, el campo responde `null` con un error `401` y el mismo mensaje que REST; los campos públicos de la misma consulta se resuelven igual. Dueños y operadores reciben `403`.
 
 ### `crearReserva` (mutation)
