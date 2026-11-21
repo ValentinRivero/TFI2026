@@ -5,10 +5,11 @@ import { t } from '../i18n/index.js';
 import Alerta from './Alerta.jsx';
 import BotonAccion from './BotonAccion.jsx';
 import CamposComplejo from './CamposComplejo.jsx';
+import CamposSena from './CamposSena.jsx';
 
 /**
- * Perfil comercial del complejo (presentación): dirección, coordenadas, teléfono, límite de cancelación e
- * información de la seña. Con `soloLectura` los campos se muestran atenuados y deshabilitados (sin foco ni selección) y no hay botones.
+ * Perfil comercial del complejo (presentación): dirección, coordenadas, teléfono, límite de cancelación,
+ * información de la seña y, en su propia sección, porcentaje de seña y datos de transferencia. Con `soloLectura` los campos se muestran atenuados y deshabilitados (sin foco ni selección) y no hay botones.
  * El estado lo maneja `useConfiguracionComplejo`; `errores` es un texto por campo y `error`, el `ErrorApi` del envío.
  */
 export default function FormularioComplejo({
@@ -39,6 +40,7 @@ export default function FormularioComplejo({
         {error && <Alerta variante="danger">{error.mensaje}</Alerta>}
         {guardado && <Alerta variante="success">{t('configuracion.guardado')}</Alerta>}
         <CamposComplejo campo={campo} />
+        <CamposSena campo={campo} />
         </fieldset>
         {!soloLectura && (
           <div className="d-flex flex-wrap gap-2 mt-4">

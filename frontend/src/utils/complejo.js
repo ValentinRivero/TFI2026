@@ -1,5 +1,6 @@
 import { PARAMETROS } from '../config/parametros.js';
 import { t } from '../i18n/index.js';
+import { normalizarAlias, validarSena } from './pagos.js';
 
 const { horasCancelacionMaximas, latitudMaxima, longitudMaxima, coordenadasDecimales } = PARAMETROS.panel;
 
@@ -22,9 +23,13 @@ export const valoresDeComplejo = (complejo) => ({
   telefono_contacto: aTexto(complejo.telefono_contacto),
   horas_limite_cancelacion: aTexto(complejo.horas_limite_cancelacion),
   info_sena: aTexto(complejo.info_sena),
+  porcentaje_sena: aTexto(complejo.porcentaje_sena ?? 0),
+  alias_transferencia: aTexto(complejo.alias_transferencia),
+  titular_transferencia: aTexto(complejo.titular_transferencia),
 });
 
-const NUMERICOS = ['latitud', 'longitud', 'horas_limite_cancelacion'];
+const NUMERICOS = ['latitud', 'longitud', 'horas_limite_cancelacion', 'porcentaje_sena'];
+const ENTEROS = ['horas_limite_cancelacion', 'porcentaje_sena'];
 
 const cambio = (campo, valor, original) => (
   NUMERICOS.includes(campo)
@@ -40,7 +45,8 @@ export const cuerpoConfiguracion = (valores, complejo) => {
   const cuerpo = {};
   Object.entries(valores).forEach(([campo, valor]) => {
     if (!cambio(campo, valor, complejo[campo])) return;
-    if (campo === 'horas_limite_cancelacion') cuerpo[campo] = Number(valor);
+    if (ENTEROS.includes(campo)) cuerpo[campo] = Number(valor);
+    else if (campo === 'alias_transferencia') cuerpo[campo] = normalizarAlias(valor);
     else cuerpo[campo] = valor.trim();
   });
   return cuerpo;
@@ -72,6 +78,12 @@ export const validarConfiguracion = (valores) => {
   }
   return errores;
 };
+
+/**
+ * Validación de la configuración del complejo: la de los datos comerciales más la de la seña y la transferencia.
+ * El alta de un complejo nuevo (superadmin) no lleva seña y usa solo `validarConfiguracion`.
+ */
+export const validarConfiguracionConSena = (valores) => ({ ...validarConfiguracion(valores), ...validarSena(valores) });
 
 /** Ids de servicios del borrador frente a los guardados: `true` si difieren (sin importar el orden). */
 export const serviciosModificados = (guardados, elegidos) => (

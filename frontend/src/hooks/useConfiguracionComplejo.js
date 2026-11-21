@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { actualizarConfiguracion } from '../services/complejoAdminService.js';
-import { cuerpoConfiguracion, validarConfiguracion, valoresDeComplejo } from '../utils/complejo.js';
+import { cuerpoConfiguracion, validarConfiguracionConSena, valoresDeComplejo } from '../utils/complejo.js';
 import useEnvio from './useEnvio.js';
 
 /**
@@ -21,7 +21,7 @@ export default function useConfiguracionComplejo(complejo, { alGuardar }) {
   }
 
   const cuerpo = cuerpoConfiguracion(valores, complejo);
-  const erroresLocales = validarConfiguracion(valores);
+  const erroresLocales = validarConfiguracionConSena(valores);
   const errores = { ...(intentado ? erroresLocales : {}), ...(envio.error?.campos ?? {}) };
 
   const cambiar = (campo, valor) => {
