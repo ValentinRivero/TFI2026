@@ -58,6 +58,7 @@ PERMISOS = {
     'ver_agenda': ('Ver la agenda de reservas del complejo', 'agenda'),
     'gestionar_agenda': ('Registrar reservas manuales y cambiar su estado', 'agenda'),
     'cancelar_reserva_complejo': ('Cancelar reservas del complejo sin restricción horaria', 'agenda'),
+    'anular_cobro': ('Anular el cobro registrado de una reserva (seña o pago total)', 'agenda'),
     'gestionar_turnos_fijos': ('Registrar, pausar y dar de baja turnos fijos', 'agenda'),
     'ver_excepciones': ('Ver las excepciones horarias del complejo', 'excepciones'),
     'gestionar_excepciones': ('Registrar y anular excepciones horarias', 'excepciones'),
@@ -99,7 +100,9 @@ PERMISOS_OPERADOR = PERMISOS_PERFIL + [
 ]
 
 # configurar_complejo edita parámetros comerciales (info_sena, horas_limite_cancelacion): no es del operador.
+# anular_cobro deshace un movimiento de dinero: lo tiene el dueño y no el operador, que sí los registra.
 PERMISOS_DUENO = PERMISOS_OPERADOR + [
+    'anular_cobro',
     'configurar_complejo',
     'administrar_canchas',
     'administrar_horarios',
@@ -165,6 +168,8 @@ COMPLEJOS = [
         'porcentaje_sena': 30,
         'alias_transferencia': 'YACARE.DEMO.SENA',
         'titular_transferencia': 'Yacaré Deportes S.R.L.',
+        # Banco 000 inexistente, con dígitos verificadores válidos: no corresponde a ninguna cuenta real.
+        'cbu_cvu_transferencia': '0000000000000000123459',
         'estado_contrato': EstadoContrato.ACTIVO,
         'servicios': ['Estacionamiento', 'Vestuarios', 'Duchas', 'Buffet', 'Parrilleros'],
         'canchas': [
@@ -194,6 +199,7 @@ COMPLEJOS = [
         'porcentaje_sena': 50,
         'alias_transferencia': 'PADEL.NANDUBAY.DEMO',
         'titular_transferencia': 'Ñandubay Pádel',
+        'cbu_cvu_transferencia': '',
         'estado_contrato': EstadoContrato.ACTIVO,
         'servicios': ['Estacionamiento', 'Vestuarios', 'Buffet', 'Wi-Fi', 'Alquiler de equipamiento'],
         'canchas': [
@@ -217,6 +223,7 @@ COMPLEJOS = [
         'porcentaje_sena': 0,
         'alias_transferencia': '',
         'titular_transferencia': '',
+        'cbu_cvu_transferencia': '',
         'estado_contrato': EstadoContrato.ACTIVO,
         'servicios': ['Vestuarios', 'Duchas', 'Accesibilidad', 'Wi-Fi'],
         'canchas': [
@@ -242,6 +249,7 @@ COMPLEJOS = [
         'porcentaje_sena': 0,
         'alias_transferencia': '',
         'titular_transferencia': '',
+        'cbu_cvu_transferencia': '',
         'estado_contrato': EstadoContrato.PENDIENTE,
         'servicios': ['Estacionamiento', 'Vestuarios'],
         'canchas': [
@@ -466,7 +474,7 @@ class Command(BaseCommand):
         campos_complejo = (
             'direccion', 'latitud', 'longitud', 'telefono_contacto',
             'horas_limite_cancelacion', 'info_sena', 'porcentaje_sena', 'alias_transferencia',
-            'titular_transferencia', 'estado_contrato',
+            'titular_transferencia', 'cbu_cvu_transferencia', 'estado_contrato',
         )
 
         for datos in COMPLEJOS:
@@ -482,11 +490,10 @@ class Command(BaseCommand):
                 complejos_nuevos.add(complejo.nombre)
             elif datos['porcentaje_sena'] and not complejo.porcentaje_sena and not complejo.alias_transferencia:
                 # Complejo de una carga anterior a las señas por transferencia: solo se completa si nadie lo configuró.
-                for campo in ('porcentaje_sena', 'alias_transferencia', 'titular_transferencia'):
+                campos = ('porcentaje_sena', 'alias_transferencia', 'titular_transferencia', 'cbu_cvu_transferencia')
+                for campo in campos:
                     setattr(complejo, campo, datos[campo])
-                complejo.save(update_fields=[
-                    'porcentaje_sena', 'alias_transferencia', 'titular_transferencia', 'fecha_modificacion',
-                ])
+                complejo.save(update_fields=[*campos, 'fecha_modificacion'])
 
             for nombre_servicio in datos['servicios']:
                 ComplejoServicio.objects.get_or_create(complejo=complejo, servicio=servicios[nombre_servicio])

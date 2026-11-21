@@ -43,6 +43,7 @@ REST_FRAMEWORK = {
         **REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'],  # noqa: F405
         'login': '5/minute',
         'reservas': '20/hour',
+        'transferencias': '10/hour',
         'grilla': '300/minute',
     },
 }

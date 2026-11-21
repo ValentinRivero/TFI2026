@@ -72,6 +72,21 @@ class PaginaCatalogoType(graphene.ObjectType):
 class DatosTransferenciaType(graphene.ObjectType):
     alias = graphene.String(required=True)
     titular = graphene.String(required=True)
+    cbu = graphene.String(required=True, description='CBU o CVU opcional; vacío si el complejo no lo informó')
+
+
+class RechazoTransferenciaType(graphene.ObjectType):
+    motivo = graphene.Int(required=True)
+    motivo_nombre = graphene.String(required=True)
+    nota = graphene.String(required=True)
+    rechazada_en = graphene.String(required=True, description='Fecha y hora ISO 8601 con zona horaria')
+
+
+class TransferenciaInformadaType(graphene.ObjectType):
+    titular = graphene.String(required=True)
+    referencia = graphene.String(required=True)
+    informada_en = graphene.String(required=True, description='Fecha y hora ISO 8601 con zona horaria')
+    rechazo = graphene.Field(RechazoTransferenciaType, description='Si el complejo la rechazó y pidió informarla de nuevo')
 
 
 class ReservaPropiaType(graphene.ObjectType):
@@ -88,6 +103,11 @@ class ReservaPropiaType(graphene.ObjectType):
     saldo_restante = graphene.Decimal(required=True)
     estado_pago = graphene.Int(required=True)
     estado_pago_nombre = graphene.String(required=True)
+    transferencia_informada = graphene.Boolean(required=True)
+    transferencia_rechazada = graphene.Boolean(required=True)
+    transferencia = graphene.Field(
+        TransferenciaInformadaType, description='Lo que el propio titular informó al transferir la seña',
+    )
     datos_transferencia = graphene.Field(
         DatosTransferenciaType, description='Solo mientras la seña está pendiente de pago',
     )

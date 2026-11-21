@@ -14,7 +14,7 @@ from core.models import (
     Reserva,
     TipoEventoAuditoria,
 )
-from core.serializers import validar_alias
+from core.serializers import validar_alias, validar_cbu
 from core.services import calcular_monto_sena
 from core.tests.test_avisos_reservas import avisos  # noqa: F401
 
@@ -109,6 +109,96 @@ class TestValidacionDelAlias:
 
         with pytest.raises(serializers.ValidationError):
             validar_alias(valor)
+
+
+# Banco 000 inexistente, con los dos dígitos verificadores correctos: no corresponde a ninguna cuenta real.
+CBU = '0000000000000000123459'
+CBU_CON_SEPARADORES = '0000 0000-0000 0000-1234 59'
+
+
+class TestValidacionDelCbu:
+    @pytest.mark.parametrize('valor,esperado', [
+        (CBU, CBU),
+        (CBU_CON_SEPARADORES, CBU),
+        ('  0000000000000000123459  ', CBU),
+        ('2850590940090418135201', '2850590940090418135201'),
+        ('0170099220000067797370', '0170099220000067797370'),
+        ('', ''),
+        ('  ', ''),
+    ])
+    def test_normaliza_y_acepta_un_cbu_valido(self, valor, esperado):
+        assert validar_cbu(valor) == esperado
+
+    @pytest.mark.parametrize('valor', [
+        '123', '0000000000000000123459 1', '000000000000000012345', '00000000000000001234AB', 'ABCDEFGHIJKLMNOPQRSTUV',
+        '2850590940090418135202', '2850590940090418135211', '2851590940090418135201', '0000000000000000123450',
+    ])
+    def test_rechaza_largo_caracteres_o_digitos_verificadores_incorrectos(self, valor):
+        from rest_framework import serializers
+
+        with pytest.raises(serializers.ValidationError):
+            validar_cbu(valor)
+
+
+class TestCbuDelComplejo:
+    def _patch(self, cliente, complejo, datos):
+        return cliente.patch(_complejo_url(complejo), datos, format='json')
+
+    def test_es_opcional_y_se_guarda_sin_separadores(self, dueno, con_sena, cliente_de):
+        respuesta = self._patch(cliente_de(dueno), con_sena, {'cbu_cvu_transferencia': CBU_CON_SEPARADORES})
+
+        assert respuesta.status_code == status.HTTP_200_OK, respuesta.json()
+        assert respuesta.json()['cbu_cvu_transferencia'] == CBU
+        con_sena.refresh_from_db()
+        assert con_sena.cbu_cvu_transferencia == CBU
+
+    def test_se_puede_borrar(self, dueno, con_sena, cliente_de):
+        api = cliente_de(dueno)
+        self._patch(api, con_sena, {'cbu_cvu_transferencia': CBU})
+
+        respuesta = self._patch(api, con_sena, {'cbu_cvu_transferencia': ''})
+
+        assert respuesta.status_code == status.HTTP_200_OK
+        assert respuesta.json()['cbu_cvu_transferencia'] == ''
+
+    @pytest.mark.parametrize('valor', ['1234', '2850590940090418135202', 'abcdefghijklmnopqrstuv', 'x' * 40])
+    def test_un_cbu_invalido_responde_400_y_no_cambia_nada(self, dueno, con_sena, cliente_de, valor):
+        respuesta = self._patch(cliente_de(dueno), con_sena, {'cbu_cvu_transferencia': valor})
+
+        assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'cbu_cvu_transferencia' in respuesta.json()['detail']
+        con_sena.refresh_from_db()
+        assert con_sena.cbu_cvu_transferencia == ''
+
+    def test_no_exige_seña_ni_alias_para_cargarse(self, dueno, complejo, cliente_de):
+        respuesta = self._patch(cliente_de(dueno), complejo, {'cbu_cvu_transferencia': CBU})
+
+        assert respuesta.status_code == status.HTTP_200_OK
+
+    def test_el_operador_no_lo_configura(self, operador, complejo, cliente_de):
+        assert self._patch(cliente_de(operador), complejo, {'cbu_cvu_transferencia': CBU}).status_code == 403
+
+    def test_la_auditoria_registra_el_campo_pero_no_el_valor(self, dueno, complejo, cliente_de):
+        self._patch(cliente_de(dueno), complejo, {'cbu_cvu_transferencia': CBU})
+
+        log = LogAuditoria.objects.get(tipo_evento=TipoEventoAuditoria.CAMBIO_CONFIGURACION)
+        assert log.detalle == 'Campos modificados: cbu_cvu_transferencia.'
+        assert CBU not in log.detalle
+
+    def test_no_es_publico_y_llega_al_jugador_solo_con_la_sena_pendiente(
+        self, reservar, con_sena, cancha, dueno, jugador, cliente, cliente_de,
+    ):
+        self._patch(cliente_de(dueno), con_sena, {'cbu_cvu_transferencia': CBU})
+
+        publico = str(cliente.get(_complejo_url(con_sena)).json()) + str(cliente.get('/api/complejos/').json())
+        reserva_id = reservar(cancha).json()['id']
+        pendiente = cliente_de(jugador).get(URL_MIAS).json()['results'][0]['datos_transferencia']
+        cliente_de(dueno).post(f'{URL_AGENDA}{reserva_id}/confirmar-sena/')
+        abonada = cliente_de(jugador).get(URL_MIAS).json()['results'][0]['datos_transferencia']
+
+        assert CBU not in publico
+        assert pendiente['cbu'] == CBU
+        assert abonada is None
 
 
 class TestConfiguracionDeSena:
@@ -225,7 +315,7 @@ class TestCongelamientoDeMontosAlReservar:
     def test_el_jugador_recibe_los_datos_de_transferencia_si_hay_sena_pendiente(self, reservar, con_sena, cancha):
         cuerpo = reservar(cancha).json()
 
-        assert cuerpo['datos_transferencia'] == {'alias': ALIAS, 'titular': 'Titular de Prueba'}
+        assert cuerpo['datos_transferencia'] == {'alias': ALIAS, 'titular': 'Titular de Prueba', 'cbu': ''}
 
     def test_sin_sena_mantiene_el_comportamiento_actual(self, reservar, complejo, cancha):
         cuerpo = reservar(cancha).json()
@@ -616,3 +706,47 @@ class TestEstadoDePago:
 
         assert reserva.estado_pago == esperado
         assert reserva.saldo_restante == Decimal(precio) - Decimal(pagado)
+
+
+class TestMoverElEstadoDeUnTurnoFuturo:
+    @pytest.mark.parametrize('anterior, nuevo', [
+        (EstadoReserva.SENADA, EstadoReserva.CONFIRMADA),
+        (EstadoReserva.SENADA, EstadoReserva.PENDIENTE),
+        (EstadoReserva.CONFIRMADA, EstadoReserva.PENDIENTE),
+        (EstadoReserva.PENDIENTE, EstadoReserva.CONFIRMADA),
+        (EstadoReserva.CONFIRMADA, EstadoReserva.SENADA),
+    ])
+    def test_los_estados_previos_al_turno_se_mueven_en_cualquier_sentido(
+        self, reloj, dueno, reserva_con_sena, cliente_de, anterior, nuevo,
+    ):
+        reserva_con_sena.estado = anterior
+        reserva_con_sena.save()
+
+        respuesta = cliente_de(dueno).patch(f'{URL_AGENDA}{reserva_con_sena.id}/', {'estado': nuevo}, format='json')
+
+        assert respuesta.status_code == status.HTTP_200_OK, respuesta.json()
+        assert respuesta.json()['estado'] == nuevo
+
+    def test_dejar_de_estar_senada_no_toca_los_montos(self, reloj, dueno, reserva_con_sena, cliente_de):
+        api = cliente_de(dueno)
+        api.post(_accion(reserva_con_sena, 'confirmar-sena'))
+
+        respuesta = api.patch(f'{URL_AGENDA}{reserva_con_sena.id}/', {'estado': EstadoReserva.CONFIRMADA}, format='json')
+
+        assert respuesta.json()['estado'] == EstadoReserva.CONFIRMADA
+        assert respuesta.json()['monto_pagado'] == '11400.00'
+        assert respuesta.json()['estado_pago'] == EstadoPago.SENA_ABONADA
+
+    def test_volver_a_senada_sin_seña_acordada_sigue_rechazado(self, reloj, dueno, cancha, crear_reserva, cliente_de):
+        reserva = crear_reserva(cancha, MARTES, time(14, 0), time(15, 0), estado=EstadoReserva.CONFIRMADA)
+
+        respuesta = cliente_de(dueno).patch(f'{URL_AGENDA}{reserva.id}/', {'estado': EstadoReserva.SENADA}, format='json')
+
+        assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_ausente_y_completada_siguen_exigiendo_el_turno_iniciado(self, reloj, dueno, reserva_con_sena, cliente_de):
+        respuesta = cliente_de(dueno).patch(
+            f'{URL_AGENDA}{reserva_con_sena.id}/', {'estado': EstadoReserva.COMPLETADA}, format='json',
+        )
+
+        assert respuesta.status_code == status.HTTP_400_BAD_REQUEST

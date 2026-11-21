@@ -19,7 +19,7 @@ RUTA_SETTINGS = pathlib.Path(__file__).resolve().parents[2] / 'config' / 'settin
 VARIABLES_DE_ENTORNO = (
     'DJANGO_SECRET_KEY', 'DJANGO_DEBUG', 'DJANGO_ALLOWED_HOSTS', 'DATABASE_URL', 'DB_CONN_MAX_AGE',
     'THROTTLE_ANON', 'THROTTLE_USER', 'THROTTLE_LOGIN', 'THROTTLE_REGISTRO', 'THROTTLE_RESERVAS',
-    'THROTTLE_GRILLA', 'THROTTLE_GRAPHQL', 'NUM_PROXIES', 'JWT_ACCESS_MINUTOS', 'JWT_REFRESH_DIAS',
+    'THROTTLE_TRANSFERENCIAS', 'THROTTLE_GRILLA', 'THROTTLE_GRAPHQL', 'NUM_PROXIES', 'JWT_ACCESS_MINUTOS', 'JWT_REFRESH_DIAS',
     'JWT_SIGNING_KEY', 'CORS_ALLOWED_ORIGINS', 'CSRF_TRUSTED_ORIGINS', 'NODE_API_URL', 'INTERNAL_API_KEY',
     'REDIS_URL', 'DJANGO_LOG_LEVEL', 'RESERVA_MESES_ANTICIPACION', 'RANGO_MAXIMO_DIAS', 'GRILLA_CACHE_SEGUNDOS',
     'NODE_TIMEOUT_SEGUNDOS', 'CONTACTOS_BAJA_DIAS', 'AUDITORIA_RETENCION_MESES', 'CATALOGO_MARCADORES_MAXIMO',
@@ -73,6 +73,7 @@ TASAS_POR_DEFECTO = {
     'login': '5/minute',
     'registro': '10/hour',
     'reservas': '20/hour',
+    'transferencias': '10/hour',
     'grilla': '300/minute',
     'graphql': '120/minute',
 }
@@ -135,6 +136,7 @@ class TestLecturaDelEntorno:
         ('THROTTLE_LOGIN', 'login'),
         ('THROTTLE_REGISTRO', 'registro'),
         ('THROTTLE_RESERVAS', 'reservas'),
+        ('THROTTLE_TRANSFERENCIAS', 'transferencias'),
         ('THROTTLE_GRILLA', 'grilla'),
         ('THROTTLE_GRAPHQL', 'graphql'),
     ])
@@ -204,7 +206,7 @@ class TestValoresInvalidos:
 
     @pytest.mark.parametrize('variable', [
         'THROTTLE_ANON', 'THROTTLE_USER', 'THROTTLE_LOGIN', 'THROTTLE_REGISTRO',
-        'THROTTLE_RESERVAS', 'THROTTLE_GRILLA', 'THROTTLE_GRAPHQL',
+        'THROTTLE_RESERVAS', 'THROTTLE_TRANSFERENCIAS', 'THROTTLE_GRILLA', 'THROTTLE_GRAPHQL',
     ])
     @pytest.mark.parametrize('valor', ['cinco/minute', '0/minute', '5', '5/', '5/minuto/dia', '-3/hour', '5/Minute'])
     def test_una_tasa_con_formato_invalido_corta_el_arranque(self, cargar_settings, variable, valor):

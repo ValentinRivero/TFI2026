@@ -202,6 +202,7 @@ REST_FRAMEWORK = {
         'login': _env_tasa('THROTTLE_LOGIN', '5/minute'),
         'registro': _env_tasa('THROTTLE_REGISTRO', '10/hour'),
         'reservas': _env_tasa('THROTTLE_RESERVAS', '20/hour'),
+        'transferencias': _env_tasa('THROTTLE_TRANSFERENCIAS', '10/hour'),
         'grilla': _env_tasa('THROTTLE_GRILLA', '300/minute'),
         'graphql': _env_tasa('THROTTLE_GRAPHQL', '120/minute'),
     },

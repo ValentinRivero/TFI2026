@@ -28,6 +28,13 @@ PORCENTAJE_SENA_MAXIMO = 100
 LARGO_ALIAS_MINIMO = 6  # alias bancario o de billetera virtual: entre 6 y 20 caracteres
 LARGO_ALIAS_MAXIMO = 20
 LARGO_TITULAR_TRANSFERENCIA = LARGO_NOMBRE
+LARGO_CBU = 22  # CBU o CVU: 22 dígitos, con dos dígitos verificadores
+# Transferencia que el jugador informa al complejo para que concilie la seña: quién transfirió y el número de operación.
+LARGO_MINIMO_PAGADOR = 2  # solo se aplica en la API
+LARGO_PAGADOR_TRANSFERENCIA = 100
+LARGO_MINIMO_REFERENCIA = 3  # solo se aplica en la API
+LARGO_REFERENCIA_TRANSFERENCIA = 60
+LARGO_NOTA_RECHAZO = 120  # nota opcional del personal al rechazar una transferencia informada
 
 
 class EstadoRegistro(models.IntegerChoices):
@@ -148,6 +155,15 @@ class EstadoPago(models.IntegerChoices):
     PAGADA = 4, 'Pagada'
 
 
+class MotivoRechazoTransferencia(models.IntegerChoices):
+    """Por qué el complejo rechaza la transferencia que informó el jugador; no admite datos personales."""
+
+    NO_LLEGO = 1, 'No encontramos la transferencia en nuestra cuenta'
+    MONTO_INCORRECTO = 2, 'El monto transferido no coincide con la seña'
+    DATOS_INCORRECTOS = 3, 'Los datos informados no coinciden con la transferencia'
+    OTRO = 4, 'Otro motivo'
+
+
 class TipoOcupacion(models.IntegerChoices):
     WEB = 1, 'Reserva web del jugador'
     MANUAL = 2, 'Reserva manual (telefónica o presencial)'
@@ -173,6 +189,7 @@ class TipoEventoAuditoria(models.IntegerChoices):
     CAMBIO_USUARIO = 16, 'Cambio administrativo de usuario'
     CAMBIO_CATALOGO = 17, 'Cambio de catálogo del sistema'
     RESERVA_PAGO = 18, 'Cobro de reserva'
+    TRANSFERENCIA_INFORMADA = 19, 'Transferencia de seña'  # informada, corregida o rechazada
 
 
 class Rol(ModeloBase):
@@ -338,6 +355,8 @@ class Complejo(ModeloBase):
     porcentaje_sena = models.SmallIntegerField(default=0)
     alias_transferencia = models.CharField(max_length=LARGO_ALIAS_MAXIMO, blank=True)
     titular_transferencia = models.CharField(max_length=LARGO_TITULAR_TRANSFERENCIA, blank=True)
+    # Otra forma de transferir la seña, opcional: se guarda solo con dígitos y el dígito verificador ya validado.
+    cbu_cvu_transferencia = models.CharField(max_length=LARGO_CBU, blank=True)
     estado_contrato = models.SmallIntegerField(
         choices=EstadoContrato.choices,
         default=EstadoContrato.PENDIENTE,
@@ -628,6 +647,18 @@ class Reserva(ModeloBase):
     precio_acordado = models.DecimalField(max_digits=10, decimal_places=2)
     monto_sena = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     monto_pagado = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # Aviso del jugador de que transfirió la seña (PROJECT.md §13.1). Solo sirve para que el complejo concilie: no
+    # confirma ningún pago, que sigue dependiendo del personal.
+    transferencia_titular = models.CharField(max_length=LARGO_PAGADOR_TRANSFERENCIA, blank=True)
+    transferencia_referencia = models.CharField(max_length=LARGO_REFERENCIA_TRANSFERENCIA, blank=True)
+    transferencia_informada_en = models.DateTimeField(null=True, blank=True)
+    # El complejo la rechaza (no llegó o no coincide) y le pide al jugador que la informe de nuevo. Se limpia al
+    # volver a informar o al confirmar la seña: la transferencia informada queda como dato y no se pierde.
+    transferencia_rechazada_en = models.DateTimeField(null=True, blank=True)
+    transferencia_motivo_rechazo = models.SmallIntegerField(
+        choices=MotivoRechazoTransferencia.choices, null=True, blank=True,
+    )
+    transferencia_nota_rechazo = models.CharField(max_length=LARGO_NOTA_RECHAZO, blank=True)
     tipo_ocupacion = models.SmallIntegerField(choices=TipoOcupacion.choices, default=TipoOcupacion.WEB)
     observaciones = models.CharField(max_length=LARGO_TEXTO_LIBRE, blank=True)
 
@@ -675,6 +706,14 @@ class Reserva(ModeloBase):
 
     def __str__(self):
         return f'{self.cancha} {self.fecha_turno} {self.hora_inicio}-{self.hora_fin} [{self.get_estado_display()}]'
+
+    @property
+    def transferencia_informada(self):
+        return self.transferencia_informada_en is not None
+
+    @property
+    def transferencia_rechazada(self):
+        return self.transferencia_rechazada_en is not None
 
     @property
     def saldo_restante(self):

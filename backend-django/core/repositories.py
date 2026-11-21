@@ -908,13 +908,14 @@ class ReservaRepository:
     @staticmethod
     def limpiar_contactos_de_bajas_hasta(fecha_limite):
         """
-        Borra el nombre y el teléfono copiados de un titular dado de baja en reservas cuyo turno fue hace más de
-        30 días (PROJECT.md §13.2). Es un UPDATE: la fila de la reserva se conserva.
+        Borra el nombre y el teléfono copiados de un titular dado de baja, y el nombre de quien transfirió la seña, en
+        reservas cuyo turno fue hace más de 30 días (PROJECT.md §13.2). Es un UPDATE: la fila de la reserva se conserva.
         """
         return Reserva.objects.filter(
             usuario__estado=EstadoUsuario.BAJA, fecha_turno__lt=fecha_limite,
-        ).exclude(nombre_cliente_manual='', telefono_cliente_manual='').update(
-            nombre_cliente_manual='', telefono_cliente_manual='', fecha_modificacion=timezone.now(),
+        ).exclude(nombre_cliente_manual='', telefono_cliente_manual='', transferencia_titular='').update(
+            nombre_cliente_manual='', telefono_cliente_manual='', transferencia_titular='',
+            fecha_modificacion=timezone.now(),
         )
 
     @staticmethod

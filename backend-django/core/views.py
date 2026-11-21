@@ -50,6 +50,7 @@ from .serializers import (
     OperadorSerializer,
     PermisoAdminSerializer,
     ReaperturaSerializer,
+    RechazoTransferenciaSerializer,
     ReservaAgendaEdicionSerializer,
     ReservaAgendaSerializer,
     ReservaAltaSerializer,
@@ -61,6 +62,7 @@ from .serializers import (
     ServicioAltaSerializer,
     ServicioEdicionSerializer,
     ServiciosComplejoSerializer,
+    TransferenciaInformadaSerializer,
     TurnoFijoSerializer,
     UsoDeporteSerializer,
     UsoRolSerializer,
@@ -95,7 +97,13 @@ from .services import (
     UsuarioAdminService,
     UsuarioService,
 )
-from .throttles import GrillaRateThrottle, LoginRateThrottle, RegistroRateThrottle, ReservaRateThrottle
+from .throttles import (
+    GrillaRateThrottle,
+    LoginRateThrottle,
+    RegistroRateThrottle,
+    ReservaRateThrottle,
+    TransferenciaRateThrottle,
+)
 
 NOMBRE_COOKIE_REFRESH = 'refresh'
 # El navegador solo envía la cookie a /api/token/, /api/token/refresh/ y /api/token/logout/.
@@ -710,6 +718,7 @@ class ReservaViewSet(viewsets.GenericViewSet):
         'create': ('reservar_turno',),
         'mias': ('ver_reservas_propias',),
         'cancelar': ('cancelar_reserva_propia',),
+        'informar_transferencia': ('reservar_turno',),
     }
     lookup_value_regex = r'\d+'
     filterset_class = ReservaPropiaFilter
@@ -724,6 +733,8 @@ class ReservaViewSet(viewsets.GenericViewSet):
         throttles = super().get_throttles()
         if self.action == 'create':
             throttles.append(ReservaRateThrottle())
+        if self.action == 'informar_transferencia':
+            throttles.append(TransferenciaRateThrottle())
         return throttles
 
     def get_queryset(self):
@@ -750,6 +761,17 @@ class ReservaViewSet(viewsets.GenericViewSet):
         )
         return Response(ReservaPropiaSerializer(reserva).data)
 
+    @action(detail=True, methods=['post'], url_path='informar-transferencia')
+    def informar_transferencia(self, request, pk=None):
+        reserva = self.get_object()
+        entrada = TransferenciaInformadaSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        reserva = ReservaService.informar_transferencia(
+            reserva.pk, request.user, entrada.validated_data['titular'],
+            entrada.validated_data['referencia'], AuditoriaService.ip_de_request(request),
+        )
+        return Response(ReservaPropiaSerializer(reserva).data)
+
 
 class AgendaViewSet(AccesoComplejoMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
     """Reservas de los complejos que el usuario administra, con los datos de contacto de cada cliente."""
@@ -765,6 +787,8 @@ class AgendaViewSet(AccesoComplejoMixin, mixins.ListModelMixin, mixins.RetrieveM
         'reabrir': ('gestionar_agenda',),
         'confirmar_sena': ('gestionar_agenda',),
         'registrar_pago': ('gestionar_agenda',),
+        'rechazar_transferencia': ('gestionar_agenda',),
+        'anular_cobro': ('anular_cobro',),
     }
     campo_complejo = 'cancha__complejo'
     lookup_value_regex = r'\d+'
@@ -811,6 +835,24 @@ class AgendaViewSet(AccesoComplejoMixin, mixins.ListModelMixin, mixins.RetrieveM
     @action(detail=True, methods=['post'], url_path='confirmar-sena')
     def confirmar_sena(self, request, pk=None):
         reserva = ReservaService.confirmar_sena(
+            self.get_object().pk, request.user, AuditoriaService.ip_de_request(request),
+        )
+        return Response(ReservaAgendaSerializer(reserva).data)
+
+    @action(detail=True, methods=['post'], url_path='rechazar-transferencia')
+    def rechazar_transferencia(self, request, pk=None):
+        reserva = self.get_object()
+        entrada = RechazoTransferenciaSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        reserva = ReservaService.rechazar_transferencia(
+            reserva.pk, entrada.validated_data['motivo'], entrada.validated_data['nota'], request.user,
+            AuditoriaService.ip_de_request(request),
+        )
+        return Response(ReservaAgendaSerializer(reserva).data)
+
+    @action(detail=True, methods=['post'], url_path='anular-cobro')
+    def anular_cobro(self, request, pk=None):
+        reserva = ReservaService.anular_cobro(
             self.get_object().pk, request.user, AuditoriaService.ip_de_request(request),
         )
         return Response(ReservaAgendaSerializer(reserva).data)

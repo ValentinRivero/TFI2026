@@ -346,6 +346,9 @@ class TestCambioDeEstado:
         (EstadoReserva.PENDIENTE, EstadoReserva.CONFIRMADA),
         (EstadoReserva.PENDIENTE, EstadoReserva.SENADA),
         (EstadoReserva.CONFIRMADA, EstadoReserva.SENADA),
+        (EstadoReserva.CONFIRMADA, EstadoReserva.PENDIENTE),
+        (EstadoReserva.SENADA, EstadoReserva.CONFIRMADA),
+        (EstadoReserva.SENADA, EstadoReserva.PENDIENTE),
     ])
     def test_confirma_y_sena_antes_del_turno(self, reloj, operador, cliente_de, reserva, anterior, nuevo):
         reserva.estado = anterior
@@ -383,8 +386,6 @@ class TestCambioDeEstado:
         assert 'estado' in respuesta.json()['detail']
 
     @pytest.mark.parametrize('anterior, nuevo', [
-        (EstadoReserva.SENADA, EstadoReserva.CONFIRMADA),
-        (EstadoReserva.CONFIRMADA, EstadoReserva.PENDIENTE),
         (EstadoReserva.CANCELADA_JUGADOR, EstadoReserva.CONFIRMADA),
         (EstadoReserva.CANCELADA_COMPLEJO, EstadoReserva.SENADA),
         (EstadoReserva.COMPLETADA, EstadoReserva.CONFIRMADA),
@@ -427,7 +428,7 @@ class TestCambioDeEstado:
     def test_sin_cambios_no_audita(self, reloj, operador, cliente_de, reserva):
         respuesta = self._patch(cliente_de, operador, reserva, estado=EstadoReserva.PENDIENTE)
 
-        assert respuesta.status_code == status.HTTP_400_BAD_REQUEST
+        assert respuesta.status_code == status.HTTP_200_OK
         assert self._patch(cliente_de, operador, reserva, observaciones='').status_code == status.HTTP_200_OK
         assert not LogAuditoria.objects.filter(tipo_evento=TipoEventoAuditoria.RESERVA_CAMBIO_ESTADO).exists()
 

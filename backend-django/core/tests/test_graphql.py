@@ -240,7 +240,8 @@ query MisReservas($estado: Int, $vigencia: String, $fechaDesde: String, $fechaHa
     count
     results {
       id complejo { id nombre } cancha { id nombre } deporte fechaTurno horaInicio horaFin precioAcordado
-      montoSena montoPagado saldoRestante estadoPago estadoPagoNombre datosTransferencia { alias titular }
+      montoSena montoPagado saldoRestante estadoPago estadoPagoNombre transferenciaInformada transferenciaRechazada
+      transferencia { titular referencia informadaEn rechazo { motivo motivoNombre nota rechazadaEn } } datosTransferencia { alias titular cbu }
       tipoOcupacion tipoOcupacionNombre estado estadoNombre cancelableHasta fechaCreacion
     }
   }
@@ -252,6 +253,8 @@ EQUIVALENCIAS_RESERVA = {
     'precioAcordado': 'precio_acordado', 'tipoOcupacion': 'tipo_ocupacion', 'montoSena': 'monto_sena',
     'montoPagado': 'monto_pagado', 'saldoRestante': 'saldo_restante', 'estadoPago': 'estado_pago',
     'estadoPagoNombre': 'estado_pago_nombre', 'datosTransferencia': 'datos_transferencia',
+    'transferenciaInformada': 'transferencia_informada',
+    'transferenciaRechazada': 'transferencia_rechazada',
     'tipoOcupacionNombre': 'tipo_ocupacion_nombre', 'estadoNombre': 'estado_nombre',
     'cancelableHasta': 'cancelable_hasta', 'fechaCreacion': 'fecha_creacion',
 }
@@ -384,7 +387,8 @@ mutation CrearReserva($cancha: Int!, $fechaTurno: String!, $horaInicio: String!)
   crearReserva(cancha: $cancha, fechaTurno: $fechaTurno, horaInicio: $horaInicio) {
     reserva {
       id complejo { id nombre } cancha { id nombre } deporte fechaTurno horaInicio horaFin precioAcordado
-      montoSena montoPagado saldoRestante estadoPago estadoPagoNombre datosTransferencia { alias titular }
+      montoSena montoPagado saldoRestante estadoPago estadoPagoNombre transferenciaInformada transferenciaRechazada
+      transferencia { titular referencia informadaEn rechazo { motivo motivoNombre nota rechazadaEn } } datosTransferencia { alias titular cbu }
       tipoOcupacion tipoOcupacionNombre estado estadoNombre cancelableHasta fechaCreacion
     }
   }
