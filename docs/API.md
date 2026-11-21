@@ -82,6 +82,8 @@ Filtros de `GET /api/complejos/` y de `GET /api/complejos/marcadores/`: `deporte
 
 `precio_desde` es `null` si el complejo no tiene canchas activas. Los decimales llegan como texto, igual que en el listado.
 
+El listado y el detalle informan `porcentaje_sena` (entero de `0` a `100`; `0` significa que el complejo no exige seña) además del texto libre `info_sena`. El alias y el titular para transferir no son públicos: solo los recibe quien reservó, mientras su seña está pendiente.
+
 ### Grilla del día
 
 `fecha` es obligatoria, en formato `AAAA-MM-DD`, y no puede ser anterior a hoy (`400`). Un complejo no habilitado responde `404`.
@@ -139,7 +141,10 @@ Filtros de `GET /api/complejos/` y de `GET /api/complejos/marcadores/`: `deporte
 {
   "id": 41, "complejo": { "id": 1, "nombre": "Complejo El Yacaré" }, "cancha": { "id": 3, "nombre": "Cancha 1" },
   "deporte": "Fútbol 5", "fecha_turno": "2026-11-24", "hora_inicio": "20:00:00", "hora_fin": "21:00:00",
-  "precio_acordado": "38000.00", "tipo_ocupacion": 1, "tipo_ocupacion_nombre": "Reserva web del jugador",
+  "precio_acordado": "38000.00", "monto_sena": "11400.00", "monto_pagado": "0.00", "saldo_restante": "38000.00",
+  "estado_pago": 2, "estado_pago_nombre": "Seña pendiente",
+  "datos_transferencia": { "alias": "YACARE.DEMO.SENA", "titular": "Yacaré Deportes S.R.L." },
+  "tipo_ocupacion": 1, "tipo_ocupacion_nombre": "Reserva web del jugador",
   "estado": 1, "estado_nombre": "Pendiente Seña", "cancelable_hasta": "2026-11-24T16:00:00-03:00",
   "fecha_creacion": "2026-11-16T10:00:00-03:00"
 }
@@ -153,6 +158,9 @@ Filtros de `GET /api/complejos/` y de `GET /api/complejos/marcadores/`: `deporte
 - `vigencia=proximas` incluye las reservas cuyo turno todavía no terminó (la de hoy en curso también); `pasadas`, las ya terminadas.
 - Solo se cancelan reservas en `1`, `2` o `3`, y si faltan más horas que el margen del complejo (`horas_limite_cancelacion`) para el inicio del turno; `cancelable_hasta` informa el límite. Fuera de margen responde `400`. Una reserva de otra cuenta responde `404`.
 - `estado`: `1` pendiente de seña, `2` confirmada, `3` señada o pagada, `4` cancelada por el jugador, `5` cancelada por el complejo, `6` ausente, `7` completada.
+- **Montos:** `precio_acordado` es el precio total. Al reservar, el servidor calcula y congela `monto_sena` (el `porcentaje_sena` del complejo aplicado al precio, redondeado al centavo con la mitad hacia arriba) y deja `monto_pagado` en `0.00`. Un cambio posterior del precio de la cancha o del porcentaje de seña no altera las reservas ya registradas. `saldo_restante` es `precio_acordado - monto_pagado`. Un complejo que no exige seña devuelve `monto_sena: "0.00"` y la reserva nace igual, pendiente (`estado = 1`).
+- **`estado_pago`:** se deduce de los montos. `1` sin seña, `2` seña pendiente, `3` seña abonada y `4` pagada.
+- **`datos_transferencia`:** `{ "alias", "titular" }` del complejo mientras la reserva está pendiente o confirmada y su seña sigue pendiente de pago; en cualquier otro caso es `null`. `titular` puede ser una cadena vacía.
 
 ## Administración del complejo
 
@@ -160,11 +168,14 @@ Filtros de `GET /api/complejos/` y de `GET /api/complejos/marcadores/`: `deporte
 |---|---|---|
 | `GET /api/complejos/administrados/` | Operador | Complejos que el usuario puede administrar |
 | `GET /api/complejos/<id>/acceso/` | Operador | Confirma que el usuario administra el complejo: `{ "complejo": id }`. Un complejo ajeno, inexistente o dado de baja responde `404` |
-| `PATCH /api/complejos/<id>/` | Dueño | `nombre`, `direccion`, `latitud`, `longitud`, `telefono_contacto`, `horas_limite_cancelacion`, `info_sena` |
+| `PATCH /api/complejos/<id>/` | Dueño | `nombre`, `direccion`, `latitud`, `longitud`, `telefono_contacto`, `horas_limite_cancelacion`, `info_sena`, `porcentaje_sena`, `alias_transferencia`, `titular_transferencia` |
 | `PUT /api/complejos/<id>/servicios/` | Dueño | `{ "servicios": [ids] }`: deja activos exactamente esos servicios |
 | `GET /api/complejos/<id>/operadores/` | Dueño | Operadores del complejo |
 | `POST /api/complejos/<id>/operadores/` | Dueño | `{ "email" }` de una cuenta de operador sin complejo asignado |
 | `DELETE /api/complejos/<id>/operadores/<usuario_id>/` | Dueño | Desvincula al operador (la cuenta sigue activa) |
+
+- **Seña por transferencia:** `porcentaje_sena` es un entero de `0` a `100` (`0` no exige seña). Con un porcentaje mayor a cero el complejo necesita `alias_transferencia`; si falta, `400` sobre ese campo, también al intentar vaciar el alias mientras se exige seña. El alias mide entre 6 y 20 caracteres, admite letras, números, puntos y guiones, sin espacios, y se guarda en mayúsculas. `titular_transferencia` es opcional (hasta 120 caracteres). Todos los textos se limpian de HTML. Las respuestas del complejo administrado incluyen los tres campos.
+- Cambiar el porcentaje solo rige para las reservas nuevas. La auditoría registra los nombres de los campos modificados, nunca el alias.
 
 ### Canchas
 
@@ -241,6 +252,8 @@ Si el cambio deja reservas por jugar (pendientes, confirmadas o señadas) o turn
 | `PATCH /api/agenda/<id>/` | Operador | `estado` y `observaciones` |
 | `POST /api/agenda/<id>/cancelar/` | Operador | Cancela la reserva (`estado = 5`) sin restricción horaria |
 | `POST /api/agenda/<id>/reabrir/` | Operador | `{ "estado", "confirmar" }`: reabre una reserva cancelada por error (`estado`: `1`, `2` o `3`) |
+| `POST /api/agenda/<id>/confirmar-sena/` | Operador | Registra que el complejo recibió la seña: `monto_pagado` pasa a `monto_sena` y la reserva a señada (`estado = 3`). Sin cuerpo |
+| `POST /api/agenda/<id>/registrar-pago/` | Operador | Registra el cobro del total: `monto_pagado` pasa a `precio_acordado`. Sin cuerpo |
 
 - Cada reserva trae `cliente`: `{ "nombre", "telefono", "email" }`. Es la cuenta del jugador si reservó en la web; si se cargó a mano, `email` es `null`. Si el titular dio de baja su cuenta, figura el contacto conservado para resolver una seña, o "Titular dado de baja".
 - `conflicto_operatoria` trae el motivo por el que una reserva por jugar quedó fuera de la grilla tras un cambio de horarios, de duración o el paso a mantenimiento, o `null`. `?con_conflicto=true` lista solo esas reservas; la marca desaparece al resolverlas.
@@ -251,6 +264,11 @@ Si el cambio deja reservas por jugar (pendientes, confirmadas o señadas) o turn
   - **Validación:** vuelve a validar el turno como un alta. Si lo tomó otra reserva o un turno fijo, lo cerró una excepción, la cancha cambió de horario o dejó de estar disponible, responde `409` sin opción de confirmar.
   - **Confirmación:** si el turno está libre y no se envía `confirmar: true`, responde `409` con `requiere_confirmacion: true` y una `vista_previa` (`id`, `fecha_turno`, `hora_inicio`, `hora_fin`, `estado_actual`, `estado_nuevo`). Con `confirmar: true` la reserva vuelve a ocupar su turno.
 - Las reservas no se borran: se cancelan.
+- **Seña y pago:** cada reserva de la agenda trae `monto_sena`, `monto_pagado`, `saldo_restante`, `estado_pago` y `estado_pago_nombre` (mismos valores que en las reservas del jugador, sin `datos_transferencia`), y dos indicadores que dicen qué admite hoy el servidor: `puede_confirmar_sena` y `puede_registrar_pago`.
+  - `confirmar-sena/` pide una reserva pendiente o confirmada con seña acordada y todavía sin abonar. `registrar-pago/` pide una reserva pendiente, confirmada, señada o completada con saldo; tras el cobro, una reserva pendiente o confirmada con seña acordada pasa a señada (`estado = 3`); sin seña, una pendiente pasa a confirmada (`estado = 2`) y una confirmada o completada conserva su estado, con `estado_pago = 4`. Ambas responden la reserva actualizada y avisan al titular y al resto del personal.
+  - `400` si la reserva está cancelada o ausente, si ya está señada o saldada, o si no exige seña (`confirmar-sena/`). `403` sin permiso de gestión de la agenda y `404` si la reserva es de un complejo que el usuario no administra. Registrar el mismo cobro dos veces no suma: la segunda respuesta es `400`.
+  - El estado señada (`3`) solo existe para una reserva con seña acordada (`monto_sena` mayor a cero): `PATCH` con `estado = 3` o `reabrir/` con `estado = 3` sobre una reserva sin seña responden `400`, y se la confirma (`2`) o se registra el pago total. Pasar una reserva con seña a señada con `PATCH` o al reabrirla deja abonada la seña, para que los montos sigan coherentes. Una reserva señada anterior a las señas, sin montos, sigue pudiendo pasar a ausente o completada.
+  - Cada cobro queda en la auditoría como "Cobro de reserva" (tipo de evento `18`), con ids, montos y estados, sin datos personales.
 
 ### Turnos fijos
 
@@ -350,7 +368,7 @@ query {
 }
 ```
 
-Cada complejo expone `id`, `nombre`, `direccion`, `latitud`, `longitud`, `telefonoContacto`, `horasLimiteCancelacion`, `infoSena`, `precioDesde`, `servicios` y `deportes`. Los decimales llegan como texto, igual que en REST.
+Cada complejo expone `id`, `nombre`, `direccion`, `latitud`, `longitud`, `telefonoContacto`, `horasLimiteCancelacion`, `infoSena`, `porcentajeSena`, `precioDesde`, `servicios` y `deportes`. Los decimales llegan como texto, igual que en REST.
 
 ### `misReservas`
 
@@ -365,7 +383,7 @@ query {
 }
 ```
 
-- Cada reserva expone los campos de REST en camelCase: `id`, `complejo`, `cancha`, `deporte`, `fechaTurno`, `horaInicio`, `horaFin`, `precioAcordado`, `tipoOcupacion`, `tipoOcupacionNombre`, `estado`, `estadoNombre`, `cancelableHasta` y `fechaCreacion`. Fechas y horas llegan como texto con el mismo formato que REST.
+- Cada reserva expone los campos de REST en camelCase: `id`, `complejo`, `cancha`, `deporte`, `fechaTurno`, `horaInicio`, `horaFin`, `precioAcordado`, `montoSena`, `montoPagado`, `saldoRestante`, `estadoPago`, `estadoPagoNombre`, `datosTransferencia` (`alias` y `titular`, o `null`), `tipoOcupacion`, `tipoOcupacionNombre`, `estado`, `estadoNombre`, `cancelableHasta` y `fechaCreacion`. Fechas y horas llegan como texto con el mismo formato que REST.
 - Sin token, o con un token inválido o vencido, el campo responde `null` con un error `401` y el mismo mensaje que REST; los campos públicos de la misma consulta se resuelven igual. Dueños y operadores reciben `403`.
 
 ### `crearReserva` (mutation)
