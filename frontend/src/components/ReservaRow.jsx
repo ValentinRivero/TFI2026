@@ -8,15 +8,16 @@ import BadgeEstadoPago from './BadgeEstadoPago.jsx';
 import BadgeEstadoReserva from './BadgeEstadoReserva.jsx';
 import ContactoComplejo from './ContactoComplejo.jsx';
 import DesgloseMontos from './DesgloseMontos.jsx';
+import SeccionTransferencia from './SeccionTransferencia.jsx';
 import TarjetaAlias from './TarjetaAlias.jsx';
 
 /**
  * Una reserva propia: complejo (con enlace a su ficha), cancha, deporte, fecha, horario, precio acordado y estado.
  * Con seña acordada muestra el estado del pago y el desglose de montos y, mientras la seña está pendiente, el alias
- * para transferirla con el botón de copiar. Si está activa y dentro del margen del complejo ofrece cancelarla (`onCancelar`); si el margen ya pasó, explica el
+ * para transferirla con el botón de copiar, y el aviso de transferencia (informar, corregir o ver lo informado). Si está activa y dentro del margen del complejo ofrece cancelarla (`onCancelar`); si el margen ya pasó, explica el
  * motivo y muestra el teléfono del complejo.
  */
-export default function ReservaRow({ reserva, onCancelar }) {
+export default function ReservaRow({ reserva, onCancelar, onInformarTransferencia }) {
   const cancelacion = estadoDeCancelacion(reserva);
 
   return (
@@ -56,6 +57,7 @@ export default function ReservaRow({ reserva, onCancelar }) {
       {debeAbonarSena(reserva) && (
         <TarjetaAlias datos={reserva.datos_transferencia} monto={reserva.monto_sena} className="mt-3" />
       )}
+      <SeccionTransferencia reserva={reserva} onInformar={onInformarTransferencia} className="mt-3" />
 
       {cancelacion === CANCELACION.PERMITIDA && (
         <div className="d-flex flex-wrap align-items-center gap-3 mt-3">

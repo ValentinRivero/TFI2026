@@ -18,6 +18,7 @@ import {
   VALORES_RESERVA_MANUAL_INICIALES,
   vistaDeAgenda,
 } from './agenda.js';
+import { diasEntre } from './formatos.js';
 
 const HOY = '2026-11-12';
 // Con seña acordada por defecto: sin ella la reserva no admite el estado «Señada».
@@ -145,8 +146,28 @@ describe('rangoDelPeriodo', () => {
     expect(rangoDelPeriodo(periodo, HOY)).toEqual({ fecha_desde: desde, fecha_hasta: HOY });
   });
 
+  test.each([
+    ['proxima-semana', '2026-11-18'],
+    ['proximo-mes', '2026-12-11'],
+    ['proximo-trimestre', '2027-02-09'],
+  ])('%s empieza hoy, incluye hoy y mira hacia adelante', (periodo, hasta) => {
+    expect(rangoDelPeriodo(periodo, HOY)).toEqual({ fecha_desde: HOY, fecha_hasta: hasta });
+  });
+
+  test('los períodos futuros tienen los mismos días que los pasados', () => {
+    [['semana', 'proxima-semana', 7], ['mes', 'proximo-mes', 30], ['trimestre', 'proximo-trimestre', 90]].forEach(
+      ([pasado, futuro, dias]) => {
+        [pasado, futuro].forEach((periodo) => {
+          const { fecha_desde: desde, fecha_hasta: hasta } = rangoDelPeriodo(periodo, HOY);
+          expect(diasEntre(desde, hasta) + 1).toBe(dias);
+        });
+      },
+    );
+  });
+
   test('cruza el cambio de año', () => {
     expect(rangoDelPeriodo('mes', '2027-01-10')).toEqual({ fecha_desde: '2026-12-12', fecha_hasta: '2027-01-10' });
+    expect(rangoDelPeriodo('proximo-mes', '2026-12-20')).toEqual({ fecha_desde: '2026-12-20', fecha_hasta: '2027-01-18' });
   });
 
   test('un período desconocido o vacío no da rango', () => {
@@ -155,7 +176,7 @@ describe('rangoDelPeriodo', () => {
   });
 
   test('el rango de cada período es válido para la consulta', () => {
-    ['semana', 'mes', 'trimestre'].forEach((periodo) => {
+    ['semana', 'mes', 'trimestre', 'proxima-semana', 'proximo-mes', 'proximo-trimestre'].forEach((periodo) => {
       const filtros = { ...filtrosAgendaIniciales(HOY), conRango: true, ...rangoDelPeriodo(periodo, HOY) };
       expect(validarFiltrosAgenda(filtros)).toEqual({});
     });
@@ -167,6 +188,14 @@ describe('periodoActivo', () => {
     const filtros = { ...filtrosAgendaIniciales(HOY), conRango: true, ...rangoDelPeriodo('mes', HOY) };
 
     expect(periodoActivo(filtros, HOY)).toBe('mes');
+  });
+
+  test('reconoce también los períodos futuros', () => {
+    ['proxima-semana', 'proximo-mes', 'proximo-trimestre'].forEach((periodo) => {
+      const filtros = { ...filtrosAgendaIniciales(HOY), conRango: true, ...rangoDelPeriodo(periodo, HOY) };
+
+      expect(periodoActivo(filtros, HOY)).toBe(periodo);
+    });
   });
 
   test('un rango a mano, o sin rango activo, no marca ningún período', () => {
@@ -220,15 +249,23 @@ describe('vistaDeAgenda', () => {
 describe('estadosSiguientes', () => {
   test('antes del turno no ofrece ausente ni completada', () => {
     expect(estadosSiguientes(reserva(1), AHORA)).toEqual([2, 3]);
-    expect(estadosSiguientes(reserva(2), AHORA)).toEqual([3]);
-    expect(estadosSiguientes(reserva(3), AHORA)).toEqual([]);
+    expect(estadosSiguientes(reserva(2), AHORA)).toEqual([1, 3]);
+    expect(estadosSiguientes(reserva(3), AHORA)).toEqual([1, 2]);
+  });
+
+  test('pendiente, confirmada y señada se mueven entre sí en cualquier sentido', () => {
+    [1, 2, 3].forEach((desde) => {
+      [1, 2, 3].filter((hasta) => hasta !== desde).forEach((hasta) => {
+        expect(estadosSiguientes(reserva(desde), AHORA)).toContain(hasta);
+      });
+    });
   });
 
   test('una vez iniciado el turno ofrece ausente y completada, y se corrigen entre sí', () => {
     const iniciada = (estado) => reserva(estado, '2026-11-12', '14:00:00');
 
     expect(estadosSiguientes(iniciada(1), AHORA)).toEqual([2, 3, 6, 7]);
-    expect(estadosSiguientes(iniciada(3), AHORA)).toEqual([6, 7]);
+    expect(estadosSiguientes(iniciada(3), AHORA)).toEqual([1, 2, 6, 7]);
     expect(estadosSiguientes(iniciada(6), AHORA)).toEqual([7]);
     expect(estadosSiguientes(iniciada(7), AHORA)).toEqual([6]);
   });
@@ -242,12 +279,12 @@ describe('estadosSiguientes', () => {
     const sinSena = (estado, hora = '20:00:00') => reserva(estado, '2026-11-12', hora, '0.00');
 
     expect(estadosSiguientes(sinSena(1), AHORA)).toEqual([2]);
-    expect(estadosSiguientes(sinSena(2), AHORA)).toEqual([]);
+    expect(estadosSiguientes(sinSena(2), AHORA)).toEqual([1]);
     expect(estadosSiguientes(sinSena(1, '14:00:00'), AHORA)).toEqual([2, 6, 7]);
   });
 
   test('una señada antigua sin montos conserva sus salidas (ausente y completada)', () => {
-    expect(estadosSiguientes(reserva(3, '2026-11-12', '14:00:00', '0.00'), AHORA)).toEqual([6, 7]);
+    expect(estadosSiguientes(reserva(3, '2026-11-12', '14:00:00', '0.00'), AHORA)).toEqual([1, 2, 6, 7]);
   });
 });
 

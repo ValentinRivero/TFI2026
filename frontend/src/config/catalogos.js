@@ -28,6 +28,14 @@ export const RESERVA_SENADA = 3;
 /** Una reserva pendiente que no exige seña no está "pendiente de seña": solo espera la confirmación del complejo. */
 export const ESTADO_PENDIENTE_SIN_SENA = entrada('Pendiente', aviso);
 
+/** Por qué el complejo rechaza una transferencia informada (espejo de `MotivoRechazoTransferencia` de Django). */
+export const MOTIVO_RECHAZO_TRANSFERENCIA = Object.freeze({
+  1: entrada('No encontramos la transferencia en nuestra cuenta', aviso),
+  2: entrada('El monto transferido no coincide con la seña', aviso),
+  3: entrada('Los datos informados no coinciden con la transferencia', aviso),
+  4: entrada('Otro motivo', neutro),
+});
+
 /** Seguimiento del cobro de una reserva (espejo de `EstadoPago` de Django): se deduce de los montos, no se guarda. */
 export const ESTADO_PAGO = Object.freeze({
   1: entrada('Sin seña', neutro),
@@ -43,13 +51,14 @@ export const ESTADOS_RESERVA_CANCELADOS = Object.freeze([4, 5]);
 export const ESTADOS_REAPERTURA = Object.freeze([1, 2, 3]);
 
 /**
- * Cambios de estado que admite la agenda por reserva (espejo de `TRANSICIONES_AGENDA` de Django). Ausente y
- * completada se corrigen entre sí; las canceladas no vuelven atrás por esta vía.
+ * Cambios de estado que admite la agenda por reserva (espejo de `TRANSICIONES_AGENDA` de Django). Pendiente,
+ * confirmada y señada se mueven entre sí en cualquier sentido; ausente y completada se corrigen entre sí; las
+ * canceladas no vuelven atrás por esta vía (se reabren).
  */
 export const TRANSICIONES_AGENDA = Object.freeze({
   1: Object.freeze([2, 3, 6, 7]),
-  2: Object.freeze([3, 6, 7]),
-  3: Object.freeze([6, 7]),
+  2: Object.freeze([1, 3, 6, 7]),
+  3: Object.freeze([1, 2, 6, 7]),
   6: Object.freeze([7]),
   7: Object.freeze([6]),
 });
@@ -234,11 +243,20 @@ export const PESTANAS_AGENDA = Object.freeze([
   Object.freeze({ valor: VISTA_AGENDA.TURNOS_FIJOS, clave: 'agenda.pestanaTurnosFijos' }),
 ]);
 
-/** Períodos rápidos del rango de fechas de la agenda: terminan hoy e incluyen hoy (`dias` = 7 es de hoy a seis días atrás). */
+/** Sentido de un período rápido de la agenda: termina hoy (`PASADO`) o empieza hoy (`FUTURO`). */
+export const SENTIDO_PERIODO = Object.freeze({ PASADO: 'pasado', FUTURO: 'futuro' });
+
+/**
+ * Períodos rápidos del rango de fechas de la agenda; todos cuentan desde el día de hoy, que siempre queda incluido
+ * (`dias` = 7 es de hoy a seis días atrás en un período pasado y de hoy a seis días adelante en uno futuro).
+ */
 export const PERIODOS_AGENDA = Object.freeze([
-  Object.freeze({ valor: 'semana', clave: 'agenda.periodoSemana', dias: 7 }),
-  Object.freeze({ valor: 'mes', clave: 'agenda.periodoMes', dias: 30 }),
-  Object.freeze({ valor: 'trimestre', clave: 'agenda.periodoTrimestre', dias: 90 }),
+  Object.freeze({ valor: 'semana', clave: 'agenda.periodoSemana', dias: 7, sentido: SENTIDO_PERIODO.PASADO }),
+  Object.freeze({ valor: 'mes', clave: 'agenda.periodoMes', dias: 30, sentido: SENTIDO_PERIODO.PASADO }),
+  Object.freeze({ valor: 'trimestre', clave: 'agenda.periodoTrimestre', dias: 90, sentido: SENTIDO_PERIODO.PASADO }),
+  Object.freeze({ valor: 'proxima-semana', clave: 'agenda.periodoProximaSemana', dias: 7, sentido: SENTIDO_PERIODO.FUTURO }),
+  Object.freeze({ valor: 'proximo-mes', clave: 'agenda.periodoProximoMes', dias: 30, sentido: SENTIDO_PERIODO.FUTURO }),
+  Object.freeze({ valor: 'proximo-trimestre', clave: 'agenda.periodoProximoTrimestre', dias: 90, sentido: SENTIDO_PERIODO.FUTURO }),
 ]);
 
 export const ES_DIA_COMPLETO = 1;
@@ -269,6 +287,7 @@ export const TIPO_EVENTO_AUDITORIA = Object.freeze({
   16: entrada('Cambio de usuario', aviso),
   17: entrada('Cambio de catálogo', aviso),
   18: entrada('Cobro de reserva', ok),
+  19: entrada('Transferencia de seña', info),
 });
 
 export const CATEGORIA_NOTIFICACION = Object.freeze({
@@ -370,6 +389,8 @@ export const ROLES_POR_SECCION = Object.freeze({
   panel: [ROL.OPERADOR, ROL.DUENO, ROL.SUPERADMIN],
   // Espejo de la matriz de permisos: el operador ve la configuración y las canchas, pero no las edita.
   configurarComplejo: [ROL.DUENO, ROL.SUPERADMIN],
+  // Deshacer un cobro es del dueño y del superadmin; el operador los registra pero no los anula.
+  anularCobro: [ROL.DUENO, ROL.SUPERADMIN],
   operadoresComplejo: [ROL.DUENO, ROL.SUPERADMIN],
   administrarCanchas: [ROL.DUENO, ROL.SUPERADMIN],
   excepciones: [ROL.OPERADOR, ROL.DUENO, ROL.SUPERADMIN],

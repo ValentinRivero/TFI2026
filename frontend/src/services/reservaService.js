@@ -12,6 +12,15 @@ export const crearReserva = async ({ canchaId, fechaTurno, horaInicio }) => {
   return data;
 };
 
+/**
+ * El jugador avisa que transfirió la seña de una reserva propia (`{ titular, referencia }`). Se puede repetir para
+ * corregir mientras la seña siga pendiente. Un 400 indica que la reserva ya no admite el aviso o que un dato es inválido.
+ */
+export const informarTransferencia = async (id, { titular, referencia }) => {
+  const { data } = await apiDjango.post(`/api/reservas/${encodeURIComponent(id)}/informar-transferencia/`, { titular, referencia });
+  return data;
+};
+
 // Las próximas se ordenan de la más cercana a la más lejana y el historial, de la más reciente a la más antigua.
 const ORDEN_POR_VIGENCIA = Object.freeze({
   proximas: 'fecha_turno,hora_inicio',
@@ -78,6 +87,21 @@ export const reabrirReserva = async (id, estado, confirmar = false) => {
  */
 export const confirmarSenaReserva = async (id) => {
   const { data } = await apiDjango.post(`${rutaAgenda(id)}confirmar-sena/`);
+  return data;
+};
+
+/**
+ * El personal rechaza la transferencia que informó el jugador (`{ motivo, nota }`: un motivo de la lista y una nota
+ * opcional). No cambia el estado ni los montos; el jugador recibe un aviso y puede volver a informarla.
+ */
+export const rechazarTransferencia = async (id, { motivo, nota }) => {
+  const { data } = await apiDjango.post(`${rutaAgenda(id)}rechazar-transferencia/`, { motivo, nota });
+  return data;
+};
+
+/** Deja sin efecto lo cobrado (seña o pago total) de una reserva, para corregir un registro equivocado. */
+export const anularCobroReserva = async (id) => {
+  const { data } = await apiDjango.post(`${rutaAgenda(id)}anular-cobro/`);
   return data;
 };
 

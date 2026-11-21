@@ -6,19 +6,32 @@ import {
   ACCION_COBRO,
   accionesDeCobro,
   calcularDesglose,
+  colapsarEspacios,
+  cuerpoTransferencia,
   debeAbonarSena,
   errorDeAlias,
+  errorDeCbu,
+  errorDeNotaRechazo,
+  errorDeReferenciaTransferencia,
+  errorDeTitularTransferencia,
+  esCbuValido,
   esPorcentajeSenaValido,
   estadoDePago,
   estadoDeReserva,
   estadoReflejaElPago,
+  etiquetaDeEstadoDestino,
   exigeSena,
   filasDeDesglose,
   filasDeReserva,
   muestraSeguimientoDePago,
   normalizarAlias,
+  normalizarCbu,
+  senaConfirmada,
   tieneSena,
+  transferenciaParaRevisar,
+  transferenciaRechazada,
   validarSena,
+  validarTransferencia,
 } from './pagos.js';
 
 describe('alias de transferencia', () => {
@@ -216,5 +229,160 @@ describe('estado de la reserva en pantalla', () => {
 
   test('un estado desconocido cae a la baja', () => {
     expect(estadoDeReserva({ estado: 99, monto_sena: '0.00' }).etiqueta).toBe('Baja');
+  });
+});
+
+describe('aviso de transferencia', () => {
+  test('colapsa los espacios de los extremos y los repetidos', () => {
+    expect(colapsarEspacios('  María   José \t Pérez ')).toBe('María José Pérez');
+    expect(colapsarEspacios(null)).toBe('');
+  });
+
+  test.each(['Marta López', 'María José Pérez', "O'Brien-Díaz Jr.", 'Pérez & Hijos S.A.', 'Ñandú 2 S.R.L.', '  Ana   Gómez '])(
+    'acepta el nombre %s',
+    (titular) => {
+      expect(errorDeTitularTransferencia(titular)).toBeUndefined();
+    },
+  );
+
+  test.each(['', '   ', 'A', '12', '1 2', '<b>Marta</b>', 'Marta; DROP TABLE', 'x'.repeat(101), 'Ana\u0000'])(
+    'rechaza el nombre %j',
+    (titular) => {
+      expect(errorDeTitularTransferencia(titular)).toBe(t('transferencia.errorTitular', { minimo: 2, maximo: 100 }));
+    },
+  );
+
+  test.each(['ABC', 'OP-48213', '0012345678', 'A1.B2_C3/D4-E5', 'x'.repeat(60), '  OP-1234  '])('acepta la operación %s', (referencia) => {
+    expect(errorDeReferenciaTransferencia(referencia)).toBeUndefined();
+  });
+
+  test.each(['', 'ab', 'con espacio', 'x'.repeat(61), '-OP123', '../etc/passwd', '<script>', 'OP;123', 'OP 123'])(
+    'rechaza la operación %j',
+    (referencia) => {
+      expect(errorDeReferenciaTransferencia(referencia)).toBe(t('transferencia.errorReferencia', { minimo: 3, maximo: 60 }));
+    },
+  );
+
+  test('valida los dos campos y devuelve un error por cada uno', () => {
+    expect(validarTransferencia({ titular: 'Marta López', referencia: 'OP-48213' })).toEqual({});
+    expect(Object.keys(validarTransferencia({ titular: '', referencia: '' }))).toEqual(['titular', 'referencia']);
+    expect(Object.keys(validarTransferencia({ titular: 'Marta López', referencia: 'a b' }))).toEqual(['referencia']);
+  });
+
+  test('el cuerpo viaja con los espacios colapsados y sin campos de más', () => {
+    expect(cuerpoTransferencia({ titular: '  Marta   López ', referencia: ' OP-1 2 ', reserva: { id: 1 } })).toEqual({
+      titular: 'Marta López',
+      referencia: 'OP-1 2',
+    });
+  });
+
+  test('el personal revisa una transferencia informada mientras la seña sigue sin confirmarse', () => {
+    expect(transferenciaParaRevisar({ transferencia_informada: true, puede_confirmar_sena: true })).toBe(true);
+    expect(transferenciaParaRevisar({ transferencia_informada: true, puede_confirmar_sena: false })).toBe(false);
+    expect(transferenciaParaRevisar({ transferencia_informada: false, puede_confirmar_sena: true })).toBe(false);
+    expect(transferenciaParaRevisar({})).toBe(false);
+  });
+});
+
+describe('CBU o CVU', () => {
+  // Banco 000 inexistente, con los dígitos verificadores correctos: no corresponde a ninguna cuenta real.
+  const CBU = '0000000000000000123459';
+
+  test('se normaliza quitando espacios y guiones', () => {
+    expect(normalizarCbu(' 0000 0000-0000 0000-1234 59 ')).toBe(CBU);
+    expect(normalizarCbu(null)).toBe('');
+  });
+
+  test.each([CBU, '0000 0000-0000 0000-1234 59', '2850590940090418135201', '0170099220000067797370'])('acepta %s', (cbu) => {
+    expect(esCbuValido(cbu)).toBe(true);
+    expect(errorDeCbu(cbu)).toBeUndefined();
+  });
+
+  test('vacío es válido: el CBU es opcional', () => {
+    expect(errorDeCbu('')).toBeUndefined();
+    expect(errorDeCbu('   ')).toBeUndefined();
+  });
+
+  test.each(['123', '000000000000000012345', '00000000000000001234590', '00000000000000001234AB', 'x'.repeat(22)])(
+    'un largo o caracteres incorrectos (%s) informa el largo',
+    (cbu) => {
+      expect(errorDeCbu(cbu)).toBe(t('configuracion.errorCbuLargo', { largo: 22 }));
+    },
+  );
+
+  test.each(['2850590940090418135202', '2850590940090418135211', '2851590940090418135201', '0000000000000000123450'])(
+    'un dígito verificador que no coincide (%s) lo rechaza',
+    (cbu) => {
+      expect(esCbuValido(cbu)).toBe(false);
+      expect(errorDeCbu(cbu)).toBe(t('configuracion.errorCbuVerificador'));
+    },
+  );
+
+  test('la sección de seña valida el CBU aunque no se exija seña', () => {
+    expect(validarSena({ porcentaje_sena: '0', alias_transferencia: '', cbu_cvu_transferencia: CBU })).toEqual({});
+    expect(Object.keys(validarSena({ porcentaje_sena: '0', alias_transferencia: '', cbu_cvu_transferencia: '123' }))).toEqual([
+      'cbu_cvu_transferencia',
+    ]);
+  });
+});
+
+describe('estado pendiente con la seña ya abonada y destinos de un cambio de estado', () => {
+  test('pendiente con la seña ya abonada es simplemente «Pendiente»', () => {
+    const reserva = { estado: 1, monto_sena: '11400.00', monto_pagado: '11400.00' };
+
+    expect(estadoDeReserva(reserva).etiqueta).toBe('Pendiente');
+  });
+
+  test('pendiente con la seña a medio abonar sigue pendiente de seña', () => {
+    expect(estadoDeReserva({ estado: 1, monto_sena: '11400.00', monto_pagado: '5000.00' }).etiqueta).toBe('Pendiente de seña');
+  });
+
+  test('el destino «pendiente» se rotula según haya una seña por abonar', () => {
+    expect(etiquetaDeEstadoDestino({ estado: 2, monto_sena: '11400.00', monto_pagado: '0.00' }, 1)).toBe('Pendiente de seña');
+    expect(etiquetaDeEstadoDestino({ estado: 3, monto_sena: '11400.00', monto_pagado: '11400.00' }, 1)).toBe('Pendiente');
+    expect(etiquetaDeEstadoDestino({ estado: 2, monto_sena: '0.00', monto_pagado: '0.00' }, 1)).toBe('Pendiente');
+  });
+
+  test('los demás destinos conservan su etiqueta', () => {
+    const reserva = { estado: 1, monto_sena: '11400.00', monto_pagado: '0.00', estado_pago: 2 };
+
+    expect(etiquetaDeEstadoDestino(reserva, 2)).toBe('Confirmada');
+    expect(etiquetaDeEstadoDestino(reserva, 3)).toBe('Señada o pagada');
+  });
+
+  test('la seña está confirmada cuando el pago es seña abonada o pagada', () => {
+    expect(senaConfirmada({ estado_pago: 3 })).toBe(true);
+    expect(senaConfirmada({ estado_pago: 4 })).toBe(true);
+    expect(senaConfirmada({ estado_pago: 2 })).toBe(false);
+    expect(senaConfirmada({ estado_pago: 1 })).toBe(false);
+    expect(senaConfirmada({})).toBe(false);
+  });
+});
+
+describe('rechazo de la transferencia informada', () => {
+  const informada = { transferencia_informada: true, puede_confirmar_sena: true };
+
+  test('una transferencia rechazada ya no está para revisar y se marca como rechazada', () => {
+    const rechazada = { ...informada, transferencia_rechazada: true };
+
+    expect(transferenciaParaRevisar(rechazada)).toBe(false);
+    expect(transferenciaRechazada(rechazada)).toBe(true);
+  });
+
+  test('una informada sin rechazo sigue para revisar y no figura como rechazada', () => {
+    expect(transferenciaParaRevisar(informada)).toBe(true);
+    expect(transferenciaRechazada(informada)).toBe(false);
+  });
+
+  test('sin transferencia informada no hay nada que revisar ni rechazar', () => {
+    expect(transferenciaParaRevisar({ puede_confirmar_sena: true })).toBe(false);
+    expect(transferenciaRechazada({ transferencia_rechazada: true })).toBe(false);
+  });
+
+  test('la nota del rechazo admite hasta 120 caracteres y puede quedar vacía', () => {
+    expect(errorDeNotaRechazo('')).toBeUndefined();
+    expect(errorDeNotaRechazo('x'.repeat(120))).toBeUndefined();
+    expect(errorDeNotaRechazo(`  ${'x'.repeat(120)}  `)).toBeUndefined();
+    expect(errorDeNotaRechazo('x'.repeat(121))).toBe('La nota no puede superar los 120 caracteres.');
   });
 });

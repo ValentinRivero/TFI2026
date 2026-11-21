@@ -9,7 +9,16 @@ import {
 import { PARAMETROS } from '../config/parametros.js';
 import { t } from '../i18n/index.js';
 
-const { porcentajeSenaMaximo, aliasLargoMinimo, aliasLargoMaximo } = PARAMETROS.pagos;
+const {
+  porcentajeSenaMaximo,
+  aliasLargoMinimo,
+  aliasLargoMaximo,
+  cbuLargo,
+  transferenciaTitularMinimo,
+  transferenciaTitularMaximo,
+  referenciaMinimo,
+  referenciaMaximo,
+} = PARAMETROS.pagos;
 
 /** Alias de CBU/CVU: letras, números, puntos y guiones, sin espacios, en mayúsculas (espejo de `PATRON_ALIAS` de Django). */
 const PATRON_ALIAS = new RegExp(`^[A-Z0-9.-]{${aliasLargoMinimo},${aliasLargoMaximo}}$`);
@@ -24,6 +33,29 @@ export const errorDeAlias = (texto, { obligatorio = false } = {}) => {
   return PATRON_ALIAS.test(alias)
     ? undefined
     : t('configuracion.errorAlias', { minimo: aliasLargoMinimo, maximo: aliasLargoMaximo });
+};
+
+/** Un CBU o CVU se pega con espacios o guiones: se guarda solo con dígitos, como el servidor. */
+export const normalizarCbu = (texto) => String(texto ?? '').replace(/[\s-]/g, '');
+
+const PATRON_CBU = new RegExp(`^\\d{${cbuLargo}}$`);
+
+const dvCbu = (digitos, pesos) => (10 - ([...digitos].reduce((suma, digito, i) => suma + Number(digito) * pesos[i], 0) % 10)) % 10;
+
+/** Un CBU o CVU tiene 22 dígitos y sus dos dígitos verificadores correctos (mismo cálculo que el servidor). */
+export const esCbuValido = (texto) => {
+  const cbu = normalizarCbu(texto);
+  return PATRON_CBU.test(cbu)
+    && dvCbu(cbu.slice(0, 7), [7, 1, 3, 9, 7, 1, 3]) === Number(cbu[7])
+    && dvCbu(cbu.slice(8, 21), [3, 9, 7, 1, 3, 9, 7, 1, 3, 9, 7, 1, 3]) === Number(cbu[21]);
+};
+
+/** Error del CBU o CVU (opcional: vacío es válido) o `undefined`. Distingue un largo incorrecto de un dígito mal tipeado. */
+export const errorDeCbu = (texto) => {
+  const cbu = normalizarCbu(texto);
+  if (cbu === '') return undefined;
+  if (!PATRON_CBU.test(cbu)) return t('configuracion.errorCbuLargo', { largo: cbuLargo });
+  return esCbuValido(cbu) ? undefined : t('configuracion.errorCbuVerificador');
 };
 
 /** Un porcentaje de seña es un entero entre 0 (el complejo no exige seña) y 100. */
@@ -41,7 +73,68 @@ export const validarSena = (valores) => {
   const exigeSena = esPorcentajeSenaValido(valores.porcentaje_sena) && Number(valores.porcentaje_sena) > 0;
   const errorAlias = errorDeAlias(valores.alias_transferencia, { obligatorio: exigeSena });
   if (errorAlias) errores.alias_transferencia = errorAlias;
+  const errorDelCbu = errorDeCbu(valores.cbu_cvu_transferencia);
+  if (errorDelCbu) errores.cbu_cvu_transferencia = errorDelCbu;
   return errores;
+};
+
+/** Quien transfirió puede ser una persona o una razón social (espejo de `PATRON_PAGADOR` de Django). */
+const PATRON_TITULAR = /^[\p{L}\p{N}_ .,&'’-]+$/u;
+/** Número de operación: letras, números y `. _ / -` sin espacios (espejo de `PATRON_REFERENCIA` de Django). */
+const PATRON_REFERENCIA = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
+
+/** Quita los espacios de los extremos y deja uno solo entre palabras, como el servidor. */
+export const colapsarEspacios = (texto) => String(texto ?? '').trim().split(/\s+/).filter(Boolean).join(' ');
+
+/** Error del nombre de quien transfirió o `undefined`. Pide al menos dos letras y solo caracteres de un nombre. */
+export const errorDeTitularTransferencia = (texto) => {
+  const titular = colapsarEspacios(texto);
+  const letras = (titular.match(/\p{L}/gu) ?? []).length;
+  const valido = letras >= transferenciaTitularMinimo
+    && titular.length <= transferenciaTitularMaximo
+    && PATRON_TITULAR.test(titular);
+  return valido
+    ? undefined
+    : t('transferencia.errorTitular', { minimo: transferenciaTitularMinimo, maximo: transferenciaTitularMaximo });
+};
+
+/** Error del número de operación o `undefined`. */
+export const errorDeReferenciaTransferencia = (texto) => {
+  const referencia = colapsarEspacios(texto);
+  const valida = referencia.length >= referenciaMinimo
+    && referencia.length <= referenciaMaximo
+    && PATRON_REFERENCIA.test(referencia);
+  return valida ? undefined : t('transferencia.errorReferencia', { minimo: referenciaMinimo, maximo: referenciaMaximo });
+};
+
+/** Errores por campo del aviso de transferencia; `{}` significa que se puede enviar. */
+export const validarTransferencia = (valores) => {
+  const errores = {};
+  const errorTitular = errorDeTitularTransferencia(valores.titular);
+  if (errorTitular) errores.titular = errorTitular;
+  const errorReferencia = errorDeReferenciaTransferencia(valores.referencia);
+  if (errorReferencia) errores.referencia = errorReferencia;
+  return errores;
+};
+
+/** Cuerpo de `POST /api/reservas/<id>/informar-transferencia/`, con los espacios colapsados. */
+export const cuerpoTransferencia = (valores) => ({
+  titular: colapsarEspacios(valores.titular),
+  referencia: colapsarEspacios(valores.referencia),
+});
+
+/** El complejo rechazó la transferencia informada y le pidió al jugador que la informe de nuevo. */
+export const transferenciaRechazada = (reserva) => Boolean(reserva.transferencia_informada && reserva.transferencia_rechazada);
+
+/** El personal tiene una transferencia informada por verificar: la seña sigue sin confirmarse y no se rechazó. */
+export const transferenciaParaRevisar = (reserva) => (
+  Boolean(reserva.transferencia_informada && reserva.puede_confirmar_sena && !reserva.transferencia_rechazada)
+);
+
+/** Error de la nota del rechazo (largo máximo, igual que el servidor) o `undefined`. Vacío es válido. */
+export const errorDeNotaRechazo = (texto) => {
+  const maximo = PARAMETROS.pagos.notaRechazoMaximo;
+  return String(texto ?? '').trim().length > maximo ? t('transferencia.errorNota', { maximo }) : undefined;
 };
 
 /** Importe (número o texto decimal como `"38000.00"`) en centavos enteros, para operar sin errores de coma flotante. */
@@ -94,15 +187,27 @@ export const estadoReflejaElPago = (reserva) => (
   reserva.estado === RESERVA_SENADA && PAGOS_QUE_REFLEJA_SENADA.includes(reserva.estado_pago)
 );
 
+/** Hay una seña acordada que todavía no se abonó completa. */
+const senaSinAbonar = (reserva) => tieneSena(reserva) && Number(reserva.monto_pagado ?? 0) < Number(reserva.monto_sena);
+
 /**
  * Etiqueta y badge del estado de la reserva. Una señada muestra su estado de pago (seña abonada o pagada) en lugar
- * de «Señada o pagada», y una pendiente sin seña se llama simplemente «Pendiente».
+ * de «Señada o pagada», y una pendiente se llama «Pendiente de seña» solo mientras haya una seña por abonar: sin
+ * seña, o con la seña ya abonada, es simplemente «Pendiente».
  */
 export const estadoDeReserva = (reserva) => {
   if (estadoReflejaElPago(reserva)) return estadoDePago(reserva);
-  if (reserva.estado === RESERVA_PENDIENTE && !tieneSena(reserva)) return ESTADO_PENDIENTE_SIN_SENA;
+  if (reserva.estado === RESERVA_PENDIENTE && !senaSinAbonar(reserva)) return ESTADO_PENDIENTE_SIN_SENA;
   return ESTADO_RESERVA[reserva.estado] ?? ESTADO_RESERVA[0];
 };
+
+/** La seña ya se abonó (el personal la confirmó o se saldó la reserva): seña abonada o pagada. */
+export const senaConfirmada = (reserva) => PAGOS_QUE_REFLEJA_SENADA.includes(reserva.estado_pago);
+
+/** Etiqueta con la que se ofrece `estado` como destino de un cambio de estado de la reserva (misma regla que el badge). */
+export const etiquetaDeEstadoDestino = (reserva, estado) => (
+  estadoDeReserva({ ...reserva, estado, estado_pago: undefined }).etiqueta
+);
 
 /**
  * Si la reserva muestra seguimiento de pago: hay seña acordada o algo abonado. Una cancelada sin nada abonado no

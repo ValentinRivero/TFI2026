@@ -98,7 +98,19 @@ export const PARAMETROS = Object.freeze({
   }),
   // Espejo de PORCENTAJE_SENA_MAXIMO, LARGO_ALIAS_MINIMO y LARGO_ALIAS_MAXIMO de Django (core/models.py): el alias
   // bancario o de billetera virtual mide entre 6 y 20 caracteres. `segundosCopiado` es cuánto dura el "Copiado".
-  pagos: Object.freeze({ porcentajeSenaMaximo: 100, aliasLargoMinimo: 6, aliasLargoMaximo: 20, segundosCopiado: 2 }),
+  pagos: Object.freeze({
+    porcentajeSenaMaximo: 100,
+    aliasLargoMinimo: 6,
+    aliasLargoMaximo: 20,
+    cbuLargo: 22, // CBU o CVU: 22 dígitos (espejo de LARGO_CBU)
+    segundosCopiado: 2,
+    // Espejo de LARGO_(MINIMO_)PAGADOR y LARGO_(MINIMO_)REFERENCIA de Django: quién transfirió y el número de operación.
+    transferenciaTitularMinimo: 2,
+    transferenciaTitularMaximo: 100,
+    referenciaMinimo: 3,
+    referenciaMaximo: 60,
+    notaRechazoMaximo: 120, // espejo de LARGO_NOTA_RECHAZO
+  }),
   // Espejo de POLITICA_PRIVACIDAD_VERSION de Django.
   politica: Object.freeze({
     version: '1.0',

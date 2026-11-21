@@ -4,7 +4,7 @@ import { describir, ESTADO_RESERVA, opcionesDe, TIPO_OCUPACION } from '../config
 import { t } from '../i18n/index.js';
 import { estadosSiguientes, puedeCancelarElComplejo, puedeReabrir } from '../utils/agenda.js';
 import { formatearFechaCorta, formatearHora } from '../utils/formatos.js';
-import { ACCION_COBRO, accionesDeCobro } from '../utils/pagos.js';
+import { ACCION_COBRO, accionesDeCobro, etiquetaDeEstadoDestino, transferenciaParaRevisar } from '../utils/pagos.js';
 import BadgeEstadoReserva from './BadgeEstadoReserva.jsx';
 import Icono from './Icono.jsx';
 import ResumenPago from './ResumenPago.jsx';
@@ -15,9 +15,9 @@ const columnas = 'agenda.columnas';
 /**
  * Fila de la agenda: horario, cancha, cliente con su contacto, origen de la reserva, precio y estado de pago, estado,
  * observaciones internas y las acciones que admite el estado actual (cobrar la seña o el total, cambiar estado,
- * cancelar o reabrir). `ocupada` deshabilita las acciones mientras se aplica un cambio sobre esa reserva.
+ * rechazar la transferencia informada, anular un cobro si el rol puede, cancelar o reabrir). `ocupada` deshabilita las acciones mientras se aplica un cambio sobre esa reserva.
  */
-export default function ReservaAgendaRow({ reserva, ocupada, onCambiarEstado, onCancelar, onReabrir, onCobrar, onEditarObservaciones }) {
+export default function ReservaAgendaRow({ reserva, ocupada, onCambiarEstado, onCancelar, onReabrir, onCobrar, onEditarObservaciones, onRechazarTransferencia, onAnularCobro, puedeAnularCobro }) {
   const origen = describir(TIPO_OCUPACION, reserva.tipo_ocupacion);
   const siguientes = estadosSiguientes(reserva);
   const { cliente } = reserva;
@@ -67,6 +67,16 @@ export default function ReservaAgendaRow({ reserva, ocupada, onCambiarEstado, on
               {t(accion === ACCION_COBRO.SENA ? 'pagos.confirmarSena' : 'pagos.registrarPago')}
             </Button>
           ))}
+          {transferenciaParaRevisar(reserva) && (
+            <Button size="sm" variant="outline-danger" disabled={ocupada} onClick={() => onRechazarTransferencia(reserva)}>
+              {t('transferencia.rechazar')}
+            </Button>
+          )}
+          {puedeAnularCobro && reserva.puede_anular_cobro && (
+            <Button size="sm" variant="outline-danger" disabled={ocupada} onClick={() => onAnularCobro(reserva)}>
+              {t('pagos.anularCobro')}
+            </Button>
+          )}
           {siguientes.length > 0 && (
             <Form.Select
               size="sm"
@@ -77,8 +87,8 @@ export default function ReservaAgendaRow({ reserva, ocupada, onCambiarEstado, on
               className="agenda-cambio-estado"
             >
               <option value="">{t('agenda.cambiarEstado')}</option>
-              {opcionesDe(ESTADO_RESERVA, siguientes).map(({ valor, etiqueta: texto }) => (
-                <option key={valor} value={valor}>{texto}</option>
+              {opcionesDe(ESTADO_RESERVA, siguientes).map(({ valor }) => (
+                <option key={valor} value={valor}>{etiquetaDeEstadoDestino(reserva, Number(valor))}</option>
               ))}
             </Form.Select>
           )}

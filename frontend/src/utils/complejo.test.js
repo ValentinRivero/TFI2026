@@ -20,6 +20,7 @@ const complejo = {
   porcentaje_sena: 0,
   alias_transferencia: '',
   titular_transferencia: '',
+  cbu_cvu_transferencia: '',
 };
 
 describe('resolverComplejoActivo', () => {
@@ -163,5 +164,33 @@ describe('seña y datos de transferencia', () => {
 
   test('un complejo sin seña ni alias es válido', () => {
     expect(validarConfiguracionConSena(valoresDeComplejo(complejo))).toEqual({});
+  });
+});
+
+describe('CBU o CVU del complejo', () => {
+  const CBU = '0000000000000000123459';
+
+  test('el valor del formulario parte del guardado y vacío si no hay', () => {
+    expect(valoresDeComplejo({ ...complejo, cbu_cvu_transferencia: CBU }).cbu_cvu_transferencia).toBe(CBU);
+    expect(valoresDeComplejo(complejo).cbu_cvu_transferencia).toBe('');
+  });
+
+  test('viaja solo con dígitos aunque se haya pegado con espacios o guiones', () => {
+    const valores = { ...valoresDeComplejo(complejo), cbu_cvu_transferencia: '0000 0000-0000 0000-1234 59' };
+
+    expect(cuerpoConfiguracion(valores, complejo)).toEqual({ cbu_cvu_transferencia: CBU });
+  });
+
+  test('se puede borrar', () => {
+    const guardado = { ...complejo, cbu_cvu_transferencia: CBU };
+    const valores = { ...valoresDeComplejo(guardado), cbu_cvu_transferencia: '' };
+
+    expect(cuerpoConfiguracion(valores, guardado)).toEqual({ cbu_cvu_transferencia: '' });
+  });
+
+  test('un CBU con un dígito verificador incorrecto bloquea el guardado', () => {
+    const valores = { ...valoresDeComplejo(complejo), cbu_cvu_transferencia: '0000000000000000123450' };
+
+    expect(Object.keys(validarConfiguracionConSena(valores))).toEqual(['cbu_cvu_transferencia']);
   });
 });

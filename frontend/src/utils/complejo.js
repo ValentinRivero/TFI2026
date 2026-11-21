@@ -1,6 +1,6 @@
 import { PARAMETROS } from '../config/parametros.js';
 import { t } from '../i18n/index.js';
-import { normalizarAlias, validarSena } from './pagos.js';
+import { normalizarAlias, normalizarCbu, validarSena } from './pagos.js';
 
 const { horasCancelacionMaximas, latitudMaxima, longitudMaxima, coordenadasDecimales } = PARAMETROS.panel;
 
@@ -26,6 +26,7 @@ export const valoresDeComplejo = (complejo) => ({
   porcentaje_sena: aTexto(complejo.porcentaje_sena ?? 0),
   alias_transferencia: aTexto(complejo.alias_transferencia),
   titular_transferencia: aTexto(complejo.titular_transferencia),
+  cbu_cvu_transferencia: aTexto(complejo.cbu_cvu_transferencia),
 });
 
 const NUMERICOS = ['latitud', 'longitud', 'horas_limite_cancelacion', 'porcentaje_sena'];
@@ -47,6 +48,7 @@ export const cuerpoConfiguracion = (valores, complejo) => {
     if (!cambio(campo, valor, complejo[campo])) return;
     if (ENTEROS.includes(campo)) cuerpo[campo] = Number(valor);
     else if (campo === 'alias_transferencia') cuerpo[campo] = normalizarAlias(valor);
+    else if (campo === 'cbu_cvu_transferencia') cuerpo[campo] = normalizarCbu(valor);
     else cuerpo[campo] = valor.trim();
   });
   return cuerpo;

@@ -7,7 +7,8 @@ import CampoFormulario from './CampoFormulario.jsx';
 const { limitesCampos, pagos } = PARAMETROS;
 
 /**
- * Seña y datos de transferencia del complejo: porcentaje de seña (0 no exige seña), alias y titular de la cuenta. Con
+ * Seña y datos de transferencia del complejo: porcentaje de seña (0 no exige seña), alias, titular de la cuenta y, de
+ * forma opcional, el CBU o CVU como otra forma de transferir. Con
  * `campo(nombre)` igual que `CamposComplejo`: devuelve `valor`, `onCambiar`, `error` y, en solo lectura, `disabled`.
  */
 export default function CamposSena({ campo, prefijo = 'complejo' }) {
@@ -49,6 +50,18 @@ export default function CamposSena({ campo, prefijo = 'complejo' }) {
             ayuda={t('configuracion.ayudaTitular')}
             className="mb-0"
             {...campo('titular_transferencia')}
+          />
+        </Col>
+        <Col md={8}>
+          <CampoFormulario
+            id={`${prefijo}-cbu`}
+            etiqueta={t('configuracion.cbuTransferencia')}
+            inputMode="numeric"
+            autoComplete="off"
+            spellCheck={false}
+            ayuda={t('configuracion.ayudaCbu', { largo: pagos.cbuLargo })}
+            className="mb-0"
+            {...campo('cbu_cvu_transferencia')}
           />
         </Col>
       </Row>

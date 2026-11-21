@@ -5,6 +5,7 @@ import {
   ESTADOS_RESERVA_CANCELADOS,
   PERIODOS_AGENDA,
   RESERVA_SENADA,
+  SENTIDO_PERIODO,
   TRANSICIONES_AGENDA,
   VISTA_AGENDA,
 } from '../config/catalogos.js';
@@ -57,11 +58,18 @@ export const cambiosAlAlternarRango = (filtros, activo, hoy) => {
   return { conRango: false, fecha: parsearFecha(filtros.fecha_desde) ? filtros.fecha_desde : hoy };
 };
 
-/** Rango `{ fecha_desde, fecha_hasta }` de un período rápido (`semana`, `mes` o `trimestre`), o `null` si no existe. */
+/**
+ * Rango `{ fecha_desde, fecha_hasta }` de un período rápido, o `null` si no existe. Los pasados (`semana`, `mes` y
+ * `trimestre`) terminan hoy; los futuros (`proxima-semana`, `proximo-mes` y `proximo-trimestre`) empiezan hoy. En
+ * ambos, hoy queda incluido y la cantidad de días es la del período.
+ */
 export const rangoDelPeriodo = (valor, hoy) => {
   const periodo = PERIODOS_AGENDA.find((candidato) => candidato.valor === valor);
-  const desde = periodo ? sumarDias(hoy, -(periodo.dias - 1)) : null;
-  return desde ? { fecha_desde: desde, fecha_hasta: hoy } : null;
+  if (!periodo) return null;
+  const extremo = sumarDias(hoy, periodo.sentido === SENTIDO_PERIODO.FUTURO ? periodo.dias - 1 : -(periodo.dias - 1));
+  return periodo.sentido === SENTIDO_PERIODO.FUTURO
+    ? { fecha_desde: hoy, fecha_hasta: extremo }
+    : { fecha_desde: extremo, fecha_hasta: hoy };
 };
 
 /** Período rápido que coincide con el rango de los filtros (para marcarlo en el desplegable), o `''` si es un rango a mano. */

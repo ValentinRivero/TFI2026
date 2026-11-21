@@ -3,9 +3,11 @@ import Alerta from '../components/Alerta.jsx';
 import EncabezadoPantalla from '../components/EncabezadoPantalla.jsx';
 import ListaReservas from '../components/ListaReservas.jsx';
 import ModalCancelarReserva from '../components/ModalCancelarReserva.jsx';
+import ModalInformarTransferencia from '../components/ModalInformarTransferencia.jsx';
 import PestanasReservas from '../components/PestanasReservas.jsx';
 import { VIGENCIA_RESERVA } from '../config/catalogos.js';
 import useCancelarReserva from '../hooks/useCancelarReserva.js';
+import useInformarTransferencia from '../hooks/useInformarTransferencia.js';
 import useListaIncremental from '../hooks/useListaIncremental.js';
 import { t } from '../i18n/index.js';
 import { listarMisReservas } from '../services/reservaService.js';
@@ -20,6 +22,7 @@ export default function MisReservas() {
 
   const lista = useListaIncremental((pagina, signal) => listarMisReservas(vigencia, pagina, signal), [vigencia]);
   const cancelacion = useCancelarReserva({ alCancelar: lista.recargar });
+  const transferencia = useInformarTransferencia({ alGuardar: lista.recargar });
 
   const cambiarVista = (valor) => {
     setParametros(valor === VIGENCIA_RESERVA.PASADAS ? { vigencia: valor } : {}, { replace: true });
@@ -32,7 +35,16 @@ export default function MisReservas() {
       {cancelacion.aviso && (
         <Alerta variante="success" onCerrar={cancelacion.descartarAviso}>{cancelacion.aviso}</Alerta>
       )}
-      <ListaReservas lista={lista} vigencia={vigencia} onCancelar={cancelacion.pedir} />
+      {transferencia.aviso && (
+        <Alerta variante="success" onCerrar={transferencia.descartarAviso}>{transferencia.aviso}</Alerta>
+      )}
+      <ListaReservas
+        lista={lista}
+        vigencia={vigencia}
+        onCancelar={cancelacion.pedir}
+        onInformarTransferencia={transferencia.abrir}
+      />
+      <ModalInformarTransferencia formulario={transferencia} />
       <ModalCancelarReserva
         reserva={cancelacion.reserva}
         error={cancelacion.error}

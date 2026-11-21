@@ -1608,7 +1608,8 @@ a {
 
   .tabla-apilable td {
     display: flex;
-    align-items: center;
+    /* Arriba, no al centro: una celda de varias líneas (cliente, precio y pago) no deja su etiqueta flotando al medio */
+    align-items: flex-start;
     justify-content: space-between;
     gap: 1rem;
     padding: 0.4rem 0;
@@ -1623,6 +1624,12 @@ a {
 
   .tabla-apilable td > * {
     min-width: 0;
+  }
+
+  /* El contenido de la celda ocupa el resto de la fila, alineado a la derecha, y nunca la ensancha */
+  .tabla-apilable td > .celda-contenido {
+    flex: 0 1 auto;
+    max-width: 100%;
   }
 
   .tabla-apilable td::before {

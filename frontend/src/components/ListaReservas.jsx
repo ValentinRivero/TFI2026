@@ -11,9 +11,9 @@ import ReservaRow from './ReservaRow.jsx';
 
 /**
  * Reservas de la vista elegida con todos sus estados: carga, error con reintento, vacío y filas con "Mostrar más".
- * `lista` es lo que devuelve `useListaIncremental`; `onCancelar` recibe la reserva que se quiere cancelar.
+ * `lista` es lo que devuelve `useListaIncremental`; `onCancelar` e `onInformarTransferencia` reciben la reserva elegida.
  */
-export default function ListaReservas({ lista, vigencia, onCancelar }) {
+export default function ListaReservas({ lista, vigencia, onCancelar, onInformarTransferencia }) {
   const { items, total, hayMas, cargando, cargandoMas, error, errorMas, cargarMas, recargar } = lista;
   const proximas = vigencia === VIGENCIA_RESERVA.PROXIMAS;
 
@@ -40,7 +40,14 @@ export default function ListaReservas({ lista, vigencia, onCancelar }) {
             {t('misReservas.resumen', { mostradas: items.length, total })}
           </p>
           <div className="d-grid gap-3">
-            {items.map((reserva) => <ReservaRow key={reserva.id} reserva={reserva} onCancelar={onCancelar} />)}
+            {items.map((reserva) => (
+              <ReservaRow
+                key={reserva.id}
+                reserva={reserva}
+                onCancelar={onCancelar}
+                onInformarTransferencia={onInformarTransferencia}
+              />
+            ))}
           </div>
           {errorMas && <Alerta variante="warning" className="mt-3">{t('misReservas.errorMas')} {errorMas.mensaje}</Alerta>}
           {hayMas && (
