@@ -4,9 +4,11 @@ import { t } from '../i18n/index.js';
 import {
   actualizarReservaAgenda,
   cancelarReservaAgenda,
+  confirmarSenaReserva,
   crearReservaManual,
   listarAgenda,
   reabrirReserva,
+  registrarPagoReserva,
 } from '../services/reservaService.js';
 import {
   cambiosAlAlternarRango,
@@ -21,6 +23,7 @@ import {
 } from '../utils/agenda.js';
 import { leerConflictos } from '../utils/conflictos.js';
 import { aFechaIso } from '../utils/formatos.js';
+import { ACCION_COBRO } from '../utils/pagos.js';
 import useBloquesDeCancha from './useBloquesDeCancha.js';
 import useConfirmacion from './useConfirmacion.js';
 import useEnvio from './useEnvio.js';
@@ -137,6 +140,22 @@ export default function useAgenda(complejoId, { habilitado = true } = {}) {
     },
   });
 
+  // Un rechazo del servidor (400: la reserva ya cambió; 404: ya no existe) deja la lista desactualizada: se recarga.
+  const cobro = useConfirmacion(
+    ({ reserva, accion }) => (
+      accion === ACCION_COBRO.SENA ? confirmarSenaReserva(reserva.id) : registrarPagoReserva(reserva.id)
+    ),
+    {
+      alExito: ({ accion }) => {
+        informar(accion === ACCION_COBRO.SENA ? 'pagos.avisoSena' : 'pagos.avisoPago');
+        lista.recargar();
+      },
+      alError: (error) => {
+        if (error.status === 400 || error.status === 404) lista.recargar();
+      },
+    },
+  );
+
   const [reapertura, setReapertura] = useState({ reserva: null, estado: ESTADO_REAPERTURA_INICIAL, conflicto: null });
   const reabrir = useEnvio();
 
@@ -209,6 +228,7 @@ export default function useAgenda(complejoId, { habilitado = true } = {}) {
       enviar: registrar,
     },
     cancelacion,
+    cobro,
     reapertura: {
       ...reapertura,
       error: reabrir.error,

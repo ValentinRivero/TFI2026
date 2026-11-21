@@ -3,6 +3,7 @@ import {
   aParametrosAgenda,
   cambiosAlAlternarRango,
   cuerpoReservaManual,
+  estadosDeReapertura,
   estadosSiguientes,
   fechaInicialDeAlta,
   filtrosAgendaIniciales,
@@ -17,7 +18,10 @@ import {
 } from './agenda.js';
 
 const HOY = '2026-11-12';
-const reserva = (estado, fecha = '2026-11-12', hora = '20:00:00') => ({ estado, fecha_turno: fecha, hora_inicio: hora });
+// Con seña acordada por defecto: sin ella la reserva no admite el estado «Señada».
+const reserva = (estado, fecha = '2026-11-12', hora = '20:00:00', montoSena = '11400.00') => ({
+  estado, fecha_turno: fecha, hora_inicio: hora, monto_sena: montoSena,
+});
 // Las 15:00 del 12/11 en hora local.
 const AHORA = new Date(2026, 10, 12, 15, 0);
 
@@ -230,6 +234,28 @@ describe('estadosSiguientes', () => {
   test('una reserva cancelada no cambia de estado por esta vía', () => {
     expect(estadosSiguientes(reserva(4), AHORA)).toEqual([]);
     expect(estadosSiguientes(reserva(5), AHORA)).toEqual([]);
+  });
+
+  test('sin seña acordada no se ofrece «Señada»: se confirma o se cobra el total', () => {
+    const sinSena = (estado, hora = '20:00:00') => reserva(estado, '2026-11-12', hora, '0.00');
+
+    expect(estadosSiguientes(sinSena(1), AHORA)).toEqual([2]);
+    expect(estadosSiguientes(sinSena(2), AHORA)).toEqual([]);
+    expect(estadosSiguientes(sinSena(1, '14:00:00'), AHORA)).toEqual([2, 6, 7]);
+  });
+
+  test('una señada antigua sin montos conserva sus salidas (ausente y completada)', () => {
+    expect(estadosSiguientes(reserva(3, '2026-11-12', '14:00:00', '0.00'), AHORA)).toEqual([6, 7]);
+  });
+});
+
+describe('estadosDeReapertura', () => {
+  test('con seña ofrece pendiente, confirmada y señada', () => {
+    expect(estadosDeReapertura(reserva(4))).toEqual([1, 2, 3]);
+  });
+
+  test('sin seña no ofrece señada', () => {
+    expect(estadosDeReapertura(reserva(5, '2026-11-12', '20:00:00', '0.00'))).toEqual([1, 2]);
   });
 });
 

@@ -1,11 +1,10 @@
-import { ESTADO_RESERVA, ESTADOS_REAPERTURA, opcionesDe } from '../config/catalogos.js';
+import { ESTADO_RESERVA, opcionesDe } from '../config/catalogos.js';
 import { t } from '../i18n/index.js';
+import { estadosDeReapertura } from '../utils/agenda.js';
 import { formatearFechaLarga, formatearHora } from '../utils/formatos.js';
 import Alerta from './Alerta.jsx';
 import CampoSelect from './CampoSelect.jsx';
 import ModalConfirmar from './ModalConfirmar.jsx';
-
-const OPCIONES = opcionesDe(ESTADO_RESERVA, ESTADOS_REAPERTURA);
 
 /**
  * Primer paso de la reapertura de una reserva cancelada: elegir el estado con el que vuelve a ocupar su turno. Al
@@ -39,7 +38,7 @@ export default function ModalReabrirReserva({ reapertura }) {
             etiqueta={t('agenda.reabrirEstado')}
             valor={estado}
             onCambiar={reapertura.cambiarEstado}
-            opciones={OPCIONES}
+            opciones={opcionesDe(ESTADO_RESERVA, estadosDeReapertura(reserva))}
             className="mb-0"
           />
         </>

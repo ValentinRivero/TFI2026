@@ -1,13 +1,16 @@
 import {
   ESTADOS_QUE_EXIGEN_TURNO_INICIADO,
+  ESTADOS_REAPERTURA,
   ESTADOS_RESERVA_CANCELABLES,
   ESTADOS_RESERVA_CANCELADOS,
   PERIODOS_AGENDA,
+  RESERVA_SENADA,
   TRANSICIONES_AGENDA,
   VISTA_AGENDA,
 } from '../config/catalogos.js';
 import { t } from '../i18n/index.js';
 import { diasEntre, parsearFecha, sumarDias } from './formatos.js';
+import { tieneSena } from './pagos.js';
 import { instanteDelTurno } from './reservas.js';
 
 /** Vista de la agenda que pide la ruta (`?vista=`); un valor desconocido o ausente abre las reservas del día. */
@@ -102,12 +105,19 @@ const yaComenzo = (reserva, ahora) => {
 
 /**
  * Estados a los que se puede pasar una reserva desde la agenda: las transiciones del backend, sin ausente ni
- * completada mientras el turno no empezó. El servidor valida igual: esto solo decide qué se ofrece.
+ * completada mientras el turno no empezó, y sin «Señada» si la reserva no tiene seña acordada. El servidor valida
+ * igual: esto solo decide qué se ofrece.
  */
 export const estadosSiguientes = (reserva, ahora = new Date()) => (
   (TRANSICIONES_AGENDA[reserva.estado] ?? []).filter(
-    (estado) => !ESTADOS_QUE_EXIGEN_TURNO_INICIADO.includes(estado) || yaComenzo(reserva, ahora),
+    (estado) => (!ESTADOS_QUE_EXIGEN_TURNO_INICIADO.includes(estado) || yaComenzo(reserva, ahora))
+      && (estado !== RESERVA_SENADA || tieneSena(reserva)),
   )
+);
+
+/** Estados con los que se puede reabrir una reserva cancelada; «Señada» solo si tiene seña acordada. */
+export const estadosDeReapertura = (reserva) => (
+  ESTADOS_REAPERTURA.filter((estado) => estado !== RESERVA_SENADA || tieneSena(reserva))
 );
 
 /** Una reserva pendiente, confirmada o señada la puede cancelar el complejo sin restricción horaria. */
