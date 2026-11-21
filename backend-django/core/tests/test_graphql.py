@@ -20,7 +20,7 @@ query Catalogo($deporte: Int, $cobertura: Int, $servicio: [Int], $search: String
   ) {
     count
     results {
-      id nombre direccion latitud longitud telefonoContacto horasLimiteCancelacion infoSena precioDesde
+      id nombre direccion latitud longitud telefonoContacto horasLimiteCancelacion infoSena porcentajeSena precioDesde
       servicios { id nombre }
       deportes { id nombre }
     }
@@ -145,6 +145,7 @@ def _a_rest(complejo):
         'telefonoContacto': 'telefono_contacto',
         'horasLimiteCancelacion': 'horas_limite_cancelacion',
         'infoSena': 'info_sena',
+        'porcentajeSena': 'porcentaje_sena',
         'precioDesde': 'precio_desde',
     }
     return {equivalencias.get(clave, clave): valor for clave, valor in complejo.items()}
@@ -239,6 +240,7 @@ query MisReservas($estado: Int, $vigencia: String, $fechaDesde: String, $fechaHa
     count
     results {
       id complejo { id nombre } cancha { id nombre } deporte fechaTurno horaInicio horaFin precioAcordado
+      montoSena montoPagado saldoRestante estadoPago estadoPagoNombre datosTransferencia { alias titular }
       tipoOcupacion tipoOcupacionNombre estado estadoNombre cancelableHasta fechaCreacion
     }
   }
@@ -247,7 +249,9 @@ query MisReservas($estado: Int, $vigencia: String, $fechaDesde: String, $fechaHa
 URL_REST_MIAS = '/api/reservas/mias/'
 EQUIVALENCIAS_RESERVA = {
     'fechaTurno': 'fecha_turno', 'horaInicio': 'hora_inicio', 'horaFin': 'hora_fin',
-    'precioAcordado': 'precio_acordado', 'tipoOcupacion': 'tipo_ocupacion',
+    'precioAcordado': 'precio_acordado', 'tipoOcupacion': 'tipo_ocupacion', 'montoSena': 'monto_sena',
+    'montoPagado': 'monto_pagado', 'saldoRestante': 'saldo_restante', 'estadoPago': 'estado_pago',
+    'estadoPagoNombre': 'estado_pago_nombre', 'datosTransferencia': 'datos_transferencia',
     'tipoOcupacionNombre': 'tipo_ocupacion_nombre', 'estadoNombre': 'estado_nombre',
     'cancelableHasta': 'cancelable_hasta', 'fechaCreacion': 'fecha_creacion',
 }
@@ -380,6 +384,7 @@ mutation CrearReserva($cancha: Int!, $fechaTurno: String!, $horaInicio: String!)
   crearReserva(cancha: $cancha, fechaTurno: $fechaTurno, horaInicio: $horaInicio) {
     reserva {
       id complejo { id nombre } cancha { id nombre } deporte fechaTurno horaInicio horaFin precioAcordado
+      montoSena montoPagado saldoRestante estadoPago estadoPagoNombre datosTransferencia { alias titular }
       tipoOcupacion tipoOcupacionNombre estado estadoNombre cancelableHasta fechaCreacion
     }
   }

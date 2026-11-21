@@ -763,6 +763,8 @@ class AgendaViewSet(AccesoComplejoMixin, mixins.ListModelMixin, mixins.RetrieveM
         'partial_update': ('gestionar_agenda',),
         'cancelar': ('cancelar_reserva_complejo',),
         'reabrir': ('gestionar_agenda',),
+        'confirmar_sena': ('gestionar_agenda',),
+        'registrar_pago': ('gestionar_agenda',),
     }
     campo_complejo = 'cancha__complejo'
     lookup_value_regex = r'\d+'
@@ -802,6 +804,20 @@ class AgendaViewSet(AccesoComplejoMixin, mixins.ListModelMixin, mixins.RetrieveM
     @action(detail=True, methods=['post'])
     def cancelar(self, request, pk=None):
         reserva = ReservaService.cancelar_por_complejo(
+            self.get_object().pk, request.user, AuditoriaService.ip_de_request(request),
+        )
+        return Response(ReservaAgendaSerializer(reserva).data)
+
+    @action(detail=True, methods=['post'], url_path='confirmar-sena')
+    def confirmar_sena(self, request, pk=None):
+        reserva = ReservaService.confirmar_sena(
+            self.get_object().pk, request.user, AuditoriaService.ip_de_request(request),
+        )
+        return Response(ReservaAgendaSerializer(reserva).data)
+
+    @action(detail=True, methods=['post'], url_path='registrar-pago')
+    def registrar_pago(self, request, pk=None):
+        reserva = ReservaService.registrar_pago_total(
             self.get_object().pk, request.user, AuditoriaService.ip_de_request(request),
         )
         return Response(ReservaAgendaSerializer(reserva).data)
