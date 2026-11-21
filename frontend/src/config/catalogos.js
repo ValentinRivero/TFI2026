@@ -22,7 +22,19 @@ export const ESTADO_RESERVA = Object.freeze({
   7: entrada('Completada', ok),
 });
 
+export const RESERVA_PENDIENTE = 1;
 export const RESERVA_SENADA = 3;
+
+/** Una reserva pendiente que no exige seña no está "pendiente de seña": solo espera la confirmación del complejo. */
+export const ESTADO_PENDIENTE_SIN_SENA = entrada('Pendiente', aviso);
+
+/** Seguimiento del cobro de una reserva (espejo de `EstadoPago` de Django): se deduce de los montos, no se guarda. */
+export const ESTADO_PAGO = Object.freeze({
+  1: entrada('Sin seña', neutro),
+  2: entrada('Seña pendiente', aviso),
+  3: entrada('Seña abonada', info),
+  4: entrada('Pagada', ok),
+});
 
 /** Estados de una reserva cancelada (por el jugador o por el complejo); solo estas se reabren. */
 export const ESTADOS_RESERVA_CANCELADOS = Object.freeze([4, 5]);
@@ -256,6 +268,7 @@ export const TIPO_EVENTO_AUDITORIA = Object.freeze({
   15: entrada('Aceptación de la política', ok),
   16: entrada('Cambio de usuario', aviso),
   17: entrada('Cambio de catálogo', aviso),
+  18: entrada('Cobro de reserva', ok),
 });
 
 export const CATEGORIA_NOTIFICACION = Object.freeze({

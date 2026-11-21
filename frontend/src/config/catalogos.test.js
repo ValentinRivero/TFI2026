@@ -20,11 +20,11 @@ describe('tipos de evento de auditoría', () => {
     const opciones = opcionesDe(TIPO_EVENTO_AUDITORIA);
 
     expect(opciones).toContainEqual({ valor: '17', etiqueta: 'Cambio de catálogo' });
-    expect(opciones).toHaveLength(17);
+    expect(opciones).toHaveLength(18);
   });
 
-  test('cubre todos los códigos del 1 al 17 sin saltos', () => {
-    expect(Object.keys(TIPO_EVENTO_AUDITORIA).map(Number)).toEqual(Array.from({ length: 17 }, (_, i) => i + 1));
+  test('cubre todos los códigos del 1 al 18 sin saltos', () => {
+    expect(Object.keys(TIPO_EVENTO_AUDITORIA).map(Number)).toEqual(Array.from({ length: 18 }, (_, i) => i + 1));
   });
 });
 
