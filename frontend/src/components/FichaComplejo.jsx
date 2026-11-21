@@ -1,14 +1,15 @@
 import { t } from '../i18n/index.js';
+import CondicionesSena from './CondicionesSena.jsx';
 
 /** Datos comerciales del complejo: condiciones de seña, margen de cancelación, servicios y teléfono de contacto. */
 export default function FichaComplejo({ complejo }) {
-  const { telefono_contacto: telefono, info_sena: sena, horas_limite_cancelacion: horas, servicios } = complejo;
+  const { telefono_contacto: telefono, horas_limite_cancelacion: horas, servicios } = complejo;
 
   return (
     <section className="superficie p-3 h-100" aria-label={t('complejo.datos')}>
       <dl className="mb-0">
         <dt className="h6">{t('complejo.sena')}</dt>
-        <dd className="texto-multilinea">{sena || <span className="text-secondary">{t('complejo.senaVacia')}</span>}</dd>
+        <dd><CondicionesSena complejo={complejo} /></dd>
 
         <dt className="h6">{t('complejo.cancelacion')}</dt>
         <dd>{horas > 0 ? t('complejo.cancelacionHoras', { horas }) : t('complejo.cancelacionHasta')}</dd>

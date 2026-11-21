@@ -15,7 +15,8 @@ export const RESULTADO_RESERVA = Object.freeze({ CREADA: 'creada', OCUPADO: 'ocu
  *   (`{ fecha, canchaId, horaInicio }`) reabre la confirmación de ese mismo turno si sigue libre.
  * - Con sesión, `abrir` muestra la confirmación y `confirmar` crea la reserva. Un 409 (el turno acaba de ocuparse)
  *   limpia la selección y pide recargar la grilla; el resto de los errores quedan en `error`, dentro de la confirmación.
- * - `resultado` es el aviso de lo último que pasó (`CREADA` u `OCUPADO`) hasta que se descarte.
+ * - `resultado` es el aviso de lo último que pasó (`CREADA`, con la reserva creada y sus datos de transferencia, u
+ *   `OCUPADO`) hasta que se descarte.
  * `alCambiarGrilla` recarga la grilla cuando el turno cambió de estado.
  */
 export default function useReservaTurno({ complejoId, fecha, turno, alCambiarGrilla, retomar = null }) {
@@ -55,8 +56,9 @@ export default function useReservaTurno({ complejoId, fecha, turno, alCambiarGri
   const confirmar = async () => {
     if (!turno.vigente) return;
     setEstado((actual) => ({ ...actual, error: null }));
+    let reserva;
     try {
-      await crearReserva({ canchaId: turno.cancha.id, fechaTurno: fecha, horaInicio: turno.bloque.hora_inicio });
+      reserva = await crearReserva({ canchaId: turno.cancha.id, fechaTurno: fecha, horaInicio: turno.bloque.hora_inicio });
     } catch (falla) {
       if (falla.status === 409) {
         cerrar();
@@ -70,7 +72,7 @@ export default function useReservaTurno({ complejoId, fecha, turno, alCambiarGri
     }
     cerrar();
     turno.quitar();
-    setResultado({ tipo: RESULTADO_RESERVA.CREADA });
+    setResultado({ tipo: RESULTADO_RESERVA.CREADA, reserva });
     alCambiarGrilla();
   };
 
