@@ -4,6 +4,7 @@ import {
   resolverComplejoActivo,
   serviciosModificados,
   validarConfiguracion,
+  validarConfiguracionConSena,
   valoresDeComplejo,
 } from './complejo.js';
 
@@ -16,6 +17,10 @@ const complejo = {
   telefono_contacto: '3777 001234',
   horas_limite_cancelacion: 4,
   info_sena: '',
+  porcentaje_sena: 0,
+  alias_transferencia: '',
+  titular_transferencia: '',
+  cbu_cvu_transferencia: '',
 };
 
 describe('resolverComplejoActivo', () => {
@@ -119,5 +124,73 @@ describe('serviciosModificados', () => {
     expect(serviciosModificados([1, 2], [1])).toBe(true);
     expect(serviciosModificados([1], [1, 3])).toBe(true);
     expect(serviciosModificados([1, 2], [1, 3])).toBe(true);
+  });
+});
+
+describe('seña y datos de transferencia', () => {
+  const conSena = { ...complejo, porcentaje_sena: 30, alias_transferencia: 'YACARE.SENA', titular_transferencia: 'Yacaré Deportes' };
+
+  test('los valores del formulario incluyen porcentaje, alias y titular como texto', () => {
+    const valores = valoresDeComplejo(conSena);
+
+    expect(valores).toMatchObject({ porcentaje_sena: '30', alias_transferencia: 'YACARE.SENA', titular_transferencia: 'Yacaré Deportes' });
+    expect(valoresDeComplejo(complejo)).toMatchObject({ porcentaje_sena: '0', alias_transferencia: '', titular_transferencia: '' });
+  });
+
+  test('el porcentaje viaja como entero y el alias normalizado en mayúsculas', () => {
+    const valores = { ...valoresDeComplejo(complejo), porcentaje_sena: '25', alias_transferencia: ' mi.alias-ok ' };
+
+    expect(cuerpoConfiguracion(valores, complejo)).toEqual({ porcentaje_sena: 25, alias_transferencia: 'MI.ALIAS-OK' });
+  });
+
+  test('un alias que solo difiere en mayúsculas del guardado se envía normalizado', () => {
+    const valores = { ...valoresDeComplejo(conSena), alias_transferencia: 'yacare.sena' };
+
+    expect(cuerpoConfiguracion(valores, conSena)).toEqual({ alias_transferencia: 'YACARE.SENA' });
+  });
+
+  test('quitar la seña envía porcentaje 0 y el alias vacío', () => {
+    const valores = { ...valoresDeComplejo(conSena), porcentaje_sena: '0', alias_transferencia: '' };
+
+    expect(cuerpoConfiguracion(valores, conSena)).toEqual({ porcentaje_sena: 0, alias_transferencia: '' });
+  });
+
+  test('la validación del perfil no pide seña, pero la de configuración sí valida su alias', () => {
+    const valores = { ...valoresDeComplejo(complejo), porcentaje_sena: '30', alias_transferencia: '' };
+
+    expect(validarConfiguracion(valores)).toEqual({});
+    expect(Object.keys(validarConfiguracionConSena(valores))).toEqual(['alias_transferencia']);
+  });
+
+  test('un complejo sin seña ni alias es válido', () => {
+    expect(validarConfiguracionConSena(valoresDeComplejo(complejo))).toEqual({});
+  });
+});
+
+describe('CBU o CVU del complejo', () => {
+  const CBU = '0000000000000000123459';
+
+  test('el valor del formulario parte del guardado y vacío si no hay', () => {
+    expect(valoresDeComplejo({ ...complejo, cbu_cvu_transferencia: CBU }).cbu_cvu_transferencia).toBe(CBU);
+    expect(valoresDeComplejo(complejo).cbu_cvu_transferencia).toBe('');
+  });
+
+  test('viaja solo con dígitos aunque se haya pegado con espacios o guiones', () => {
+    const valores = { ...valoresDeComplejo(complejo), cbu_cvu_transferencia: '0000 0000-0000 0000-1234 59' };
+
+    expect(cuerpoConfiguracion(valores, complejo)).toEqual({ cbu_cvu_transferencia: CBU });
+  });
+
+  test('se puede borrar', () => {
+    const guardado = { ...complejo, cbu_cvu_transferencia: CBU };
+    const valores = { ...valoresDeComplejo(guardado), cbu_cvu_transferencia: '' };
+
+    expect(cuerpoConfiguracion(valores, guardado)).toEqual({ cbu_cvu_transferencia: '' });
+  });
+
+  test('un CBU con un dígito verificador incorrecto bloquea el guardado', () => {
+    const valores = { ...valoresDeComplejo(complejo), cbu_cvu_transferencia: '0000000000000000123450' };
+
+    expect(Object.keys(validarConfiguracionConSena(valores))).toEqual(['cbu_cvu_transferencia']);
   });
 });

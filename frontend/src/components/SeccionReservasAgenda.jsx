@@ -1,21 +1,24 @@
 import Button from 'react-bootstrap/Button';
 import { t } from '../i18n/index.js';
-import { formatearFechaLarga, formatearHora } from '../utils/formatos.js';
+import { formatearFechaLarga, formatearHora, formatearPrecio } from '../utils/formatos.js';
 import Alerta from './Alerta.jsx';
 import ConfirmarConflicto from './ConfirmarConflicto.jsx';
 import FiltrosAgenda from './FiltrosAgenda.jsx';
 import FormularioReservaManual from './FormularioReservaManual.jsx';
+import ModalCobroReserva from './ModalCobroReserva.jsx';
 import ModalConfirmarAccion from './ModalConfirmarAccion.jsx';
+import ModalObservaciones from './ModalObservaciones.jsx';
+import ModalRechazarTransferencia from './ModalRechazarTransferencia.jsx';
 import ModalReabrirReserva from './ModalReabrirReserva.jsx';
 import TablaAgenda from './TablaAgenda.jsx';
 import VistaPreviaCambio from './VistaPreviaCambio.jsx';
 
 /**
  * Pestaña "Reservas" de la agenda (presentación): avisos, alta manual, filtros, tabla paginada y los diálogos
- * de cancelación y reapertura. `agenda` es lo que devuelve `useAgenda` y `canchas`, `[{ id, nombre }]` del complejo.
+ * de cobro, rechazo de transferencia, anulación de cobro, observaciones, cancelación y reapertura. `agenda` es lo que devuelve `useAgenda` y `canchas`, `[{ id, nombre }]` del complejo.
  */
 export default function SeccionReservasAgenda({ agenda, canchas }) {
-  const { alta, cancelacion, reapertura } = agenda;
+  const { alta, anulacion, cancelacion, cobro, observaciones, rechazo, reapertura } = agenda;
   const reserva = cancelacion.objetivo;
 
   return (
@@ -47,7 +50,32 @@ export default function SeccionReservasAgenda({ agenda, canchas }) {
         onCambiarEstado={agenda.cambiarEstado}
         onCancelar={cancelacion.pedir}
         onReabrir={reapertura.pedir}
+        onCobrar={(reserva, accion) => cobro.pedir({ reserva, accion })}
+        onEditarObservaciones={observaciones.abrir}
+        onRechazarTransferencia={rechazo.abrir}
+        onAnularCobro={anulacion.pedir}
+        puedeAnularCobro={agenda.puedeAnularCobro}
       />
+
+      <ModalRechazarTransferencia formulario={rechazo} />
+      <ModalConfirmarAccion
+        abierto={Boolean(anulacion.objetivo)}
+        titulo={t('pagos.anularTitulo')}
+        texto={anulacion.objetivo ? t('pagos.anularTexto', {
+          monto: formatearPrecio(anulacion.objetivo.monto_pagado),
+          fecha: formatearFechaLarga(anulacion.objetivo.fecha_turno),
+          hora: formatearHora(anulacion.objetivo.hora_inicio),
+          cancha: anulacion.objetivo.cancha_nombre,
+        }) : ''}
+        error={anulacion.error}
+        textoConfirmar={t('pagos.anularCobro')}
+        onConfirmar={anulacion.confirmar}
+        onCancelar={anulacion.cerrar}
+      />
+
+      <ModalObservaciones edicion={observaciones} />
+
+      <ModalCobroReserva cobro={cobro} />
 
       <ModalConfirmarAccion
         abierto={Boolean(reserva)}

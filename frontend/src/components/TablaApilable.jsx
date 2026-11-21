@@ -24,7 +24,15 @@ export default function TablaApilable({ columnas, etiqueta, children }) {
   );
 }
 
-/** Celda de una fila de `TablaApilable`: `etiqueta` es la de su columna, que se ve en la vista apilada. */
+/**
+ * Celda de una fila de `TablaApilable`: `etiqueta` es la de su columna, que se ve en la vista apilada. El contenido va
+ * en un único bloque para que, en esa vista, la celda sea «etiqueta + contenido» aunque tenga varias líneas (cliente,
+ * precio y pago, estado) y no se repartan en columnas angostas.
+ */
 export function CeldaTabla({ etiqueta, className = '', children }) {
-  return <td data-etiqueta={etiqueta} className={className}>{children}</td>;
+  return (
+    <td data-etiqueta={etiqueta} className={className}>
+      <div className="celda-contenido">{children}</div>
+    </td>
+  );
 }

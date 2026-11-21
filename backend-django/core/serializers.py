@@ -10,24 +10,35 @@ from .models import (
     HORAS_CANCELACION_DEFECTO,
     HORAS_CANCELACION_MAXIMAS,
     LARGO_DESCRIPCION_ROL,
+    LARGO_ALIAS_MAXIMO,
+    LARGO_ALIAS_MINIMO,
+    LARGO_CBU,
     LARGO_DIRECCION,
     LARGO_EMAIL,
     LARGO_INFO_SENA,
     LARGO_MINIMO_NOMBRE,
+    LARGO_MINIMO_PAGADOR,
+    LARGO_MINIMO_REFERENCIA,
     LARGO_NOMBRE,
+    LARGO_NOTA_RECHAZO,
     LARGO_NOMBRE_CANCHA,
     LARGO_NOMBRE_DEPORTE,
     LARGO_NOMBRE_ROL,
     LARGO_NOMBRE_SERVICIO,
+    LARGO_PAGADOR_TRANSFERENCIA,
+    LARGO_REFERENCIA_TRANSFERENCIA,
     LARGO_TELEFONO,
     LARGO_TEXTO_LIBRE,
+    LARGO_TITULAR_TRANSFERENCIA,
     LATITUD_MAXIMA,
     LONGITUD_MAXIMA,
+    PORCENTAJE_SENA_MAXIMO,
     AlcanceExcepcion,
     Cancha,
     Complejo,
     EstadoCancha,
     EstadoContrato,
+    EstadoPago,
     EstadoRegistro,
     EstadoReserva,
     EstadoTurnoFijo,
@@ -35,6 +46,7 @@ from .models import (
     ExcepcionHoraria,
     HorarioApertura,
     LogAuditoria,
+    MotivoRechazoTransferencia,
     Reserva,
     TipoEventoAuditoria,
     TipoMotivoExcepcion,
@@ -46,6 +58,7 @@ from .services import (
     ACCION_CANCELAR_FECHA,
     ACCION_MANTENER_FECHA,
     CRITERIOS_REPORTE,
+    ESTADOS_RESERVA_SENABLES,
     ROLES_BASE,
     ConflictoOperatoriaService,
     ReservaService,
@@ -60,6 +73,26 @@ MENSAJE_TELEFONO = 'Ingresá un teléfono válido: solo números, espacios, guio
 MENSAJE_SIN_CAMPOS = 'Indicá al menos uno de los campos editables.'
 # Nombre de persona: letras de cualquier idioma, espacios, apóstrofes, guiones y puntos ("María José", "O'Brien", "Jr.").
 PATRON_NOMBRE_PERSONA = re.compile(r"^(?:[^\W\d_]|[ '’.\-])+$")
+# Alias de CBU/CVU: entre 6 y 20 caracteres, solo letras, números, puntos y guiones, sin espacios. Se guarda en mayúsculas.
+PATRON_ALIAS = re.compile(rf'^[A-Z0-9.\-]{{{LARGO_ALIAS_MINIMO},{LARGO_ALIAS_MAXIMO}}}$')
+MENSAJE_ALIAS = (
+    f'Ingresá un alias válido: entre {LARGO_ALIAS_MINIMO} y {LARGO_ALIAS_MAXIMO} caracteres, solo letras, números, '
+    'puntos y guiones, sin espacios.'
+)
+# Quien transfirió puede ser una persona o una razón social: letras, números, espacios y . , & ' -.
+PATRON_PAGADOR = re.compile(r"^[\w .,&'’\-]+$")
+MENSAJE_PAGADOR = (
+    f'Ingresá el nombre de quien transfirió: entre {LARGO_MINIMO_PAGADOR} y {LARGO_PAGADOR_TRANSFERENCIA} caracteres, '
+    'solo letras, números, espacios y . , & \' -.'
+)
+# Número de operación: letras, números y . _ / - sin espacios, empezando por una letra o un número.
+PATRON_REFERENCIA = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._/\-]*$')
+MENSAJE_REFERENCIA = (
+    f'Ingresá el número de operación: entre {LARGO_MINIMO_REFERENCIA} y {LARGO_REFERENCIA_TRANSFERENCIA} caracteres, '
+    'solo letras, números y . _ / - sin espacios.'
+)
+MENSAJE_CBU_LARGO = f'Ingresá los {LARGO_CBU} dígitos del CBU o CVU, solo números.'
+MENSAJE_CBU_VERIFICADOR = 'El CBU o CVU no es válido: revisá los dígitos, porque los verificadores no coinciden.'
 MENSAJE_NOMBRE_PERSONA = (
     'Ingresá un nombre válido: solo letras, espacios, apóstrofes, guiones y puntos, '
     f'entre {LARGO_MINIMO_NOMBRE} y {LARGO_NOMBRE} caracteres.'
@@ -89,6 +122,51 @@ def validar_telefono(valor):
     return valor
 
 
+def _digito_verificador(digitos, pesos):
+    return (10 - sum(int(digito) * peso for digito, peso in zip(digitos, pesos)) % 10) % 10
+
+
+def validar_cbu(valor):
+    """
+    Normaliza un CBU o CVU (se descartan espacios y guiones al pegarlo) y exige 22 dígitos con sus dos dígitos
+    verificadores correctos: un error de tipeo mandaría las transferencias a otra cuenta. Vacío lo borra.
+    """
+    valor = re.sub(r'[\s-]', '', valor)
+    if not valor:
+        return valor
+    if not re.fullmatch(rf'\d{{{LARGO_CBU}}}', valor):
+        raise serializers.ValidationError(MENSAJE_CBU_LARGO)
+    primero = _digito_verificador(valor[:7], (7, 1, 3, 9, 7, 1, 3))
+    segundo = _digito_verificador(valor[8:21], (3, 9, 7, 1, 3, 9, 7, 1, 3, 9, 7, 1, 3))
+    if primero != int(valor[7]) or segundo != int(valor[21]):
+        raise serializers.ValidationError(MENSAJE_CBU_VERIFICADOR)
+    return valor
+
+
+def validar_alias(valor):
+    """Normaliza a mayúsculas y exige el formato de alias bancario o de billetera virtual; vacío limpia el alias."""
+    valor = valor.upper()
+    if valor and not PATRON_ALIAS.match(valor):
+        raise serializers.ValidationError(MENSAJE_ALIAS)
+    return valor
+
+
+def validar_pagador(valor):
+    """Colapsa los espacios y exige al menos dos letras y solo los caracteres de un nombre o una razón social."""
+    valor = ' '.join(unicodedata.normalize('NFC', valor).split())
+    letras = sum(caracter.isalpha() for caracter in valor)
+    if letras < LARGO_MINIMO_PAGADOR or not PATRON_PAGADOR.match(valor):
+        raise serializers.ValidationError(MENSAJE_PAGADOR)
+    return valor
+
+
+def validar_referencia(valor):
+    valor = ' '.join(valor.split())
+    if not PATRON_REFERENCIA.match(valor):
+        raise serializers.ValidationError(MENSAJE_REFERENCIA)
+    return valor
+
+
 def validar_nombre_persona(valor):
     """Normaliza (acentos compuestos y espacios repetidos) y exige un nombre de persona sin dígitos, símbolos ni emojis."""
     valor = ' '.join(unicodedata.normalize('NFC', valor).split())
@@ -104,6 +182,26 @@ class TextoLimpioField(serializers.CharField):
         if valor == '' and not self.allow_blank:
             self.fail('blank')
         return valor
+
+
+class AliasField(TextoLimpioField):
+    def to_internal_value(self, data):
+        return validar_alias(super().to_internal_value(data))
+
+
+class PagadorField(TextoLimpioField):
+    def to_internal_value(self, data):
+        return validar_pagador(super().to_internal_value(data))
+
+
+class ReferenciaField(TextoLimpioField):
+    def to_internal_value(self, data):
+        return validar_referencia(super().to_internal_value(data))
+
+
+class CbuField(TextoLimpioField):
+    def to_internal_value(self, data):
+        return validar_cbu(super().to_internal_value(data))
 
 
 class NombrePersonaField(TextoLimpioField):
@@ -382,6 +480,7 @@ class ComplejoCatalogoSerializer(serializers.ModelSerializer):
             'telefono_contacto',
             'horas_limite_cancelacion',
             'info_sena',
+            'porcentaje_sena',
             'precio_desde',
             'servicios',
             'deportes',
@@ -436,6 +535,10 @@ class ComplejoAdminSerializer(serializers.ModelSerializer):
             'telefono_contacto',
             'horas_limite_cancelacion',
             'info_sena',
+            'porcentaje_sena',
+            'alias_transferencia',
+            'titular_transferencia',
+            'cbu_cvu_transferencia',
             'estado_contrato',
             'estado_contrato_nombre',
             'propietario',
@@ -456,6 +559,10 @@ class ComplejoConfiguracionSerializer(serializers.Serializer):
     telefono_contacto = TelefonoField(max_length=LARGO_TELEFONO, required=False, allow_blank=True)
     horas_limite_cancelacion = serializers.IntegerField(min_value=0, max_value=HORAS_CANCELACION_MAXIMAS, required=False)
     info_sena = TextoLimpioField(max_length=LARGO_INFO_SENA, required=False, allow_blank=True)
+    porcentaje_sena = serializers.IntegerField(min_value=0, max_value=PORCENTAJE_SENA_MAXIMO, required=False)
+    alias_transferencia = AliasField(max_length=LARGO_ALIAS_MAXIMO, required=False, allow_blank=True)
+    titular_transferencia = TextoLimpioField(max_length=LARGO_TITULAR_TRANSFERENCIA, required=False, allow_blank=True)
+    cbu_cvu_transferencia = CbuField(max_length=LARGO_CBU, required=False, allow_blank=True)
 
     def validate(self, attrs):
         return _exigir_algun_campo(attrs)
@@ -772,9 +879,31 @@ class ReservaManualSerializer(ReservaAltaSerializer):
     observaciones = TextoLimpioField(max_length=LARGO_TEXTO_LIBRE, allow_blank=True, default='')
 
 
+class RechazoTransferenciaSerializer(serializers.Serializer):
+    """Motivo de la lista y una nota corta opcional (se limpia de HTML) que ve el jugador en su reserva."""
+
+    motivo = serializers.ChoiceField(choices=MotivoRechazoTransferencia.choices)
+    nota = TextoLimpioField(max_length=LARGO_NOTA_RECHAZO, required=False, allow_blank=True, default='')
+
+
+class TransferenciaInformadaSerializer(serializers.Serializer):
+    """Quién transfirió la seña y el número de operación; ambos se limpian de HTML y se les colapsan los espacios."""
+
+    titular = PagadorField(max_length=LARGO_PAGADOR_TRANSFERENCIA)
+    referencia = ReferenciaField(max_length=LARGO_REFERENCIA_TRANSFERENCIA)
+
+    def validate_referencia(self, valor):
+        if len(valor) < LARGO_MINIMO_REFERENCIA:
+            raise serializers.ValidationError(MENSAJE_REFERENCIA)
+        return valor
+
+
 ESTADOS_RESERVA_EDITABLES = [
     (valor, etiqueta) for valor, etiqueta in EstadoReserva.choices
-    if valor in (EstadoReserva.CONFIRMADA, EstadoReserva.SENADA, EstadoReserva.AUSENTE, EstadoReserva.COMPLETADA)
+    if valor in (
+        EstadoReserva.PENDIENTE, EstadoReserva.CONFIRMADA, EstadoReserva.SENADA, EstadoReserva.AUSENTE,
+        EstadoReserva.COMPLETADA,
+    )
 ]
 
 
@@ -824,8 +953,57 @@ class ReservaAgendaEdicionSerializer(CamposInmutablesMixin, serializers.Serializ
         return _exigir_algun_campo(self.descartar_inmutables(attrs))
 
 
-class ReservaPropiaSerializer(serializers.ModelSerializer):
-    """Vista del jugador: no incluye las observaciones internas del complejo."""
+CAMPOS_DE_PAGO = (
+    'precio_acordado',
+    'monto_sena',
+    'monto_pagado',
+    'saldo_restante',
+    'estado_pago',
+    'estado_pago_nombre',
+    'transferencia_informada',
+    'transferencia_rechazada',
+    'transferencia',
+)
+
+
+class PagoReservaSerializer(serializers.ModelSerializer):
+    """Montos congelados al reservar y estado de pago deducido de ellos; lo comparten el jugador y el personal."""
+
+    saldo_restante = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    estado_pago = serializers.IntegerField(read_only=True)
+    estado_pago_nombre = serializers.SerializerMethodField()
+    transferencia_informada = serializers.BooleanField(read_only=True)
+    transferencia_rechazada = serializers.BooleanField(read_only=True)
+    transferencia = serializers.SerializerMethodField()
+
+    def get_estado_pago_nombre(self, reserva):
+        return EstadoPago(reserva.estado_pago).label
+
+    def get_transferencia(self, reserva):
+        """Lo que el jugador informó al transferir la seña; solo lo ven el titular y el personal de ese complejo."""
+        if not reserva.transferencia_informada:
+            return None
+        rechazo = None
+        if reserva.transferencia_rechazada:
+            rechazo = {
+                'motivo': reserva.transferencia_motivo_rechazo,
+                'motivo_nombre': MotivoRechazoTransferencia(reserva.transferencia_motivo_rechazo).label,
+                'nota': reserva.transferencia_nota_rechazo,
+                'rechazada_en': serializers.DateTimeField().to_representation(reserva.transferencia_rechazada_en),
+            }
+        return {
+            'titular': reserva.transferencia_titular,
+            'referencia': reserva.transferencia_referencia,
+            'informada_en': serializers.DateTimeField().to_representation(reserva.transferencia_informada_en),
+            'rechazo': rechazo,
+        }
+
+
+class ReservaPropiaSerializer(PagoReservaSerializer):
+    """
+    Vista del jugador: no incluye las observaciones internas del complejo. Los datos de transferencia del complejo
+    solo viajan mientras la seña está pendiente: es lo único para lo que el jugador los necesita.
+    """
 
     complejo = serializers.SerializerMethodField()
     cancha = serializers.SerializerMethodField()
@@ -833,6 +1011,7 @@ class ReservaPropiaSerializer(serializers.ModelSerializer):
     estado_nombre = serializers.CharField(source='get_estado_display', read_only=True)
     tipo_ocupacion_nombre = serializers.CharField(source='get_tipo_ocupacion_display', read_only=True)
     cancelable_hasta = serializers.SerializerMethodField()
+    datos_transferencia = serializers.SerializerMethodField()
 
     class Meta:
         model = Reserva
@@ -844,7 +1023,8 @@ class ReservaPropiaSerializer(serializers.ModelSerializer):
             'fecha_turno',
             'hora_inicio',
             'hora_fin',
-            'precio_acordado',
+            *CAMPOS_DE_PAGO,
+            'datos_transferencia',
             'tipo_ocupacion',
             'tipo_ocupacion_nombre',
             'estado',
@@ -863,6 +1043,16 @@ class ReservaPropiaSerializer(serializers.ModelSerializer):
     def get_cancelable_hasta(self, reserva):
         return serializers.DateTimeField().to_representation(ReservaService.limite_de_cancelacion(reserva))
 
+    def get_datos_transferencia(self, reserva):
+        if reserva.estado not in ESTADOS_RESERVA_SENABLES or reserva.estado_pago != EstadoPago.SENA_PENDIENTE:
+            return None
+        complejo = reserva.cancha.complejo
+        return {
+            'alias': complejo.alias_transferencia,
+            'titular': complejo.titular_transferencia,
+            'cbu': complejo.cbu_cvu_transferencia,
+        }
+
 
 TITULAR_DADO_DE_BAJA = 'Titular dado de baja'
 
@@ -880,7 +1070,7 @@ def _datos_de_contacto(ocupacion):
     return {'nombre': nombre, 'telefono': ocupacion.telefono_cliente_manual, 'email': None}
 
 
-class ReservaAgendaSerializer(serializers.ModelSerializer):
+class ReservaAgendaSerializer(PagoReservaSerializer):
     """Vista del personal del complejo: incluye los datos de contacto que necesita la operatoria del predio."""
 
     complejo = serializers.IntegerField(source='cancha.complejo_id', read_only=True)
@@ -889,6 +1079,9 @@ class ReservaAgendaSerializer(serializers.ModelSerializer):
     tipo_ocupacion_nombre = serializers.CharField(source='get_tipo_ocupacion_display', read_only=True)
     cliente = serializers.SerializerMethodField()
     conflicto_operatoria = serializers.SerializerMethodField()
+    puede_confirmar_sena = serializers.SerializerMethodField()
+    puede_registrar_pago = serializers.SerializerMethodField()
+    puede_anular_cobro = serializers.SerializerMethodField()
 
     class Meta:
         model = Reserva
@@ -900,7 +1093,10 @@ class ReservaAgendaSerializer(serializers.ModelSerializer):
             'fecha_turno',
             'hora_inicio',
             'hora_fin',
-            'precio_acordado',
+            *CAMPOS_DE_PAGO,
+            'puede_confirmar_sena',
+            'puede_registrar_pago',
+            'puede_anular_cobro',
             'tipo_ocupacion',
             'tipo_ocupacion_nombre',
             'turno_fijo',
@@ -916,6 +1112,15 @@ class ReservaAgendaSerializer(serializers.ModelSerializer):
 
     def get_cliente(self, reserva):
         return _datos_de_contacto(reserva)
+
+    def get_puede_confirmar_sena(self, reserva):
+        return ReservaService.motivo_sena_no_registrable(reserva) is None
+
+    def get_puede_registrar_pago(self, reserva):
+        return ReservaService.motivo_pago_no_registrable(reserva) is None
+
+    def get_puede_anular_cobro(self, reserva):
+        return reserva.monto_pagado > 0
 
     def get_conflicto_operatoria(self, reserva):
         # El listado de la agenda lo trae anotado en SQL; una reserva suelta (alta, cambio de estado) se evalúa acá.

@@ -1,6 +1,8 @@
 from datetime import time, timedelta
 from unittest import mock
 
+from decimal import Decimal
+
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -45,7 +47,9 @@ def cancha(complejo, crear_cancha, crear_horario):
 
 @pytest.fixture
 def cancelada(crear_reserva, cancha):
-    return crear_reserva(cancha, MARTES, time(20, 0), time(21, 0), estado=EstadoReserva.CANCELADA_COMPLEJO)
+    return crear_reserva(
+        cancha, MARTES, time(20, 0), time(21, 0), estado=EstadoReserva.CANCELADA_COMPLEJO, monto_sena=Decimal('11400.00'),
+    )
 
 
 def _reabrir(api, reserva, **datos):

@@ -1,13 +1,18 @@
 import {
   ESTADOS_QUE_EXIGEN_TURNO_INICIADO,
+  ESTADOS_REAPERTURA,
   ESTADOS_RESERVA_CANCELABLES,
   ESTADOS_RESERVA_CANCELADOS,
   PERIODOS_AGENDA,
+  RESERVA_SENADA,
+  SENTIDO_PERIODO,
   TRANSICIONES_AGENDA,
   VISTA_AGENDA,
 } from '../config/catalogos.js';
+import { PARAMETROS } from '../config/parametros.js';
 import { t } from '../i18n/index.js';
 import { diasEntre, parsearFecha, sumarDias } from './formatos.js';
+import { tieneSena } from './pagos.js';
 import { instanteDelTurno } from './reservas.js';
 
 /** Vista de la agenda que pide la ruta (`?vista=`); un valor desconocido o ausente abre las reservas del día. */
@@ -53,11 +58,18 @@ export const cambiosAlAlternarRango = (filtros, activo, hoy) => {
   return { conRango: false, fecha: parsearFecha(filtros.fecha_desde) ? filtros.fecha_desde : hoy };
 };
 
-/** Rango `{ fecha_desde, fecha_hasta }` de un período rápido (`semana`, `mes` o `trimestre`), o `null` si no existe. */
+/**
+ * Rango `{ fecha_desde, fecha_hasta }` de un período rápido, o `null` si no existe. Los pasados (`semana`, `mes` y
+ * `trimestre`) terminan hoy; los futuros (`proxima-semana`, `proximo-mes` y `proximo-trimestre`) empiezan hoy. En
+ * ambos, hoy queda incluido y la cantidad de días es la del período.
+ */
 export const rangoDelPeriodo = (valor, hoy) => {
   const periodo = PERIODOS_AGENDA.find((candidato) => candidato.valor === valor);
-  const desde = periodo ? sumarDias(hoy, -(periodo.dias - 1)) : null;
-  return desde ? { fecha_desde: desde, fecha_hasta: hoy } : null;
+  if (!periodo) return null;
+  const extremo = sumarDias(hoy, periodo.sentido === SENTIDO_PERIODO.FUTURO ? periodo.dias - 1 : -(periodo.dias - 1));
+  return periodo.sentido === SENTIDO_PERIODO.FUTURO
+    ? { fecha_desde: hoy, fecha_hasta: extremo }
+    : { fecha_desde: extremo, fecha_hasta: hoy };
 };
 
 /** Período rápido que coincide con el rango de los filtros (para marcarlo en el desplegable), o `''` si es un rango a mano. */
@@ -102,12 +114,19 @@ const yaComenzo = (reserva, ahora) => {
 
 /**
  * Estados a los que se puede pasar una reserva desde la agenda: las transiciones del backend, sin ausente ni
- * completada mientras el turno no empezó. El servidor valida igual: esto solo decide qué se ofrece.
+ * completada mientras el turno no empezó, y sin «Señada» si la reserva no tiene seña acordada. El servidor valida
+ * igual: esto solo decide qué se ofrece.
  */
 export const estadosSiguientes = (reserva, ahora = new Date()) => (
   (TRANSICIONES_AGENDA[reserva.estado] ?? []).filter(
-    (estado) => !ESTADOS_QUE_EXIGEN_TURNO_INICIADO.includes(estado) || yaComenzo(reserva, ahora),
+    (estado) => (!ESTADOS_QUE_EXIGEN_TURNO_INICIADO.includes(estado) || yaComenzo(reserva, ahora))
+      && (estado !== RESERVA_SENADA || tieneSena(reserva)),
   )
+);
+
+/** Estados con los que se puede reabrir una reserva cancelada; «Señada» solo si tiene seña acordada. */
+export const estadosDeReapertura = (reserva) => (
+  ESTADOS_REAPERTURA.filter((estado) => estado !== RESERVA_SENADA || tieneSena(reserva))
 );
 
 /** Una reserva pendiente, confirmada o señada la puede cancelar el complejo sin restricción horaria. */
@@ -116,6 +135,17 @@ export const puedeCancelarElComplejo = (reserva) => ESTADOS_RESERVA_CANCELABLES.
 /** Se reabre una reserva cancelada cuyo turno todavía no empezó. */
 export const puedeReabrir = (reserva, ahora = new Date()) => (
   ESTADOS_RESERVA_CANCELADOS.includes(reserva.estado) && !yaComenzo(reserva, ahora)
+);
+
+/** Error de las observaciones internas (largo máximo, igual que el servidor) o `undefined`. Vacío es válido: las borra. */
+export const errorDeObservaciones = (texto) => {
+  const maximo = PARAMETROS.limitesCampos.descripcion;
+  return String(texto ?? '').trim().length > maximo ? t('agenda.errorObservaciones', { maximo }) : undefined;
+};
+
+/** Si el texto escrito difiere del guardado (sin contar espacios en los extremos). */
+export const observacionesModificadas = (reserva, texto) => (
+  String(texto ?? '').trim() !== String(reserva.observaciones ?? '').trim()
 );
 
 export const VALORES_RESERVA_MANUAL_INICIALES = Object.freeze({

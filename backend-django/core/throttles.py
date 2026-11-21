@@ -35,6 +35,12 @@ class ReservaRateThrottle(UserRateThrottle):
     scope = 'reservas'
 
 
+class TransferenciaRateThrottle(UserRateThrottle):
+    """Limita los avisos de transferencia por cuenta: cada alta o corrección notifica al personal del complejo."""
+
+    scope = 'transferencias'
+
+
 class GraphQLRateThrottle(UserRateThrottle):
     """
     Límite del endpoint GraphQL por cuenta o, sin sesión, por IP. Cubre lo que no llega a una vista REST: consultas

@@ -32,6 +32,7 @@ from core.models import (
     TurnoFijo,
     Usuario,
 )
+from core.services import calcular_monto_sena
 
 ROLES = {
     'SUPERADMIN': 'Administrador de la plataforma (Bombo Devs). Hereda las acciones de cualquier complejo.',
@@ -57,6 +58,7 @@ PERMISOS = {
     'ver_agenda': ('Ver la agenda de reservas del complejo', 'agenda'),
     'gestionar_agenda': ('Registrar reservas manuales y cambiar su estado', 'agenda'),
     'cancelar_reserva_complejo': ('Cancelar reservas del complejo sin restricción horaria', 'agenda'),
+    'anular_cobro': ('Anular el cobro registrado de una reserva (seña o pago total)', 'agenda'),
     'gestionar_turnos_fijos': ('Registrar, pausar y dar de baja turnos fijos', 'agenda'),
     'ver_excepciones': ('Ver las excepciones horarias del complejo', 'excepciones'),
     'gestionar_excepciones': ('Registrar y anular excepciones horarias', 'excepciones'),
@@ -98,7 +100,9 @@ PERMISOS_OPERADOR = PERMISOS_PERFIL + [
 ]
 
 # configurar_complejo edita parámetros comerciales (info_sena, horas_limite_cancelacion): no es del operador.
+# anular_cobro deshace un movimiento de dinero: lo tiene el dueño y no el operador, que sí los registra.
 PERMISOS_DUENO = PERMISOS_OPERADOR + [
+    'anular_cobro',
     'configurar_complejo',
     'administrar_canchas',
     'administrar_horarios',
@@ -160,7 +164,12 @@ COMPLEJOS = [
         'longitud': Decimal('-59.272500'),
         'telefono_contacto': '3777 000101',
         'horas_limite_cancelacion': 4,
-        'info_sena': 'Seña del 30% por transferencia al alias YACARE.DEMO.SENA. Se descuenta del total.',
+        'info_sena': 'La seña se transfiere al alias del complejo y se descuenta del total.',
+        'porcentaje_sena': 30,
+        'alias_transferencia': 'YACARE.DEMO.SENA',
+        'titular_transferencia': 'Yacaré Deportes S.R.L.',
+        # Banco 000 inexistente, con dígitos verificadores válidos: no corresponde a ninguna cuenta real.
+        'cbu_cvu_transferencia': '0000000000000000123459',
         'estado_contrato': EstadoContrato.ACTIVO,
         'servicios': ['Estacionamiento', 'Vestuarios', 'Duchas', 'Buffet', 'Parrilleros'],
         'canchas': [
@@ -186,7 +195,11 @@ COMPLEJOS = [
         'longitud': Decimal('-59.258000'),
         'telefono_contacto': '3777 000102',
         'horas_limite_cancelacion': 12,
-        'info_sena': 'Seña del 50% para confirmar el turno. Se reintegra cancelando con 12 horas de anticipación.',
+        'info_sena': 'Se reintegra cancelando con 12 horas de anticipación.',
+        'porcentaje_sena': 50,
+        'alias_transferencia': 'PADEL.NANDUBAY.DEMO',
+        'titular_transferencia': 'Ñandubay Pádel',
+        'cbu_cvu_transferencia': '',
         'estado_contrato': EstadoContrato.ACTIVO,
         'servicios': ['Estacionamiento', 'Vestuarios', 'Buffet', 'Wi-Fi', 'Alquiler de equipamiento'],
         'canchas': [
@@ -207,6 +220,10 @@ COMPLEJOS = [
         'telefono_contacto': '3777 000103',
         'horas_limite_cancelacion': 4,
         'info_sena': '',
+        'porcentaje_sena': 0,
+        'alias_transferencia': '',
+        'titular_transferencia': '',
+        'cbu_cvu_transferencia': '',
         'estado_contrato': EstadoContrato.ACTIVO,
         'servicios': ['Vestuarios', 'Duchas', 'Accesibilidad', 'Wi-Fi'],
         'canchas': [
@@ -229,6 +246,10 @@ COMPLEJOS = [
         'telefono_contacto': '3777 000104',
         'horas_limite_cancelacion': 4,
         'info_sena': '',
+        'porcentaje_sena': 0,
+        'alias_transferencia': '',
+        'titular_transferencia': '',
+        'cbu_cvu_transferencia': '',
         'estado_contrato': EstadoContrato.PENDIENTE,
         'servicios': ['Estacionamiento', 'Vestuarios'],
         'canchas': [
@@ -299,7 +320,7 @@ def _reservas(hoy):
          'hora_inicio': time(19, 0), 'hora_fin': time(20, 0), 'usuario': None,
          'creado_por': 'elias.mendieta@demo.talibre.test', 'nombre_cliente_manual': 'Julián Ríos',
          'telefono_cliente_manual': '3777 000302', 'tipo_ocupacion': TipoOcupacion.MANUAL,
-         'estado': EstadoReserva.SENADA, 'precio_acordado': '38000.00',
+         'estado': EstadoReserva.SENADA, 'precio_acordado': '38000.00', 'pago': 'sena',
          'observaciones': 'Seña de $11.400 recibida por transferencia'},
         {'complejo': 'Complejo El Yacaré', 'cancha': 'Cancha 2', 'fecha_turno': hoy + timedelta(days=2),
          'hora_inicio': time(19, 0), 'hora_fin': time(20, 0), 'usuario': 'gisela.barrios@demo.talibre.test',
@@ -308,7 +329,7 @@ def _reservas(hoy):
         {'complejo': 'Complejo El Yacaré', 'cancha': 'Cancha 7', 'fecha_turno': hoy - timedelta(days=4),
          'hora_inicio': time(21, 0), 'hora_fin': time(22, 0), 'usuario': 'hugo.caceres@demo.talibre.test',
          'creado_por': 'hugo.caceres@demo.talibre.test', 'tipo_ocupacion': TipoOcupacion.WEB,
-         'estado': EstadoReserva.COMPLETADA, 'precio_acordado': '56000.00'},
+         'estado': EstadoReserva.COMPLETADA, 'precio_acordado': '56000.00', 'pago': 'total'},
         {'complejo': 'Complejo El Yacaré', 'cancha': 'Cancha 7', 'fecha_turno': hoy - timedelta(days=3),
          'hora_inicio': time(20, 0), 'hora_fin': time(21, 0), 'usuario': 'fabricio.medina@demo.talibre.test',
          'creado_por': 'fabricio.medina@demo.talibre.test', 'tipo_ocupacion': TipoOcupacion.WEB,
@@ -316,7 +337,7 @@ def _reservas(hoy):
         {'complejo': 'Pádel Ñandubay', 'cancha': 'Pádel 1', 'fecha_turno': hoy + timedelta(days=3),
          'hora_inicio': time(18, 30), 'hora_fin': time(20, 0), 'usuario': 'gisela.barrios@demo.talibre.test',
          'creado_por': 'gisela.barrios@demo.talibre.test', 'tipo_ocupacion': TipoOcupacion.WEB,
-         'estado': EstadoReserva.SENADA, 'precio_acordado': '30000.00'},
+         'estado': EstadoReserva.SENADA, 'precio_acordado': '30000.00', 'pago': 'sena'},
         {'complejo': 'Pádel Ñandubay', 'cancha': 'Pádel 3', 'fecha_turno': hoy + timedelta(days=4),
          'hora_inicio': time(9, 30), 'hora_fin': time(11, 0), 'usuario': None,
          'creado_por': 'brenda.saucedo@demo.talibre.test', 'nombre_cliente_manual': 'Karina Molina',
@@ -452,7 +473,8 @@ class Command(BaseCommand):
         complejos_nuevos = set()
         campos_complejo = (
             'direccion', 'latitud', 'longitud', 'telefono_contacto',
-            'horas_limite_cancelacion', 'info_sena', 'estado_contrato',
+            'horas_limite_cancelacion', 'info_sena', 'porcentaje_sena', 'alias_transferencia',
+            'titular_transferencia', 'cbu_cvu_transferencia', 'estado_contrato',
         )
 
         for datos in COMPLEJOS:
@@ -466,6 +488,12 @@ class Command(BaseCommand):
 
             if creado:
                 complejos_nuevos.add(complejo.nombre)
+            elif datos['porcentaje_sena'] and not complejo.porcentaje_sena and not complejo.alias_transferencia:
+                # Complejo de una carga anterior a las señas por transferencia: solo se completa si nadie lo configuró.
+                campos = ('porcentaje_sena', 'alias_transferencia', 'titular_transferencia', 'cbu_cvu_transferencia')
+                for campo in campos:
+                    setattr(complejo, campo, datos[campo])
+                complejo.save(update_fields=[*campos, 'fecha_modificacion'])
 
             for nombre_servicio in datos['servicios']:
                 ComplejoServicio.objects.get_or_create(complejo=complejo, servicio=servicios[nombre_servicio])
@@ -586,8 +614,12 @@ class Command(BaseCommand):
         for datos in _reservas(hoy):
             if datos['complejo'] not in complejos_nuevos:
                 continue
+            cancha = canchas[(datos['complejo'], datos['cancha'])]
+            precio = Decimal(datos['precio_acordado'])
+            monto_sena = calcular_monto_sena(precio, cancha.complejo.porcentaje_sena)
+            pago = datos.get('pago')
             Reserva.objects.create(
-                cancha=canchas[(datos['complejo'], datos['cancha'])],
+                cancha=cancha,
                 fecha_turno=datos['fecha_turno'],
                 hora_inicio=datos['hora_inicio'],
                 hora_fin=datos['hora_fin'],
@@ -595,7 +627,9 @@ class Command(BaseCommand):
                 creado_por=usuarios[datos['creado_por']],
                 nombre_cliente_manual=datos.get('nombre_cliente_manual', ''),
                 telefono_cliente_manual=datos.get('telefono_cliente_manual', ''),
-                precio_acordado=Decimal(datos['precio_acordado']),
+                precio_acordado=precio,
+                monto_sena=monto_sena,
+                monto_pagado=precio if pago == 'total' else monto_sena if pago == 'sena' else Decimal('0'),
                 tipo_ocupacion=datos['tipo_ocupacion'],
                 estado=datos['estado'],
                 observaciones=datos.get('observaciones', ''),

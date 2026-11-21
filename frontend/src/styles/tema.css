@@ -753,6 +753,20 @@ a {
   border-color: var(--estado-neutro-borde);
 }
 
+/* Botón de solo ícono: respeta el área táctil mínima también en ancho */
+.boton-icono {
+  min-width: var(--toque-min);
+  padding-inline: 0.5rem;
+}
+
+/* Alias de transferencia: se lee y se copia, así que ancho parejo y corte en cualquier carácter si no entra */
+.alias-transferencia {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
 /* Texto libre del complejo (por ejemplo, las condiciones de seña): respeta los saltos de línea */
 .texto-multilinea {
   white-space: pre-line;
@@ -1594,7 +1608,8 @@ a {
 
   .tabla-apilable td {
     display: flex;
-    align-items: center;
+    /* Arriba, no al centro: una celda de varias líneas (cliente, precio y pago) no deja su etiqueta flotando al medio */
+    align-items: flex-start;
     justify-content: space-between;
     gap: 1rem;
     padding: 0.4rem 0;
@@ -1609,6 +1624,12 @@ a {
 
   .tabla-apilable td > * {
     min-width: 0;
+  }
+
+  /* El contenido de la celda ocupa el resto de la fila, alineado a la derecha, y nunca la ensancha */
+  .tabla-apilable td > .celda-contenido {
+    flex: 0 1 auto;
+    max-width: 100%;
   }
 
   .tabla-apilable td::before {
