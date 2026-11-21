@@ -71,3 +71,18 @@ export const reabrirReserva = async (id, estado, confirmar = false) => {
   const { data } = await apiDjango.post(`${rutaAgenda(id)}reabrir/`, { estado, confirmar });
   return data;
 };
+
+/**
+ * Registra que el complejo recibió la seña de la reserva: queda abonado el monto congelado al reservar. Un 400 explica
+ * por qué no corresponde (cancelada, ausente, ya señada o sin seña).
+ */
+export const confirmarSenaReserva = async (id) => {
+  const { data } = await apiDjango.post(`${rutaAgenda(id)}confirmar-sena/`);
+  return data;
+};
+
+/** Registra el cobro del total: salda la reserva. Un 400 indica que no se puede (cancelada, ausente o ya saldada). */
+export const registrarPagoReserva = async (id) => {
+  const { data } = await apiDjango.post(`${rutaAgenda(id)}registrar-pago/`);
+  return data;
+};
